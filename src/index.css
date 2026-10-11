@@ -1,0 +1,167 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: var(--color-primary);
+  --color-primary-foreground: var(--color-primary-foreground);
+
+  --color-palette-1: var(--color-palette-1);
+  --color-palette-2: var(--color-palette-2);
+  --color-palette-3: var(--color-palette-3);
+  --color-palette-4: var(--color-palette-4);
+  --color-palette-5: var(--color-palette-5);
+
+  --color-background: var(--color-background);
+  --color-surface: var(--color-surface);
+  --color-card: var(--color-surface);
+  --color-foreground: var(--color-foreground);
+  --color-muted: var(--color-muted);
+  --color-muted-foreground: var(--color-muted-foreground);
+  --color-border: var(--color-border);
+
+  --font-heading: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  :root {
+    /* Main Brand Token */
+    --color-primary: #2563EB;
+    --color-primary-foreground: #FFFFFF;
+
+    /* Palette Requested Tokens */
+    --color-palette-1: #F8FAFC;
+    --color-palette-2: #FFFFFF;
+    --color-palette-3: #DBEAFE;
+    --color-palette-4: #2563EB;
+    --color-palette-5: #0F172A;
+
+    /* Layout & Neutrals */
+    --color-background: #F8FAFC;
+    --color-surface: #FFFFFF;
+    --color-card: #FFFFFF;
+    --color-foreground: #0F172A;
+    --color-muted: #F1F5F9;
+    --color-muted-foreground: #475569;
+    --color-border: #DBEAFE;
+
+    /* Typography */
+    --font-heading: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Dark mode overrides */
+  .dark {
+    --color-primary: #3B82F6;
+    --color-primary-foreground: #FFFFFF;
+    --color-background: #090D16;
+    --color-surface: #0F172A;
+    --color-card: #0F172A;
+    --color-foreground: #F8FAFC;
+    --color-muted: #1E293B;
+    --color-muted-foreground: #94A3B8;
+    --color-border: #1E3A8A;
+    --color-palette-1: #0F172A;
+    --color-palette-2: #090D16;
+    --color-palette-3: #1D4ED8;
+    --color-palette-4: #3B82F6;
+    --color-palette-5: #DBEAFE;
+  }
+
+  /* Font Accessibility - Grandes */
+  html.text-accessibility-large {
+    font-size: 18px;
+  }
+
+  html.text-accessibility-xlarge {
+    font-size: 20px;
+  }
+
+  body {
+    font-family: var(--font-body);
+    color: var(--color-foreground);
+    background-color: var(--color-background);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.01em;
+  }
+}
+
+/* Custom styles and utility classes for theme tokens */
+.bg-primary {
+  background-color: var(--color-primary);
+}
+
+.text-primary {
+  color: var(--color-primary);
+}
+
+.border-primary {
+  border-color: var(--color-primary);
+}
+
+.bg-background {
+  background-color: var(--color-background);
+}
+
+.bg-surface {
+  background-color: var(--color-surface);
+}
+
+.bg-card {
+  background-color: var(--color-surface);
+}
+
+.text-foreground {
+  color: var(--color-foreground);
+}
+
+.bg-muted {
+  background-color: var(--color-muted);
+}
+
+.text-muted-foreground {
+  color: var(--color-muted-foreground);
+}
+
+.border-border {
+  border-color: var(--color-border);
+}
+
+.bg-palette-1 {
+  background-color: var(--color-palette-1);
+}
+
+.bg-palette-2 {
+  background-color: var(--color-palette-2);
+}
+
+.bg-palette-3 {
+  background-color: var(--color-palette-3);
+}
+
+.bg-palette-4 {
+  background-color: var(--color-palette-4);
+}
+
+.text-palette-5 {
+  color: var(--color-palette-5);
+}
+
+.border-palette-3 {
+  border-color: var(--color-palette-3);
+}
+
+.font-heading {
+  font-family: var(--font-heading);
+}
+
+.font-body {
+  font-family: var(--font-body);
+}
+
+.font-sans {
+  font-family: var(--font-body);
+}

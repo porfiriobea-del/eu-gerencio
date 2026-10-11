@@ -1,0 +1,362 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+
+    function isStoreMember(ownerId) {
+      return exists(/databases/$(database)/documents/userStores/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/userStores/$(request.auth.uid)).data.ownerId == ownerId;
+    }
+
+    function isAuthorizedStore(ownerId) {
+      return isSignedIn() && (ownerId == request.auth.uid || isStoreMember(ownerId));
+    }
+
+    // Validation Helpers
+    function isValidProduct(data) {
+      let hasBaseFields = data.keys().hasAll(["name", "type", "category", "purchaseForm", "unitsPerPackage", "unitCost", "stock", "safetyStock", "dailyAverageSales", "replacementDays", "basePrice", "ownerId", "createdAt", "updatedAt"]) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.type is string && (data.type == 'comum' || data.type == 'cigarro') &&
+        data.category is string && data.category.size() >= 1 && data.category.size() <= 50 &&
+        data.purchaseForm is string && (data.purchaseForm == 'pacote' || data.purchaseForm == 'fardo' || data.purchaseForm == 'unidade') &&
+        data.unitsPerPackage is number &&
+        data.unitCost is number &&
+        data.stock is number &&
+        data.safetyStock is number &&
+        data.dailyAverageSales is number &&
+        data.replacementDays is number &&
+        data.basePrice is number &&
+        isAuthorizedStore(data.ownerId) &&
+        data.createdAt is number &&
+        data.updatedAt is number;
+
+      let validOptionalFields = (!('maxStock' in data) || data.maxStock is number) &&
+        (!('initialStock' in data) || data.initialStock is number) &&
+        (!('initialStockDate' in data) || (data.initialStockDate is string && data.initialStockDate.size() <= 50)) &&
+        (!('pricePackage' in data) || data.pricePackage is number) &&
+        (!('pricePack' in data) || data.pricePack is number) &&
+        (!('priceCart' in data) || data.priceCart is number) &&
+        (!('priceHalfCart' in data) || data.priceHalfCart is number) &&
+        (!('priceUnit' in data) || data.priceUnit is number) &&
+        (!('expirationDate' in data) || (data.expirationDate is string && data.expirationDate.size() <= 20)) &&
+        (!('hasPromoSuggestion' in data) || data.hasPromoSuggestion is bool) &&
+        (!('promoPrice' in data) || data.promoPrice is number) &&
+        (!('promoDiscountPercent' in data) || data.promoDiscountPercent is number) &&
+        (!('promoNotes' in data) || (data.promoNotes is string && data.promoNotes.size() <= 200)) &&
+        (!('barcode' in data) || (data.barcode is string && data.barcode.size() <= 60));
+
+      let allowedKeys = ["name", "type", "category", "imageUrl", "barcode", "purchaseForm", "unitsPerPackage", "unitCost", "stock", "safetyStock", "maxStock", "initialStock", "initialStockDate", "pricePackage", "pricePack", "priceCart", "priceHalfCart", "priceUnit", "dailyAverageSales", "replacementDays", "basePrice", "ownerId", "createdAt", "updatedAt", "expirationDate", "hasPromoSuggestion", "promoPrice", "promoDiscountPercent", "promoNotes"];
+
+      return hasBaseFields && validOptionalFields && data.keys().hasOnly(allowedKeys);
+    }
+
+    function isValidCustomer(data) {
+      return data.keys().hasAll(["name", "phone", "previousDebt", "totalDebt", "notes", "ownerId", "createdAt", "updatedAt"]) &&
+        data.keys().size() == 8 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.phone is string && data.phone.size() <= 20 &&
+        data.previousDebt is number &&
+        data.totalDebt is number &&
+        data.notes is string && data.notes.size() <= 1000 &&
+        isAuthorizedStore(data.ownerId) &&
+        data.createdAt is number &&
+        data.updatedAt is number;
+    }
+
+    function isValidSale(data) {
+      let allowedKeys = ["total", "type", "customerId", "ownerId", "createdAt", "itemsSummary", "employeeId", "employeeName"];
+      return data.keys().hasAll(["total", "type", "customerId", "ownerId", "createdAt"]) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.total is number &&
+        data.type is string && (data.type == 'cash' || data.type == 'card' || data.type == 'fiado') &&
+        data.customerId is string && data.customerId.size() <= 128 &&
+        isAuthorizedStore(data.ownerId) &&
+        data.createdAt is number &&
+        (!('itemsSummary' in data) || (data.itemsSummary is string && data.itemsSummary.size() <= 1000)) &&
+        (!('employeeId' in data) || (data.employeeId is string && data.employeeId.size() <= 128)) &&
+        (!('employeeName' in data) || (data.employeeName is string && data.employeeName.size() <= 100));
+    }
+
+    function isValidCashClosure(data) {
+      let allowedKeys = ["date", "closedAt", "totalSales", "totalCash", "totalCard", "totalFiado", "salesCount", "openingBalance", "withdrawals", "expectedCash", "countedCash", "difference", "notes", "ownerId", "createdAt", "employeeId", "employeeName"];
+      return data.keys().hasAll(["date", "closedAt", "totalSales", "totalCash", "totalCard", "totalFiado", "salesCount", "openingBalance", "withdrawals", "expectedCash", "countedCash", "difference", "notes", "ownerId", "createdAt"]) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.date is string && data.date.size() <= 20 &&
+        data.closedAt is number &&
+        data.totalSales is number &&
+        data.totalCash is number &&
+        data.totalCard is number &&
+        data.totalFiado is number &&
+        data.salesCount is number &&
+        data.openingBalance is number &&
+        data.withdrawals is number &&
+        data.expectedCash is number &&
+        data.countedCash is number &&
+        data.difference is number &&
+        data.notes is string && data.notes.size() <= 1000 &&
+        isAuthorizedStore(data.ownerId) &&
+        data.createdAt is number &&
+        (!('employeeId' in data) || (data.employeeId is string && data.employeeId.size() <= 128)) &&
+        (!('employeeName' in data) || (data.employeeName is string && data.employeeName.size() <= 100));
+    }
+
+    function isValidSaleItem(data) {
+      return data.keys().hasAll(["productId", "name", "format", "quantity", "price", "unitCost", "ownerId", "createdAt"]) &&
+        data.keys().size() == 8 &&
+        data.productId is string && data.productId.size() <= 128 &&
+        data.name is string && data.name.size() <= 100 &&
+        data.format is string && data.format.size() <= 20 &&
+        data.quantity is number &&
+        data.price is number &&
+        data.unitCost is number &&
+        isAuthorizedStore(data.ownerId) &&
+        data.createdAt is number;
+    }
+
+    function isValidPayment(data) {
+      let allowedKeys = ["customerId", "amount", "method", "ownerId", "createdAt", "employeeId", "employeeName"];
+      return data.keys().hasAll(["customerId", "amount", "method", "ownerId", "createdAt"]) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.customerId is string && data.customerId.size() <= 128 &&
+        data.amount is number &&
+        data.method is string && (data.method == 'cash' || data.method == 'card') &&
+        isAuthorizedStore(data.ownerId) &&
+        data.createdAt is number &&
+        (!('employeeId' in data) || (data.employeeId is string && data.employeeId.size() <= 128)) &&
+        (!('employeeName' in data) || (data.employeeName is string && data.employeeName.size() <= 100));
+    }
+
+    function isValidPurchase(data) {
+      let allowedKeys = ["productId", "productName", "category", "quantity", "packageQuantity", "packageType", "unitCost", "totalCost", "supplier", "notes", "date", "ownerId", "createdAt", "expirationDate", "suggestPromo", "suggestedPromoPrice", "promoDiscountPercent", "employeeId", "employeeName"];
+      return data.keys().hasAll(["productId", "productName", "quantity", "unitCost", "totalCost", "date", "ownerId", "createdAt"]) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.productId is string && data.productId.size() <= 128 &&
+        data.productName is string && data.productName.size() >= 1 && data.productName.size() <= 100 &&
+        data.quantity is number && data.quantity > 0 &&
+        data.unitCost is number && data.unitCost >= 0 &&
+        data.totalCost is number && data.totalCost >= 0 &&
+        data.date is string && data.date.size() <= 20 &&
+        isAuthorizedStore(data.ownerId) &&
+        data.createdAt is number &&
+        (!('category' in data) || (data.category is string && data.category.size() <= 50)) &&
+        (!('packageQuantity' in data) || data.packageQuantity is number) &&
+        (!('packageType' in data) || (data.packageType is string && data.packageType.size() <= 20)) &&
+        (!('supplier' in data) || (data.supplier is string && data.supplier.size() <= 100)) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 500)) &&
+        (!('expirationDate' in data) || (data.expirationDate is string && data.expirationDate.size() <= 20)) &&
+        (!('suggestPromo' in data) || data.suggestPromo is bool) &&
+        (!('suggestedPromoPrice' in data) || data.suggestedPromoPrice is number) &&
+        (!('promoDiscountPercent' in data) || data.promoDiscountPercent is number) &&
+        (!('employeeId' in data) || (data.employeeId is string && data.employeeId.size() <= 128)) &&
+        (!('employeeName' in data) || (data.employeeName is string && data.employeeName.size() <= 100));
+    }
+
+    function isValidSettings(data) {
+      let hasBaseFields = data.keys().hasAll(["theme", "darkMode", "defaultMargin", "dailyGoal", "ownerId", "updatedAt"]) &&
+        data.theme is string && data.theme.size() <= 50 &&
+        data.darkMode is bool &&
+        data.defaultMargin is number &&
+        data.dailyGoal is number &&
+        isAuthorizedStore(data.ownerId) &&
+        data.updatedAt is number;
+        
+      let validStoreName = !data.keys().hasAny(["storeName"]) || (data.storeName is string && data.storeName.size() <= 150);
+      let validCnpj = !data.keys().hasAny(["cnpj"]) || (data.cnpj is string && data.cnpj.size() <= 50);
+      let validPhone = !data.keys().hasAny(["phone"]) || (data.phone is string && data.phone.size() <= 50);
+      let validEmail = !data.keys().hasAny(["email"]) || (data.email is string && data.email.size() <= 150);
+      let validLogo = !data.keys().hasAny(["logoUrl"]) || (data.logoUrl is string && data.logoUrl.size() <= 500000);
+      let validLanguageMode = !data.keys().hasAny(["languageMode"]) || (data.languageMode is string && data.languageMode.size() <= 50);
+      let validSector = (!('businessSector' in data) || (data.businessSector is string && data.businessSector.size() <= 50));
+      let validCardRates = (!('creditCardRate' in data) || (data.creditCardRate is number && data.creditCardRate >= 0 && data.creditCardRate <= 100)) &&
+        (!('debitCardRate' in data) || (data.debitCardRate is number && data.debitCardRate >= 0 && data.debitCardRate <= 100)) &&
+        (!('pixRate' in data) || (data.pixRate is number && data.pixRate >= 0 && data.pixRate <= 100)) &&
+        (!('voucherRate' in data) || (data.voucherRate is number && data.voucherRate >= 0 && data.voucherRate <= 100)) &&
+        (!('otherFeesRate' in data) || (data.otherFeesRate is number && data.otherFeesRate >= 0 && data.otherFeesRate <= 100)) &&
+        (!('enableCardFees' in data) || data.enableCardFees is bool) &&
+        (!('passCardFeeToCustomer' in data) || data.passCardFeeToCustomer is bool) &&
+        (!('cardFeePaymentMode' in data) || (data.cardFeePaymentMode is string && (data.cardFeePaymentMode == 'absorb' || data.cardFeePaymentMode == 'repass'))) &&
+        (!('cardFeeCalculationMode' in data) || (data.cardFeeCalculationMode is string && (data.cardFeeCalculationMode == 'absorb' || data.cardFeeCalculationMode == 'surcharge' || data.cardFeeCalculationMode == 'repass')));
+        
+      return hasBaseFields && validStoreName && validCnpj && validPhone && validEmail && validLogo && validLanguageMode && validSector && validCardRates;
+    }
+
+    function isValidFeedback(data) {
+      let allowedKeys = ["ownerId", "userEmail", "rating", "category", "message", "contact", "storeName", "createdAt"];
+      return data.keys().hasAll(["ownerId", "category", "message", "createdAt"]) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.ownerId == request.auth.uid &&
+        data.category is string && data.category.size() >= 1 && data.category.size() <= 50 &&
+        data.message is string && data.message.size() >= 2 && data.message.size() <= 2000 &&
+        data.createdAt is number &&
+        (!('rating' in data) || (data.rating is number && data.rating >= 1 && data.rating <= 5)) &&
+        (!('userEmail' in data) || (data.userEmail is string && data.userEmail.size() <= 150)) &&
+        (!('contact' in data) || (data.contact is string && data.contact.size() <= 150)) &&
+        (!('storeName' in data) || (data.storeName is string && data.storeName.size() <= 100));
+    }
+
+    function isValidEmployee(data) {
+      let allowedKeys = ["name", "role", "email", "pin", "phone", "color", "avatarUrl", "isActive", "currentShiftStartedAt", "lastShiftEndedAt", "ownerId", "createdAt", "updatedAt"];
+      return data.keys().hasAll(["name", "role", "isActive", "ownerId", "createdAt", "updatedAt"]) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.role is string && data.role.size() <= 50 &&
+        data.isActive is bool &&
+        isAuthorizedStore(data.ownerId) &&
+        data.createdAt is number &&
+        data.updatedAt is number &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+        (!('pin' in data) || (data.pin is string && data.pin.size() <= 32)) &&
+        (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
+        (!('color' in data) || (data.color is string && data.color.size() <= 30)) &&
+        (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 500)) &&
+        (!('currentShiftStartedAt' in data) || data.currentShiftStartedAt is number) &&
+        (!('lastShiftEndedAt' in data) || data.lastShiftEndedAt is number);
+    }
+
+    function isValidMovement(data) {
+      let allowedKeys = ["timestamp", "employeeId", "employeeName", "employeeRole", "type", "description", "entityId", "entityName", "quantity", "amount", "previousValue", "newValue", "notes", "ownerId", "createdAt"];
+      return data.keys().hasAll(["timestamp", "employeeId", "employeeName", "type", "description", "ownerId", "createdAt"]) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.timestamp is number &&
+        data.employeeId is string && data.employeeId.size() <= 128 &&
+        data.employeeName is string && data.employeeName.size() <= 100 &&
+        data.type is string && data.type.size() <= 50 &&
+        data.description is string && data.description.size() <= 1000 &&
+        isAuthorizedStore(data.ownerId) &&
+        data.createdAt is number &&
+        (!('employeeRole' in data) || (data.employeeRole is string && data.employeeRole.size() <= 50)) &&
+        (!('entityId' in data) || (data.entityId is string && data.entityId.size() <= 128)) &&
+        (!('entityName' in data) || (data.entityName is string && data.entityName.size() <= 200)) &&
+        (!('quantity' in data) || data.quantity is number) &&
+        (!('amount' in data) || data.amount is number) &&
+        (!('previousValue' in data) || (data.previousValue is string || data.previousValue is number)) &&
+        (!('newValue' in data) || (data.newValue is string || data.newValue is number)) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 500));
+    }
+
+    function isValidTeamInvitation(data) {
+      let allowedKeys = ["ownerId", "storeName", "email", "name", "role", "phone", "pin", "status", "createdAt", "acceptedAt", "acceptedByUid"];
+      return data.keys().hasAll(["ownerId", "email", "name", "role", "status", "createdAt"]) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.ownerId is string && data.ownerId.size() <= 128 &&
+        data.email is string && data.email.size() <= 150 &&
+        data.name is string && data.name.size() <= 100 &&
+        data.role is string && data.role.size() <= 50 &&
+        data.status is string && (data.status == 'pending' || data.status == 'accepted' || data.status == 'revoked') &&
+        data.createdAt is number &&
+        (!('storeName' in data) || (data.storeName is string && data.storeName.size() <= 100)) &&
+        (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
+        (!('pin' in data) || (data.pin is string && data.pin.size() <= 32)) &&
+        (!('acceptedAt' in data) || data.acceptedAt is number) &&
+        (!('acceptedByUid' in data) || (data.acceptedByUid is string && data.acceptedByUid.size() <= 128));
+    }
+
+    function isValidUserStore(data) {
+      let allowedKeys = ["userUid", "ownerId", "storeName", "email", "name", "role", "linkedAt"];
+      return data.keys().hasAll(["userUid", "ownerId", "linkedAt"]) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.userUid is string && data.userUid == request.auth.uid &&
+        data.ownerId is string && data.ownerId.size() <= 128 &&
+        data.linkedAt is number &&
+        (!('storeName' in data) || (data.storeName is string && data.storeName.size() <= 100)) &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+        (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
+        (!('role' in data) || (data.role is string && data.role.size() <= 50));
+    }
+
+    match /products/{productId} {
+      allow get, list: if isSignedIn() && isAuthorizedStore(existing().ownerId);
+      allow create: if isSignedIn() && isValidId(productId) && isValidProduct(incoming()) && isAuthorizedStore(incoming().ownerId);
+      allow update: if isSignedIn() && isValidId(productId) && isValidProduct(incoming()) && isAuthorizedStore(existing().ownerId) && incoming().ownerId == existing().ownerId && incoming().createdAt == existing().createdAt && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'type', 'category', 'imageUrl', 'purchaseForm', 'unitsPerPackage', 'unitCost', 'stock', 'safetyStock', 'maxStock', 'initialStock', 'initialStockDate', 'pricePackage', 'pricePack', 'priceCart', 'priceHalfCart', 'priceUnit', 'dailyAverageSales', 'replacementDays', 'basePrice', 'updatedAt', 'expirationDate', 'hasPromoSuggestion', 'promoPrice', 'promoDiscountPercent', 'promoNotes']);
+      allow delete: if isSignedIn() && isValidId(productId) && isAuthorizedStore(existing().ownerId);
+    }
+
+    match /customers/{customerId} {
+      allow get, list: if isSignedIn() && isAuthorizedStore(existing().ownerId);
+      allow create: if isSignedIn() && isValidId(customerId) && isValidCustomer(incoming()) && isAuthorizedStore(incoming().ownerId);
+      allow update: if isSignedIn() && isValidId(customerId) && isValidCustomer(incoming()) && isAuthorizedStore(existing().ownerId) && incoming().ownerId == existing().ownerId && incoming().createdAt == existing().createdAt && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'previousDebt', 'totalDebt', 'notes', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(customerId) && isAuthorizedStore(existing().ownerId);
+    }
+
+    match /sales/{saleId} {
+      allow get, list: if isSignedIn() && isAuthorizedStore(existing().ownerId);
+      allow create: if isSignedIn() && isValidId(saleId) && isValidSale(incoming()) && isAuthorizedStore(incoming().ownerId);
+      allow delete: if isSignedIn() && isValidId(saleId) && isAuthorizedStore(existing().ownerId);
+      
+      match /saleItems/{itemId} {
+        allow get, list: if isSignedIn() && isAuthorizedStore(existing().ownerId);
+        allow create: if isSignedIn() && isValidId(itemId) && isValidSaleItem(incoming()) && isAuthorizedStore(get(/databases/$(database)/documents/sales/$(saleId)).data.ownerId);
+        allow delete: if isSignedIn() && isValidId(itemId) && isAuthorizedStore(existing().ownerId);
+      }
+    }
+
+    match /payments/{paymentId} {
+      allow get, list: if isSignedIn() && isAuthorizedStore(existing().ownerId);
+      allow create: if isSignedIn() && isValidId(paymentId) && isValidPayment(incoming()) && isAuthorizedStore(incoming().ownerId);
+      allow delete: if isSignedIn() && isValidId(paymentId) && isAuthorizedStore(existing().ownerId);
+    }
+
+    match /cashClosures/{closureId} {
+      allow get, list: if isSignedIn() && isAuthorizedStore(existing().ownerId);
+      allow create: if isSignedIn() && isValidId(closureId) && isValidCashClosure(incoming()) && isAuthorizedStore(incoming().ownerId);
+      allow delete: if isSignedIn() && isValidId(closureId) && isAuthorizedStore(existing().ownerId);
+    }
+
+    match /purchases/{purchaseId} {
+      allow get, list: if isSignedIn() && isAuthorizedStore(existing().ownerId);
+      allow create: if isSignedIn() && isValidId(purchaseId) && isValidPurchase(incoming()) && isAuthorizedStore(incoming().ownerId);
+      allow update: if isSignedIn() && isValidId(purchaseId) && isValidPurchase(incoming()) && isAuthorizedStore(existing().ownerId) && incoming().ownerId == existing().ownerId && incoming().createdAt == existing().createdAt;
+      allow delete: if isSignedIn() && isValidId(purchaseId) && isAuthorizedStore(existing().ownerId);
+    }
+
+    match /settings/{docOwnerId} {
+      allow get: if isSignedIn() && isAuthorizedStore(docOwnerId);
+      allow list: if isSignedIn() && (docOwnerId == request.auth.uid || isAuthorizedStore(existing().ownerId));
+      allow create: if isSignedIn() && isValidId(docOwnerId) && docOwnerId == request.auth.uid && isValidSettings(incoming());
+      allow update: if isSignedIn() && isValidId(docOwnerId) && isAuthorizedStore(docOwnerId) && isValidSettings(incoming());
+      allow delete: if isSignedIn() && isValidId(docOwnerId) && docOwnerId == request.auth.uid;
+    }
+
+    match /feedbacks/{feedbackId} {
+      allow get, list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(feedbackId) && isValidFeedback(incoming());
+      allow delete: if isSignedIn() && isValidId(feedbackId) && existing().ownerId == request.auth.uid;
+    }
+
+    match /employees/{employeeId} {
+      allow get, list: if isSignedIn() && isAuthorizedStore(existing().ownerId);
+      allow create: if isSignedIn() && isValidId(employeeId) && isValidEmployee(incoming()) && isAuthorizedStore(incoming().ownerId);
+      allow update: if isSignedIn() && isValidId(employeeId) && isValidEmployee(incoming()) && isAuthorizedStore(existing().ownerId) && incoming().ownerId == existing().ownerId;
+      allow delete: if isSignedIn() && isValidId(employeeId) && isAuthorizedStore(existing().ownerId);
+    }
+
+    match /movements/{movementId} {
+      allow get, list: if isSignedIn() && isAuthorizedStore(existing().ownerId);
+      allow create: if isSignedIn() && isValidId(movementId) && isValidMovement(incoming()) && isAuthorizedStore(incoming().ownerId);
+      allow delete: if isSignedIn() && isValidId(movementId) && isAuthorizedStore(existing().ownerId);
+    }
+
+    match /teamInvitations/{invitationId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(invitationId) && isAuthorizedStore(incoming().ownerId) && isValidTeamInvitation(incoming());
+      allow update: if isSignedIn() && isValidId(invitationId) && (isAuthorizedStore(existing().ownerId) || (request.auth.token.email != null && request.auth.token.email.lower() == existing().email.lower())) && isValidTeamInvitation(incoming());
+      allow delete: if isSignedIn() && isValidId(invitationId) && isAuthorizedStore(existing().ownerId);
+    }
+
+    match /userStores/{userUid} {
+      allow get, list: if isSignedIn() && (userUid == request.auth.uid || isAuthorizedStore(existing().ownerId));
+      allow create, update: if isSignedIn() && isValidId(userUid) && userUid == request.auth.uid && isValidUserStore(incoming());
+      allow delete: if isSignedIn() && (userUid == request.auth.uid || isAuthorizedStore(existing().ownerId));
+    }
+  }
+}

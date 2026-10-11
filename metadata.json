@@ -1,0 +1,8 @@
+{
+  "name": "Eu Gerencio!",
+  "description": "Aplicativo de gestão para pequenos comércios (estoque, caixa, fiado, relatórios).",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,320 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "A product for sale in the store.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "type": { "type": "string", "enum": ["comum", "cigarro"] },
+        "category": { "type": "string", "minLength": 1, "maxLength": 50 },
+        "imageUrl": { "type": "string", "maxLength": 500 },
+        "purchaseForm": { "type": "string", "enum": ["pacote", "fardo", "unidade"] },
+        "unitsPerPackage": { "type": "number" },
+        "unitCost": { "type": "number" },
+        "stock": { "type": "number" },
+        "safetyStock": { "type": "number" },
+        "maxStock": { "type": "number" },
+        "initialStock": { "type": "number" },
+        "initialStockDate": { "type": "string", "maxLength": 50 },
+        "dailyAverageSales": { "type": "number" },
+        "replacementDays": { "type": "number" },
+        "basePrice": { "type": "number" },
+        "pricePackage": { "type": "number" },
+        "pricePack": { "type": "number" },
+        "priceCart": { "type": "number" },
+        "priceHalfCart": { "type": "number" },
+        "priceUnit": { "type": "number" },
+        "expirationDate": { "type": "string", "maxLength": 20 },
+        "hasPromoSuggestion": { "type": "boolean" },
+        "promoPrice": { "type": "number" },
+        "promoDiscountPercent": { "type": "number" },
+        "promoNotes": { "type": "string", "maxLength": 200 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["name", "type", "category", "purchaseForm", "unitsPerPackage", "unitCost", "stock", "safetyStock", "dailyAverageSales", "replacementDays", "basePrice", "ownerId", "createdAt", "updatedAt"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "A customer who can buy on credit (fiado).",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "previousDebt": { "type": "number" },
+        "totalDebt": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["name", "phone", "previousDebt", "totalDebt", "notes", "ownerId", "createdAt", "updatedAt"]
+    },
+    "Sale": {
+      "title": "Sale",
+      "description": "A completed sale transaction.",
+      "type": "object",
+      "properties": {
+        "total": { "type": "number" },
+        "type": { "type": "string", "enum": ["cash", "card", "fiado"] },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "itemsSummary": { "type": "string", "maxLength": 1000 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["total", "type", "customerId", "ownerId", "createdAt"]
+    },
+    "CashClosure": {
+      "title": "CashClosure",
+      "description": "A daily cash register closure record.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "maxLength": 20 },
+        "closedAt": { "type": "number" },
+        "totalSales": { "type": "number" },
+        "totalCash": { "type": "number" },
+        "totalCard": { "type": "number" },
+        "totalFiado": { "type": "number" },
+        "salesCount": { "type": "number" },
+        "openingBalance": { "type": "number" },
+        "withdrawals": { "type": "number" },
+        "expectedCash": { "type": "number" },
+        "countedCash": { "type": "number" },
+        "difference": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["date", "closedAt", "totalSales", "totalCash", "totalCard", "totalFiado", "salesCount", "openingBalance", "withdrawals", "expectedCash", "countedCash", "difference", "notes", "ownerId", "createdAt"]
+    },
+    "SaleItem": {
+      "title": "SaleItem",
+      "description": "A line item in a sale.",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "format": { "type": "string", "maxLength": 20 },
+        "quantity": { "type": "number" },
+        "price": { "type": "number" },
+        "unitCost": { "type": "number" },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["productId", "name", "format", "quantity", "price", "unitCost", "ownerId", "createdAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "A payment made by a customer towards their debt.",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string", "maxLength": 128 },
+        "amount": { "type": "number" },
+        "method": { "type": "string", "enum": ["cash", "card"] },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["customerId", "amount", "method", "ownerId", "createdAt"]
+    },
+    "Purchase": {
+      "title": "Purchase",
+      "description": "A stock replenishment or purchase record.",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "maxLength": 128 },
+        "productName": { "type": "string", "maxLength": 100 },
+        "category": { "type": "string", "maxLength": 50 },
+        "quantity": { "type": "number" },
+        "packageQuantity": { "type": "number" },
+        "packageType": { "type": "string", "maxLength": 20 },
+        "unitCost": { "type": "number" },
+        "totalCost": { "type": "number" },
+        "supplier": { "type": "string", "maxLength": 100 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "date": { "type": "string", "maxLength": 20 },
+        "expirationDate": { "type": "string", "maxLength": 20 },
+        "suggestPromo": { "type": "boolean" },
+        "suggestedPromoPrice": { "type": "number" },
+        "promoDiscountPercent": { "type": "number" },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["productId", "productName", "quantity", "unitCost", "totalCost", "date", "ownerId", "createdAt"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "User preferences and settings.",
+      "type": "object",
+      "properties": {
+        "storeName": { "type": "string", "maxLength": 100 },
+        "cnpj": { "type": "string", "maxLength": 20 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "email": { "type": "string", "maxLength": 100 },
+        "theme": { "type": "string", "maxLength": 20 },
+        "darkMode": { "type": "boolean" },
+        "defaultMargin": { "type": "number" },
+        "dailyGoal": { "type": "number" },
+        "languageMode": { "type": "string", "enum": ["technical", "neutral", "basic"] },
+        "enableCardFees": { "type": "boolean" },
+        "creditCardRate": { "type": "number" },
+        "debitCardRate": { "type": "number" },
+        "pixRate": { "type": "number" },
+        "voucherRate": { "type": "number" },
+        "otherFeesRate": { "type": "number" },
+        "passCardFeeToCustomer": { "type": "boolean" },
+        "cardFeePaymentMode": { "type": "string", "enum": ["absorb", "repass"] },
+        "cardFeeCalculationMode": { "type": "string", "enum": ["absorb", "surcharge", "repass"] },
+        "logoUrl": { "type": "string", "maxLength": 500000 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["storeName", "cnpj", "phone", "email", "theme", "darkMode", "defaultMargin", "dailyGoal", "ownerId", "updatedAt"]
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "User feedback and suggestions about the application.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 150 },
+        "rating": { "type": "number" },
+        "category": { "type": "string", "maxLength": 50 },
+        "message": { "type": "string", "minLength": 2, "maxLength": 2000 },
+        "contact": { "type": "string", "maxLength": 150 },
+        "storeName": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["ownerId", "category", "message", "createdAt"]
+    },
+    "Employee": {
+      "title": "Employee",
+      "description": "An employee or operator of the establishment.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "role": { "type": "string", "maxLength": 50 },
+        "email": { "type": "string", "maxLength": 150 },
+        "pin": { "type": "string", "maxLength": 32 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "color": { "type": "string", "maxLength": 30 },
+        "avatarUrl": { "type": "string", "maxLength": 500 },
+        "isActive": { "type": "boolean" },
+        "currentShiftStartedAt": { "type": "number" },
+        "lastShiftEndedAt": { "type": "number" },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["name", "role", "isActive", "ownerId", "createdAt", "updatedAt"]
+    },
+    "Movement": {
+      "title": "Movement",
+      "description": "An audit log record of any movement or transaction in the store.",
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "number" },
+        "employeeId": { "type": "string", "maxLength": 128 },
+        "employeeName": { "type": "string", "maxLength": 100 },
+        "employeeRole": { "type": "string", "maxLength": 50 },
+        "type": { "type": "string", "maxLength": 50 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "entityId": { "type": "string", "maxLength": 128 },
+        "entityName": { "type": "string", "maxLength": 200 },
+        "quantity": { "type": "number" },
+        "amount": { "type": "number" },
+        "previousValue": { "type": "string", "maxLength": 100 },
+        "newValue": { "type": "string", "maxLength": 100 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["timestamp", "employeeId", "employeeName", "type", "description", "ownerId", "createdAt"]
+    },
+    "TeamInvitation": {
+      "title": "TeamInvitation",
+      "description": "An invitation sent to a potential employee by email.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "storeName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 150 },
+        "name": { "type": "string", "maxLength": 100 },
+        "role": { "type": "string", "maxLength": 50 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "pin": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "maxLength": 20 },
+        "createdAt": { "type": "number" },
+        "acceptedAt": { "type": "number" },
+        "acceptedByUid": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["ownerId", "email", "name", "role", "status", "createdAt"]
+    },
+    "UserStore": {
+      "title": "UserStore",
+      "description": "Mapping from an employee user UID to their associated establishment store ownerId.",
+      "type": "object",
+      "properties": {
+        "userUid": { "type": "string", "maxLength": 128 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "storeName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 150 },
+        "name": { "type": "string", "maxLength": 100 },
+        "role": { "type": "string", "maxLength": 50 },
+        "linkedAt": { "type": "number" }
+      },
+      "required": ["userUid", "ownerId", "linkedAt"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Store products."
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/Customer" },
+      "description": "Store customers (fiado)."
+    },
+    "/sales/{saleId}": {
+      "schema": { "$ref": "#/entities/Sale" },
+      "description": "Sales records."
+    },
+    "/sales/{saleId}/saleItems/{itemId}": {
+      "schema": { "$ref": "#/entities/SaleItem" },
+      "description": "Line items for a sale."
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Customer payments."
+    },
+    "/purchases/{purchaseId}": {
+      "schema": { "$ref": "#/entities/Purchase" },
+      "description": "Purchase and stock replenishment records."
+    },
+    "/settings/{ownerId}": {
+      "schema": { "$ref": "#/entities/Settings" },
+      "description": "User settings document, ID is ownerId."
+    },
+    "/feedbacks/{feedbackId}": {
+      "schema": { "$ref": "#/entities/Feedback" },
+      "description": "User feedback submissions."
+    },
+    "/employees/{employeeId}": {
+      "schema": { "$ref": "#/entities/Employee" },
+      "description": "Establishment employee records."
+    },
+    "/movements/{movementId}": {
+      "schema": { "$ref": "#/entities/Movement" },
+      "description": "Establishment movement history and audit logs."
+    },
+    "/teamInvitations/{invitationId}": {
+      "schema": { "$ref": "#/entities/TeamInvitation" },
+      "description": "Invitations sent to employees."
+    },
+    "/userStores/{userUid}": {
+      "schema": { "$ref": "#/entities/UserStore" },
+      "description": "Sub-account store associations for employees."
+    }
+  }
+}
