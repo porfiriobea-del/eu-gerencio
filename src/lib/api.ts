@@ -1609,10 +1609,13 @@ export const getSaleItemsForSale = async (saleId: string): Promise<SaleItem[]> =
 
 export async function deleteMultipleProducts(ids: string[]) {
   if (!ids || ids.length === 0) return;
-  const { error } = await supabase
-    .from('produtos')
-    .delete()
-    .in('id', ids);
+  const { doc, writeBatch } = await import('firebase/firestore');
+  const batch = writeBatch(db);
   
-  if (error) throw error;
+  ids.forEach(id => {
+    const ref = doc(db, 'products', id);
+    batch.delete(ref);
+  });
+  
+  await batch.commit();
 }
