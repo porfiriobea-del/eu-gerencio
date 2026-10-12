@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteField } from 'firebase/firestore';
-import { subscribeProducts, updateProduct, addProduct, addMultipleProducts, deleteProduct, subscribeTodaySales, recordMovement } from '../lib/api';
+import { subscribeProducts, updateProduct, addProduct, addMultipleProducts, deleteProduct, deleteMultipleProducts, subscribeTodaySales, recordMovement } from '../lib/api';
 import { Product, Sale } from '../types';
 import { getAllCategories, saveCustomCategory } from '../lib/categories';
-import { Plus, Edit2, Trash2, Package, AlertTriangle, CheckCircle2, ShoppingBag, Calendar, ArrowUpRight, TrendingUp, Info, Tag, Check, X, RotateCcw, Sparkles, Camera, Image as ImageIcon, Clock, Flame, Percent, LayoutGrid, List, ChevronDown, ChevronUp, Minus, Eye, EyeOff } from 'lucide-react';
+import { Plus, Edit2, Trash2, Package, AlertTriangle, CheckCircle2, ShoppingBag, Calendar, ArrowUpRight, TrendingUp, Info, Tag, Check, X, RotateCcw, Sparkles, Camera, Image as ImageIcon, Clock, Flame, Percent, LayoutGrid, List, ChevronDown, ChevronUp, Minus, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { format, startOfMonth, subMonths } from 'date-fns';
 import { usePreferences } from '../lib/preferencesContext';
 import { PocketTip } from '../components/PocketTip';
@@ -64,9 +64,13 @@ export default function Stock() {
   const [isSavingInitialStock, setIsSavingInitialStock] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // States for deleting product
+  // States for deleting product (single & multiple)
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState<boolean>(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState<boolean>(false);
+  const [bulkDeleteProgress, setBulkDeleteProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
 
   // States for Batch Monthly Turnover ("Virada de Mês")
   const [isMonthlyTurnoverOpen, setIsMonthlyTurnoverOpen] = useState<boolean>(false);
@@ -354,25 +358,104 @@ export default function Stock() {
     setIsModalOpen(false);
   };
 
-  // Delete product action (either registered by mistake or unavailable)
+  // Delete product action with loading state & optimistic update
   const handleDeleteProduct = async () => {
-    if (!productToDelete?.id) return;
+    if (!productToDelete?.id || isDeleting) return;
     setIsDeleting(true);
+    const targetProduct = productToDelete;
+    const targetId = targetProduct.id!;
+
+    // 1. Atualização Otimista Imediata no estado local
+    setProducts(prev => prev.filter(p => p.id !== targetId));
+    setSelectedProductIds(prev => prev.filter(id => id !== targetId));
+
     try {
-      await deleteProduct(productToDelete.id);
-      setToastMessage(`Produto "${productToDelete.name}" foi excluído com sucesso.`);
+      await deleteProduct(targetId, targetProduct.name);
+      setToastMessage(`✓ Produto "${targetProduct.name}" excluído.`);
       setTimeout(() => setToastMessage(null), 4000);
       setProductToDelete(null);
-      // If the deleted product was open in the modal, close it
-      if (editingId === productToDelete.id) {
+      if (editingId === targetId) {
         setIsModalOpen(false);
         setEditingId(null);
       }
     } catch (err) {
-      console.error('Erro ao excluir produto:', err);
-      alert('Não foi possível excluir o produto. Verifique sua conexão e tente novamente.');
+      console.error('Erro ao excluir produto no banco de dados:', err);
+      // Caso ocorra erro na exclusão, recarrega o item de volta ao estado local
+      setProducts(prev => prev.some(p => p.id === targetId) ? prev : [...prev, targetProduct]);
+      setToastMessage(`⚠️ Erro ao excluir "${targetProduct.name}". O produto foi recarregado no estoque.`);
+      setTimeout(() => setToastMessage(null), 6000);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const toggleSelectProduct = (id: string) => {
+    setSelectedProductIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllFiltered = () => {
+    const allFilteredIds = filteredProducts.filter(p => !!p.id).map(p => p.id as string);
+    const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedProductIds.includes(id));
+    if (allSelected) {
+      setSelectedProductIds(prev => prev.filter(id => !allFilteredIds.includes(id)));
+    } else {
+      setSelectedProductIds(prev => Array.from(new Set([...prev, ...allFilteredIds])));
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedProductIds([]);
+  };
+
+  // Helper to trigger bulk delete for all listed items or current selection
+  const handleTriggerDeleteAll = () => {
+    if (selectedProductIds.length === 0) {
+      const allFilteredIds = filteredProducts.filter(p => !!p.id).map(p => p.id as string);
+      if (allFilteredIds.length === 0) return;
+      setSelectedProductIds(allFilteredIds);
+    }
+    setIsBulkDeleteModalOpen(true);
+  };
+
+  // Bulk delete action: Optimistic update + single bulk request with Supabase .in('id', ids)
+  const handleConfirmBulkDelete = async () => {
+    if (selectedProductIds.length === 0 || isBulkDeleting) return;
+    const idsToDelete = [...selectedProductIds];
+    const itemsToDelete = products.filter(p => p.id && idsToDelete.includes(p.id));
+
+    // 1. Atualização Otimista Imediata:
+    // Remove todos os itens selecionados da tela instantaneamente assim que a exclusão for confirmada
+    setProducts(prev => prev.filter(p => !p.id || !idsToDelete.includes(p.id)));
+
+    // Fecha a subtela/modal e limpa a seleção imediatamente
+    setIsBulkDeleteModalOpen(false);
+    setSelectedProductIds([]);
+    if (editingId && idsToDelete.includes(editingId)) {
+      setIsModalOpen(false);
+      setEditingId(null);
+    }
+
+    setToastMessage(`✓ ${idsToDelete.length} item(ns) excluído(s) com sucesso.`);
+    setTimeout(() => setToastMessage(null), 4000);
+
+    // 2. Exclusão em Lote (Bulk Delete): Executa uma única requisição rápida (.in('id', idsSelecionados))
+    setIsBulkDeleting(true);
+    try {
+      await deleteMultipleProducts(idsToDelete);
+    } catch (err) {
+      console.error('Erro na exclusão em lote de produtos:', err);
+      // Rollback otimista: recarrega os itens que falharam de volta ao estado local
+      setProducts(prev => {
+        const existingIds = new Set(prev.map(p => p.id));
+        const toRestore = itemsToDelete.filter(item => !existingIds.has(item.id));
+        return [...prev, ...toRestore];
+      });
+      setToastMessage(`⚠️ Erro ao excluir os itens selecionados. Os produtos foram recarregados.`);
+      setTimeout(() => setToastMessage(null), 6000);
+    } finally {
+      setIsBulkDeleting(false);
     }
   };
 
@@ -561,15 +644,18 @@ export default function Stock() {
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-5">
-          <CheckCircle2 className="w-5 h-5" />
-          <span className="text-sm font-medium">{toastMessage}</span>
-          <button onClick={() => setToastMessage(null)} className="ml-2 text-white/80 hover:text-white">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+      {toastMessage && (() => {
+        const isError = toastMessage.includes('⚠️') || toastMessage.toLowerCase().includes('erro');
+        return (
+          <div className={`fixed bottom-6 right-6 z-50 ${isError ? 'bg-red-600' : 'bg-emerald-600'} text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-5 max-w-md`}>
+            {isError ? <AlertTriangle className="w-5 h-5 shrink-0" /> : <CheckCircle2 className="w-5 h-5 shrink-0" />}
+            <span className="text-sm font-medium">{toastMessage}</span>
+            <button onClick={() => setToastMessage(null)} className="ml-2 text-white/80 hover:text-white shrink-0 cursor-pointer">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Header & Metrics */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -920,7 +1006,7 @@ export default function Stock() {
 
       {/* Barra de Seleção de Modo de Visualização (Cards Simples vs Tabela Completa) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 pb-1">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-bold text-foreground">
             {filteredProducts.length} {filteredProducts.length === 1 ? entityName().toLowerCase() : entityName(true).toLowerCase()}
           </span>
@@ -928,6 +1014,54 @@ export default function Stock() {
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300/60">
               Modo Descomplicado
             </span>
+          )}
+
+          {filteredProducts.length > 0 && (
+            <button
+              type="button"
+              onClick={handleSelectAllFiltered}
+              className={`text-xs font-bold px-2.5 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
+                filteredProducts.every(p => p.id && selectedProductIds.includes(p.id))
+                  ? 'bg-primary text-white border-primary shadow-xs'
+                  : selectedProductIds.length > 0
+                  ? 'bg-palette-1 text-primary border-primary/40'
+                  : 'bg-surface text-muted-foreground hover:text-foreground border-border hover:bg-muted'
+              }`}
+              title="Selecionar ou desmarcar produtos para exclusão em lote"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>
+                {filteredProducts.every(p => p.id && selectedProductIds.includes(p.id))
+                  ? 'Desmarcar Todos'
+                  : selectedProductIds.length > 0
+                  ? `Selecionados (${selectedProductIds.length})`
+                  : 'Selecionar Vários'}
+              </span>
+            </button>
+          )}
+
+          {selectedProductIds.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="text-xs font-bold px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs animate-in fade-in"
+              title="Excluir todos os produtos selecionados"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Excluir Tudo ({selectedProductIds.length})</span>
+            </button>
+          ) : (
+            filteredProducts.length > 0 && (
+              <button
+                type="button"
+                onClick={handleTriggerDeleteAll}
+                className="text-xs font-bold px-2.5 py-1.5 rounded-xl border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors flex items-center gap-1.5 cursor-pointer"
+                title="Excluir todos os produtos listados"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Excluir Tudo</span>
+              </button>
+            )
           )}
         </div>
 
@@ -989,12 +1123,15 @@ export default function Stock() {
 
             const isDuplicate = p.id ? duplicateAnalysis.duplicateIdSet.has(p.id) : false;
             const duplicateCount = p.id ? (duplicateAnalysis.duplicateCountById.get(p.id) || 1) : 1;
+            const isSelected = p.id ? selectedProductIds.includes(p.id) : false;
 
             return (
               <div 
                 key={p.id} 
-                className={`rounded-2xl border transition-all duration-200 shadow-xs flex flex-col justify-between overflow-hidden ${
-                  isDuplicate
+                className={`rounded-2xl border transition-all duration-200 shadow-xs flex flex-col justify-between overflow-hidden relative ${
+                  isSelected
+                    ? 'border-2 border-primary bg-primary/5 dark:bg-primary/10 ring-2 ring-primary/40 shadow-md'
+                    : isDuplicate
                     ? 'border-2 border-rose-500 bg-gradient-to-b from-rose-100/50 via-surface to-surface dark:from-rose-950/50 dark:via-surface ring-2 ring-rose-500/25 shadow-md'
                     : p.stock === 0
                     ? 'bg-surface border-red-400/60 dark:border-red-600/40 bg-gradient-to-b from-red-50/20 to-surface'
@@ -1025,8 +1162,24 @@ export default function Stock() {
                     </div>
                   )}
 
-                  {/* Header: Imagem, Nome e Categoria */}
+                  {/* Header: Imagem, Checkbox, Nome e Categoria */}
                   <div className="flex items-start gap-3">
+                    {/* Checkbox de Seleção Rápida */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (p.id) toggleSelectProduct(p.id);
+                      }}
+                      className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all cursor-pointer border shrink-0 mt-1 ${
+                        isSelected
+                          ? 'bg-primary text-white border-primary shadow-xs scale-105'
+                          : 'bg-muted/60 text-transparent hover:text-muted-foreground/30 border-border hover:border-primary/50'
+                      }`}
+                      title={isSelected ? 'Desmarcar este produto' : 'Selecionar este produto para exclusão'}
+                    >
+                      <Check className={`w-4 h-4 stroke-[3] ${isSelected ? 'opacity-100' : 'opacity-0'}`} />
+                    </button>
                     {p.imageUrl ? (
                       <img 
                         src={p.imageUrl} 
@@ -1250,6 +1403,30 @@ export default function Stock() {
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-muted border-b border-border">
+                <th className="p-3.5 w-12 text-center">
+                  <button
+                    type="button"
+                    onClick={handleSelectAllFiltered}
+                    className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer border mx-auto ${
+                      filteredProducts.length > 0 && filteredProducts.every(p => p.id && selectedProductIds.includes(p.id))
+                        ? 'bg-primary text-white border-primary shadow-xs'
+                        : selectedProductIds.length > 0
+                        ? 'bg-primary/20 text-primary border-primary'
+                        : 'bg-surface text-transparent hover:text-muted-foreground/30 border-border'
+                    }`}
+                    title={
+                      filteredProducts.length > 0 && filteredProducts.every(p => p.id && selectedProductIds.includes(p.id))
+                        ? 'Desmarcar todos'
+                        : 'Selecionar todos os produtos listados'
+                    }
+                  >
+                    {filteredProducts.length > 0 && filteredProducts.every(p => p.id && selectedProductIds.includes(p.id)) ? (
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    ) : selectedProductIds.length > 0 ? (
+                      <Minus className="w-3.5 h-3.5 stroke-[3]" />
+                    ) : null}
+                  </button>
+                </th>
                 <th className="p-3.5 font-semibold text-muted-foreground">{entityName()}</th>
                 <th className="p-3.5 font-semibold text-muted-foreground">{v('stock.initial', 'Estoque Inicial')} ({v('stock.initialDate', 'Data Base')})</th>
                 <th className="p-3.5 font-semibold text-muted-foreground">{v('stock.current', 'Estoque Atual')}</th>
@@ -1275,9 +1452,27 @@ export default function Stock() {
                 const stockPercentage = Math.min(100, Math.round((p.stock / maxStockVal) * 100));
                 const isDuplicate = p.id ? duplicateAnalysis.duplicateIdSet.has(p.id) : false;
                 const duplicateCount = p.id ? (duplicateAnalysis.duplicateCountById.get(p.id) || 1) : 1;
+                const isSelected = p.id ? selectedProductIds.includes(p.id) : false;
 
                 return (
-                  <tr key={p.id} className={`transition-colors ${isDuplicate ? 'bg-rose-50/70 dark:bg-rose-950/40 border-l-4 border-l-rose-600 hover:bg-rose-100/60' : 'hover:bg-muted/40'}`}>
+                  <tr key={p.id} className={`transition-colors ${isSelected ? 'bg-primary/10 border-l-4 border-l-primary' : isDuplicate ? 'bg-rose-50/70 dark:bg-rose-950/40 border-l-4 border-l-rose-600 hover:bg-rose-100/60' : 'hover:bg-muted/40'}`}>
+                    <td className="p-3.5 w-12 text-center">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (p.id) toggleSelectProduct(p.id);
+                        }}
+                        className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer border mx-auto ${
+                          isSelected
+                            ? 'bg-primary text-white border-primary shadow-xs'
+                            : 'bg-surface text-transparent hover:text-muted-foreground/30 border-border hover:border-primary/40'
+                        }`}
+                        title={isSelected ? 'Desmarcar produto' : 'Selecionar produto para exclusão'}
+                      >
+                        <Check className={`w-3.5 h-3.5 stroke-[3] ${isSelected ? 'opacity-100' : 'opacity-0'}`} />
+                      </button>
+                    </td>
                     <td className="p-3.5">
                       <div className="flex items-center gap-3">
                         {p.imageUrl ? (
@@ -1498,7 +1693,7 @@ export default function Stock() {
 
               {filteredProducts.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="p-8 text-center text-muted-foreground">
                     Nenhum produto encontrado com os filtros selecionados.
                   </td>
                 </tr>
@@ -1511,8 +1706,18 @@ export default function Stock() {
 
       {/* Modal de Cadastro / Edição com Estoque Inicial, Data Base e Estoque Máximo */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs">
-          <div className="bg-surface rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 border border-border shadow-2xl">
+        <div 
+          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsModalOpen(false);
+            }
+          }}
+        >
+          <div 
+            className="bg-surface rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 border border-border shadow-2xl my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-2xl font-bold mb-2 text-foreground">
               {editingId ? 'Editar Produto e Parâmetros de Reposição' : 'Novo Produto'}
             </h2>
@@ -2804,8 +3009,18 @@ export default function Stock() {
 
       {/* Modal de Edição Rápida de Estoque Inicial e Data */}
       {editingInitialStockProduct && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-surface rounded-2xl max-w-lg w-full p-6 border border-border shadow-2xl animate-in fade-in zoom-in-95">
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSavingInitialStock) {
+              setEditingInitialStockProduct(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-surface rounded-2xl max-w-lg w-full p-6 border border-border shadow-2xl animate-in fade-in zoom-in-95 my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-between items-start mb-4 border-b border-border pb-3">
               <div>
                 <span className="text-xs font-semibold text-primary uppercase tracking-wider block">Atualização Mensal</span>
@@ -2957,8 +3172,18 @@ export default function Stock() {
 
       {/* Modal de Virada de Mês em Massa */}
       {isMonthlyTurnoverOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-surface rounded-2xl max-w-lg w-full p-6 border border-border shadow-2xl animate-in fade-in zoom-in-95">
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSavingTurnover) {
+              setIsMonthlyTurnoverOpen(false);
+            }
+          }}
+        >
+          <div 
+            className="bg-surface rounded-2xl max-w-lg w-full p-6 border border-border shadow-2xl animate-in fade-in zoom-in-95 my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-between items-start mb-4 border-b border-border pb-3">
               <div>
                 <span className="text-xs font-semibold text-primary uppercase tracking-wider block">Virada de Mês</span>
@@ -3061,10 +3286,20 @@ export default function Stock() {
         </div>
       )}
 
-      {/* Modal de Confirmação para Excluir Produto */}
+      {/* Modal de Confirmação para Excluir Produto Individual */}
       {productToDelete && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-surface rounded-2xl max-w-md w-full p-6 border border-border shadow-2xl space-y-4">
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeleting) {
+              setProductToDelete(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-surface rounded-2xl max-w-md w-full p-6 border border-border shadow-2xl space-y-4 my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
               <div className="w-12 h-12 rounded-xl bg-red-100 dark:bg-red-950/50 flex items-center justify-center shrink-0 border border-red-200 dark:border-red-900/40">
                 <Trash2 className="w-6 h-6" />
@@ -3103,7 +3338,7 @@ export default function Stock() {
                 type="button"
                 onClick={() => setProductToDelete(null)}
                 disabled={isDeleting}
-                className="px-4 py-2 border border-border rounded-xl hover:bg-muted text-foreground font-medium text-sm cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 border border-border rounded-xl hover:bg-muted text-foreground font-medium text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancelar
               </button>
@@ -3111,10 +3346,156 @@ export default function Stock() {
                 type="button"
                 onClick={handleDeleteProduct}
                 disabled={isDeleting}
-                className="flex items-center gap-2 px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-sm cursor-pointer transition-colors shadow-sm disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-sm transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                title={isDeleting ? 'Excluindo produto...' : 'Confirmar exclusão'}
               >
-                <Trash2 className="w-4 h-4" />
+                {isDeleting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
                 <span>{isDeleting ? 'Excluindo...' : 'Sim, Excluir Produto'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Barra Flutuante de Ações para Seleção Múltipla */}
+      {selectedProductIds.length > 0 && (
+        <div className="fixed bottom-6 inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-40 bg-surface/95 backdrop-blur-md border-2 border-primary/50 text-foreground px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3 sm:gap-6 animate-in slide-in-from-bottom-5 duration-200 max-w-xl w-full">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-primary text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
+              {selectedProductIds.length}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-bold text-foreground truncate">
+                {selectedProductIds.length} {selectedProductIds.length === 1 ? 'produto selecionado' : 'produtos selecionados'}
+              </p>
+              <p className="text-[11px] text-muted-foreground hidden sm:block truncate">
+                Clique em excluir para remover os selecionados juntos
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleSelectAllFiltered}
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl border border-border bg-muted/60 hover:bg-muted text-foreground text-xs font-semibold cursor-pointer transition-colors"
+            >
+              {filteredProducts.length > 0 && filteredProducts.every(p => p.id && selectedProductIds.includes(p.id)) ? 'Desmarcar' : 'Todos'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="px-3.5 sm:px-4 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Excluir ({selectedProductIds.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+              title="Cancelar seleção"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação para Exclusão em Massa de Produtos */}
+      {isBulkDeleteModalOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isBulkDeleting) {
+              setIsBulkDeleteModalOpen(false);
+            }
+          }}
+        >
+          <div 
+            className="bg-surface rounded-2xl max-w-lg w-full p-6 border border-border shadow-2xl space-y-4 my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
+              <div className="w-12 h-12 rounded-xl bg-red-100 dark:bg-red-950/50 flex items-center justify-center shrink-0 border border-red-200 dark:border-red-900/40">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-foreground">
+                  Excluir {selectedProductIds.length} Produtos?
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Esta ação removerá todos os {selectedProductIds.length} produtos selecionados do catálogo e estoque.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-muted/60 rounded-xl border border-border max-h-56 overflow-y-auto space-y-1.5 divide-y divide-border/40">
+              {selectedProductIds.map(id => {
+                const prod = products.find(p => p.id === id);
+                if (!prod) return null;
+                return (
+                  <div key={id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs">
+                    <div className="truncate pr-2">
+                      <span className="font-bold text-foreground">{prod.name}</span>
+                      <span className="text-muted-foreground ml-1.5 text-[11px]">({prod.category})</span>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-2">
+                      <span className="text-muted-foreground">{prod.stock} un.</span>
+                      <span className="font-semibold text-foreground">R$ {prod.basePrice?.toFixed(2)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Use esta opção para excluir com facilidade mais de um produto quando necessário (como produtos duplicados, descontinuados ou cadastrados por engano).
+            </p>
+
+            {isBulkDeleting && (
+              <div className="space-y-1.5 pt-1">
+                <div className="flex justify-between text-xs font-semibold text-foreground">
+                  <span>Excluindo produtos...</span>
+                  <span>{bulkDeleteProgress.current} de {bulkDeleteProgress.total}</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                  <div 
+                    className="bg-red-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${(bulkDeleteProgress.current / (bulkDeleteProgress.total || 1)) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsBulkDeleteModalOpen(false)}
+                disabled={isBulkDeleting}
+                className="px-4 py-2 border border-border rounded-xl hover:bg-muted text-foreground font-medium text-sm cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBulkDelete}
+                disabled={isBulkDeleting}
+                className="flex items-center gap-2 px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-sm transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                title={isBulkDeleting ? 'Excluindo produtos...' : 'Confirmar exclusão em massa'}
+              >
+                {isBulkDeleting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                <span>{isBulkDeleting ? 'Excluindo...' : `Sim, Excluir ${selectedProductIds.length} Produtos`}</span>
               </button>
             </div>
           </div>
