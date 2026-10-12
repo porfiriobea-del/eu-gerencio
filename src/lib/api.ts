@@ -1607,3 +1607,12 @@ export const getSaleItemsForSale = async (saleId: string): Promise<SaleItem[]> =
 };
 
 
+export async function deleteMultipleProducts(ids: string[]) {
+  if (!ids || ids.length === 0) return;
+  const { error } = await supabase
+    .from('produtos')
+    .delete()
+    .in('id', ids);
+  
+  if (error) throw error;
+}
