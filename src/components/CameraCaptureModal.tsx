@@ -301,18 +301,43 @@ export function CameraCaptureModal({
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
           
           {/* CAMERA / CAPTURE VIEW */}
-          {mode === 'camera' && (
+{mode === 'camera' && (
             <div className="space-y-4">
               <div className="relative rounded-2xl overflow-hidden bg-black aspect-4/3 flex items-center justify-center border-2 border-dashed border-border shadow-inner">
+                {/* O vídeo fica sempre no DOM para o ref nunca ser nulo */}
+                <video
+                  ref={videoRef}
+                  playsInline
+                  muted
+                  autoPlay
+                  className={`w-full h-full object-cover ${isCameraActive ? 'block' : 'hidden'}`}
+                />
+                <canvas ref={canvasRef} className="hidden" />
+
+                {/* Overlay ou Tela de Carregamento */}
                 {isCameraActive ? (
-                  <>
-                    <video
-                      ref={videoRef}
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover"
-                    />
-                    <canvas ref={canvasRef} className="hidden" />
+                  <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6">
+                    <div className="w-64 h-48 border-2 border-white/70 rounded-2xl border-dashed shadow-2xl relative">
+                      <div className="absolute top-2 left-2 text-[10px] text-white/90 bg-black/50 px-2 py-0.5 rounded backdrop-blur-xs font-medium">
+                        Enquadre o produto ou rótulo
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 space-y-3 bg-black/90">
+                    <Camera className="w-12 h-12 text-muted-foreground/60 mx-auto" />
+                    <p className="text-sm text-muted-foreground">
+                      {cameraError || 'Inicializando câmera...'}
+                    </p>
+                    <button
+                      onClick={startCamera}
+                      className="px-4 py-2 bg-primary text-white rounded-xl text-xs font-semibold hover:opacity-90 inline-flex items-center gap-2 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Tentar Câmera Novamente
+                    </button>
+                  </div>
+                )}
+              </div>
 
                     {/* Viewfinder Overlay */}
                     <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6">
