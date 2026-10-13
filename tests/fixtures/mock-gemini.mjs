@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 globalThis.fetch = async (url, options) => {
   assert.match(String(url), /^https:\/\/generativelanguage\.googleapis\.com\//);
   const body = JSON.parse(options.body);
+  const prompt = body.contents[0].parts.find(part => part.text)?.text;
+  for (const evidence of ['MARCA', 'RÓTULO', 'INGREDIENTES', 'EAN']) assert.ok(prompt.includes(evidence));
   const image = body.contents[0].parts.find(part => part.inlineData)?.inlineData;
   assert.equal(image.mimeType, 'image/jpeg');
   assert.equal(body.generationConfig.responseMimeType, 'application/json');

@@ -1,7 +1,8 @@
+import { getPackageUnits, CIGARETTE_UNITS } from '../lib/productUnits';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteField } from 'firebase/firestore';
-import { subscribeProducts, updateProduct, addProduct, addMultipleProducts, deleteProduct, deleteMultipleProducts, subscribeTodaySales, recordMovement } from '../lib/api';
+import { subscribeProducts, updateProduct, adjustProductStock, addProduct, addMultipleProducts, deleteProduct, deleteMultipleProducts, subscribeTodaySales, recordMovement } from '../lib/api';
 import { Product, Sale } from '../types';
 import { getAllCategories, saveCustomCategory } from '../lib/categories';
 import { Plus, Edit2, Trash2, Package, AlertTriangle, CheckCircle2, ShoppingBag, Calendar, ArrowUpRight, TrendingUp, Info, Tag, Check, X, RotateCcw, Sparkles, Camera, Image as ImageIcon, Clock, Flame, Percent, LayoutGrid, List, ChevronDown, ChevronUp, Minus, Eye, EyeOff, Loader2 } from 'lucide-react';
@@ -9,7 +10,7 @@ import { format, startOfMonth, subMonths } from 'date-fns';
 import { usePreferences } from '../lib/preferencesContext';
 import { PocketTip } from '../components/PocketTip';
 import { PreAddProductsModal } from '../components/PreAddProductsModal';
-import { recognizeProductFromImage } from '../lib/geminiProductScanner';
+import { recognizeProductFromImage, prepareProductImage } from '../lib/geminiProductScanner';
 import { CameraCaptureModal } from '../components/CameraCaptureModal';
 import { analyzeDuplicates, normalizeProductName } from '../lib/duplicateDetector';
 import { PRELOADED_PRODUCTS } from '../lib/preloadedProducts';
@@ -99,6 +100,8 @@ export default function Stock() {
     promoNotes: ''
   });
 
+  const formUnitsPerPackage = getPackageUnits(formData);
+
   const [isReadingLabel, setIsReadingLabel] = useState(false);
   const [labelReadError, setLabelReadError] = useState<string | null>(null);
   const labelRequestRef = useRef(0);
@@ -119,28 +122,8 @@ export default function Stock() {
     setIsReadingLabel(true);
     setLabelReadError(null);
     try {
-      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error('Não foi possível abrir a foto.'));
-        reader.onload = () => {
-          const img = new Image();
-          img.onload = () => resolve(img);
-          img.onerror = () => reject(new Error('Imagem inválida. Escolha outra foto.'));
-          img.src = String(reader.result);
-        };
-        reader.readAsDataURL(file);
-      });
+      const imageBase64 = await prepareProductImage(file);
       if (requestId !== labelRequestRef.current) return;
-
-      // Preserve label detail instead of shrinking the image to 320px.
-      const scale = Math.min(1, 1280 / Math.max(image.width, image.height));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(image.width * scale));
-      canvas.height = Math.max(1, Math.round(image.height * scale));
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Não foi possível processar a imagem.');
-      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-      const imageBase64 = canvas.toDataURL('image/jpeg', 0.9);
       setFormData((prev: any) => ({ ...prev, imageUrl: imageBase64 }));
 
       const { name, category } = await recognizeProductFromImage(imageBase64, categories);
@@ -187,7 +170,7 @@ export default function Stock() {
           category: cat,
           type: 'cigarro',
           purchaseForm: 'pacote',
-          unitsPerPackage: 200, // 10 carteiras de 20 cigarros.
+          unitsPerPackage: CIGARETTE_UNITS.pack, // 10 carteiras de 20 cigarros.
           unitCost: Number(prev.unitCost) > 0 ? prev.unitCost : 0.45,
           basePrice: baseUnit,
           priceUnit: baseUnit,
@@ -221,12 +204,14 @@ export default function Stock() {
 
   const openModal = (product?: Product) => {
     if (product) {
-      const unitsPkg = product.unitsPerPackage || 1;
+      const unitsPkg = getPackageUnits(product);
       const calculatedPkgCost = product.unitCost && unitsPkg > 1 
         ? Number((product.unitCost * unitsPkg).toFixed(2)) 
         : product.unitCost;
       setFormData({
         ...product,
+        unitsPerPackage: unitsPkg,
+        purchaseForm: product.type === 'cigarro' ? 'pacote' : product.purchaseForm,
         imageUrl: product.imageUrl || '',
         purchaseTotalCost: calculatedPkgCost ? String(calculatedPkgCost) : '',
         initialStock: product.initialStock !== undefined ? product.initialStock : product.stock,
@@ -274,11 +259,23 @@ export default function Stock() {
     const safetyNum = Number(formData.safetyStock);
     const maxNum = Number(formData.maxStock) || Math.max(stockNum, safetyNum * 2, 10);
     const initStockNum = Number(formData.initialStock !== undefined ? formData.initialStock : stockNum);
-    const unitsPkg = Number(formData.unitsPerPackage) || 1;
+    const unitsPkg = getPackageUnits(formData);
+    if (!Number.isSafeInteger(stockNum) || stockNum < 0 ||
+        !Number.isSafeInteger(initStockNum) || initStockNum < 0) {
+      alert('Informe o estoque em unidades avulsas inteiras, sem valores negativos.');
+      return;
+    }
+    if (formData.type === 'cigarro' && ['priceUnit', 'priceHalfCart', 'priceCart', 'pricePack'].some(field =>
+      formData[field] !== undefined && formData[field] !== '' &&
+      (!Number.isFinite(Number(formData[field])) || Number(formData[field]) < 0))) {
+      alert('Informe preços válidos para cada formato de cigarro.');
+      return;
+    }
 
     const payload: any = {
       ...formData,
       unitsPerPackage: unitsPkg,
+      purchaseForm: formData.type === 'cigarro' ? 'pacote' : formData.purchaseForm,
       unitCost: Number(formData.unitCost) || 0,
       stock: stockNum,
       safetyStock: safetyNum,
@@ -505,8 +502,11 @@ export default function Stock() {
   // Quick purchase/stock update helper
   const handleQuickAddStock = async (product: Product, amountToAdd: number) => {
     if (!product.id) return;
-    const newStock = Math.max(0, product.stock + amountToAdd);
-    await updateProduct(product.id, { stock: newStock });
+    try {
+      await adjustProductStock(product.id, amountToAdd);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Não foi possível atualizar o estoque.');
+    }
   };
 
   const duplicateAnalysis = useMemo(() => {
@@ -576,7 +576,7 @@ export default function Stock() {
     setInitialStockEditDate(currentDateBase);
     
     const initStock = p.initialStock !== undefined ? p.initialStock : p.stock;
-    const unitsPkg = p.unitsPerPackage > 0 ? p.unitsPerPackage : 1;
+    const unitsPkg = getPackageUnits(p);
     
     if (unitsPkg > 1) {
       setInitialStockEditPackages(Math.floor(initStock / unitsPkg));
@@ -589,7 +589,7 @@ export default function Stock() {
     if (!editingInitialStockProduct?.id) return;
     try {
       setIsSavingInitialStock(true);
-      const unitsPkg = editingInitialStockProduct.unitsPerPackage > 0 ? editingInitialStockProduct.unitsPerPackage : 1;
+      const unitsPkg = getPackageUnits(editingInitialStockProduct);
       let finalUnits = initialStockEditUnits;
       if (unitsPkg > 1) {
         finalUnits = (initialStockEditPackages * unitsPkg) + initialStockEditLoose;
@@ -652,7 +652,7 @@ export default function Stock() {
         type: p.type,
         category: p.category,
         purchaseForm: p.purchaseForm,
-        unitsPerPackage: p.unitsPerPackage,
+        unitsPerPackage: getPackageUnits(p),
         unitCost: p.unitCost,
         stock: 0, // Aguardando contagem de estoque
         safetyStock: p.safetyStock,
@@ -1161,7 +1161,7 @@ export default function Stock() {
             const isOverStocked = p.stock > maxStockVal;
             const suggestedBuyUnits = Math.max(0, maxStockVal - p.stock);
             const isExpanded = p.id ? !!expandedProductIds[p.id] : false;
-            const unitsPkg = p.unitsPerPackage > 0 ? p.unitsPerPackage : 1;
+            const unitsPkg = getPackageUnits(p);
             const suggestedPackages = unitsPkg > 1 ? Math.ceil(suggestedBuyUnits / unitsPkg) : suggestedBuyUnits;
 
             const isDuplicate = p.id ? duplicateAnalysis.duplicateIdSet.has(p.id) : false;
@@ -1301,10 +1301,10 @@ export default function Stock() {
                         {v('stock.current', 'Quantidade na Prateleira')}
                       </span>
                       <div className="text-2xl font-black text-foreground flex items-baseline gap-1 mt-0.5">
-                        {p.unitsPerPackage > 1 ? (
+                        {getPackageUnits(p) > 1 ? (
                           <>
-                            <span>{Math.floor(p.stock / p.unitsPerPackage)} fardos</span>
-                            <span className="text-xs font-normal text-muted-foreground">+ {p.stock % p.unitsPerPackage} un.</span>
+                            <span>{Math.floor(p.stock / getPackageUnits(p))} fardos</span>
+                            <span className="text-xs font-normal text-muted-foreground">+ {p.stock % getPackageUnits(p)} un.</span>
                           </>
                         ) : (
                           <>
@@ -1333,11 +1333,11 @@ export default function Stock() {
                       >
                         <Plus className="w-4 h-4" />
                       </button>
-                      {p.unitsPerPackage > 1 && (
+                      {getPackageUnits(p) > 1 && (
                         <button
                           type="button"
-                          title={`Entrada rápida de +1 fardo (+${p.unitsPerPackage} un.)`}
-                          onClick={() => handleQuickAddStock(p, p.unitsPerPackage)}
+                          title={`Entrada rápida de +1 ${p.type === 'cigarro' ? 'pacote' : 'fardo'} (+${getPackageUnits(p)} un.)`}
+                          onClick={() => handleQuickAddStock(p, getPackageUnits(p))}
                           className="px-2.5 h-9 rounded-xl bg-palette-1 border border-primary/25 text-primary text-xs font-bold flex items-center justify-center cursor-pointer shadow-2xs hover:bg-palette-1/80 active:scale-95 transition-all"
                         >
                           +1 Fardo
@@ -1488,8 +1488,8 @@ export default function Stock() {
                 
                 // Suggested units to reach max stock
                 const suggestedBuyUnits = Math.max(0, maxStockVal - p.stock);
-                const suggestedPackages = p.unitsPerPackage > 1 
-                  ? Math.ceil(suggestedBuyUnits / p.unitsPerPackage) 
+                const suggestedPackages = getPackageUnits(p) > 1
+                  ? Math.ceil(suggestedBuyUnits / getPackageUnits(p))
                   : suggestedBuyUnits;
 
                 const stockPercentage = Math.min(100, Math.round((p.stock / maxStockVal) * 100));
@@ -1569,9 +1569,9 @@ export default function Stock() {
                             <div className="text-[11px] text-primary font-medium mt-1">
                               🚬 Maço: R$ {(p.pricePack || (p.basePrice * 200)).toFixed(2)} | Cart: R$ {(p.priceCart || (p.basePrice * 20)).toFixed(2)} | Avulso: R$ {(p.priceUnit || p.basePrice).toFixed(2)}
                             </div>
-                          ) : p.unitsPerPackage > 1 ? (
+                          ) : getPackageUnits(p) > 1 ? (
                             <div className="text-[11px] text-primary font-medium mt-1">
-                              📦 {p.purchaseForm === 'fardo' ? 'Fardo' : 'Pacote'} c/ {p.unitsPerPackage} un.: R$ {(p.pricePackage || (p.basePrice * p.unitsPerPackage)).toFixed(2)} | Avulso: R$ {p.basePrice.toFixed(2)}
+                              📦 {p.purchaseForm === 'fardo' ? 'Fardo' : 'Pacote'} c/ {getPackageUnits(p)} un.: R$ {(p.pricePackage || (p.basePrice * getPackageUnits(p))).toFixed(2)} | Avulso: R$ {p.basePrice.toFixed(2)}
                             </div>
                           ) : null}
                         </div>
@@ -1580,10 +1580,10 @@ export default function Stock() {
 
                     {/* Estoque Inicial com Data Base */}
                     <td className="p-3.5">
-                      {p.unitsPerPackage > 1 ? (
+                      {getPackageUnits(p) > 1 ? (
                         <div>
                           <div className="font-bold text-foreground">
-                            {Math.floor((p.initialStock !== undefined ? p.initialStock : p.stock) / p.unitsPerPackage)} fardos + {((p.initialStock !== undefined ? p.initialStock : p.stock) % p.unitsPerPackage)} un.
+                            {Math.floor((p.initialStock !== undefined ? p.initialStock : p.stock) / getPackageUnits(p))} fardos + {((p.initialStock !== undefined ? p.initialStock : p.stock) % getPackageUnits(p))} un.
                           </div>
                           <div className="text-xs text-muted-foreground font-medium">
                             ({p.initialStock !== undefined ? p.initialStock : p.stock} un. no total)
@@ -1609,10 +1609,10 @@ export default function Stock() {
 
                     {/* Estoque Atual e Barra Visual */}
                     <td className="p-3.5">
-                      {p.unitsPerPackage > 1 ? (
+                      {getPackageUnits(p) > 1 ? (
                         <div>
                           <div className={`font-bold text-base ${needsReplenish ? 'text-red-600' : 'text-foreground'}`}>
-                            {Math.floor(p.stock / p.unitsPerPackage)} fardos + {p.stock % p.unitsPerPackage} un.
+                            {Math.floor(p.stock / getPackageUnits(p))} fardos + {p.stock % getPackageUnits(p)} un.
                           </div>
                           <div className="text-xs text-muted-foreground font-medium">
                             {p.stock} un. físicas no total
@@ -1641,7 +1641,7 @@ export default function Stock() {
                       <div>
                         <span className="text-muted-foreground">Segurança: </span>
                         <span className="font-semibold text-foreground">
-                          {p.unitsPerPackage > 1 ? `${p.safetyStock} un. (${Math.floor(p.safetyStock / p.unitsPerPackage)} fardos)` : `${p.safetyStock} un.`}
+                          {getPackageUnits(p) > 1 ? `${p.safetyStock} un. (${Math.floor(p.safetyStock / getPackageUnits(p))} fardos)` : `${p.safetyStock} un.`}
                         </span>
                       </div>
                       <div className="mt-0.5">
@@ -1651,7 +1651,7 @@ export default function Stock() {
                       <div className="mt-0.5 text-primary font-bold">
                         <span>Estoque Máximo: </span>
                         <span>
-                          {p.unitsPerPackage > 1 ? `${maxStockVal} un. (${Math.floor(maxStockVal / p.unitsPerPackage)} fardos)` : `${maxStockVal} un.`}
+                          {getPackageUnits(p) > 1 ? `${maxStockVal} un. (${Math.floor(maxStockVal / getPackageUnits(p))} fardos)` : `${maxStockVal} un.`}
                         </span>
                       </div>
                     </td>
@@ -1694,10 +1694,10 @@ export default function Stock() {
                     {/* Ações */}
                     <td className="p-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        {p.unitsPerPackage > 1 && (
+                        {getPackageUnits(p) > 1 && (
                           <button
-                            title={`Entrada de +1 ${p.purchaseForm === 'fardo' ? 'fardo' : 'pacote'} (+${p.unitsPerPackage} un.)`}
-                            onClick={() => handleQuickAddStock(p, p.unitsPerPackage)}
+                            title={`Entrada de +1 ${p.purchaseForm === 'fardo' ? 'fardo' : 'pacote'} (+${getPackageUnits(p)} un.)`}
+                            onClick={() => handleQuickAddStock(p, getPackageUnits(p))}
                             className="px-2 py-1 bg-palette-1 hover:opacity-90 text-primary rounded text-xs font-bold transition-opacity cursor-pointer border border-primary/20"
                           >
                             +1 Fardo
@@ -1833,7 +1833,7 @@ export default function Stock() {
                     </div>
                     {isReadingLabel && (
                       <p role="status" className="flex items-center gap-2 text-xs text-primary">
-                        <Loader2 className="w-4 h-4 animate-spin" /> Lendo rótulo...
+                        <Loader2 className="w-4 h-4 animate-spin" /> Processando imagem com IA...
                       </p>
                     )}
                     {labelReadError && (
@@ -1997,7 +1997,7 @@ export default function Stock() {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
                       <div className="bg-surface p-2.5 rounded-lg border border-border shadow-xs">
                         <label className="block text-[11px] font-bold text-foreground mb-1">
-                          📦 Maço (200 un.)
+                          📦 Pacote/Maço (200 un.)
                         </label>
                         <span className="text-[10px] text-muted-foreground block mb-1">10 carteiras</span>
                         <div className="flex items-center gap-1">
@@ -2090,10 +2090,11 @@ export default function Stock() {
                         Forma como você compra do Fornecedor *
                       </label>
                       <select 
-                        value={formData.purchaseForm} 
+                        value={formData.type === 'cigarro' ? 'pacote' : formData.purchaseForm}
+                        disabled={formData.type === 'cigarro'}
                         onChange={e => {
                           const newForm = e.target.value as any;
-                          const currentUnits = Number(formData.unitsPerPackage) || 1;
+                          const currentUnits = formUnitsPerPackage || 1;
                           const defaultUnits = newForm === 'unidade' ? 1 : (currentUnits > 1 ? currentUnits : (newForm === 'fardo' ? 6 : 12));
                           const totalCost = parseFloat(formData.purchaseTotalCost);
                           const newUnitCost = !isNaN(totalCost) && totalCost > 0 
@@ -2125,7 +2126,8 @@ export default function Stock() {
                           type="number" 
                           required 
                           min={1} 
-                          value={formData.unitsPerPackage} 
+                          value={formUnitsPerPackage}
+                          disabled={formData.type === 'cigarro'}
                           onChange={e => {
                             const newUnits = Math.max(1, parseInt(e.target.value) || 1);
                             const totalCost = parseFloat(formData.purchaseTotalCost);
@@ -2159,7 +2161,7 @@ export default function Stock() {
                         <button
                           key={units}
                           type="button"
-                          aria-pressed={Number(formData.unitsPerPackage) === units}
+                          aria-pressed={formUnitsPerPackage === units}
                           className="rounded-lg border border-border px-3 py-1.5 font-semibold hover:bg-muted"
                           onClick={() => setFormData((prev: any) => ({
                             ...prev,
@@ -2200,7 +2202,7 @@ export default function Stock() {
                             onChange={e => {
                               const val = e.target.value;
                               const numVal = parseFloat(val);
-                              const units = Number(formData.unitsPerPackage) || 1;
+                              const units = formUnitsPerPackage || 1;
                               const calcUnitCost = !isNaN(numVal) && numVal > 0 
                                 ? Number((numVal / units).toFixed(2))
                                 : 0;
@@ -2240,7 +2242,7 @@ export default function Stock() {
                           onChange={e => {
                             const val = e.target.value;
                             const numVal = parseFloat(val) || 0;
-                            const units = Number(formData.unitsPerPackage) || 1;
+                            const units = formUnitsPerPackage || 1;
                             setFormData((prev: any) => ({
                               ...prev,
                               unitCost: val,
@@ -2252,18 +2254,18 @@ export default function Stock() {
                       </div>
                       <div className="flex items-center justify-between mt-1 text-[11px] text-muted-foreground">
                         <span>
-                          {formData.purchaseForm !== 'unidade' && Number(formData.unitsPerPackage) > 1 && parseFloat(formData.purchaseTotalCost) > 0 ? (
+                          {formData.purchaseForm !== 'unidade' && formUnitsPerPackage > 1 && parseFloat(formData.purchaseTotalCost) > 0 ? (
                             <>Calculado: R$ {parseFloat(formData.purchaseTotalCost).toFixed(2)} ÷ {formData.unitsPerPackage} un.</>
                           ) : (
                             <>Custo individual de cada unidade para o estoque</>
                           )}
                         </span>
-                        {formData.purchaseForm !== 'unidade' && Number(formData.unitsPerPackage) > 1 && (
+                        {formData.purchaseForm !== 'unidade' && formUnitsPerPackage > 1 && (
                           <button
                             type="button"
                             onClick={() => {
                               const total = parseFloat(formData.purchaseTotalCost) || 0;
-                              const units = Number(formData.unitsPerPackage) || 1;
+                              const units = formUnitsPerPackage || 1;
                               if (total > 0) {
                                 setFormData((prev: any) => ({
                                   ...prev,
@@ -2321,7 +2323,7 @@ export default function Stock() {
                           onChange={e => {
                             const val = e.target.value;
                             const numPrice = parseFloat(val) || 0;
-                            const units = Number(formData.unitsPerPackage) || 1;
+                            const units = formUnitsPerPackage || 1;
                             setFormData((prev: any) => ({
                               ...prev, 
                               basePrice: val,
@@ -2352,7 +2354,7 @@ export default function Stock() {
                             { label: '50%', mult: 1.50 }
                           ].map(sug => {
                             const sugPrice = Number((Number(formData.unitCost) * sug.mult).toFixed(2));
-                            const units = Number(formData.unitsPerPackage) || 1;
+                            const units = formUnitsPerPackage || 1;
                             return (
                               <button
                                 key={sug.label}
@@ -2384,7 +2386,7 @@ export default function Stock() {
                 </div>
 
                 {/* Preço de Venda e Sugestão do Fardo/Pacote Fechado */}
-                {formData.type !== 'cigarro' && Number(formData.unitsPerPackage) > 1 && (
+                {formData.type !== 'cigarro' && formUnitsPerPackage > 1 && (
                   <div className="col-span-1 sm:col-span-2 p-4 rounded-xl bg-palette-1/60 border border-primary/30 space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-primary/20 pb-2">
                       <div>
@@ -2401,13 +2403,13 @@ export default function Stock() {
                         <button
                           type="button"
                           onClick={() => {
-                            const calculated = Number(((Number(formData.basePrice) || 0) * Number(formData.unitsPerPackage)).toFixed(2));
+                            const calculated = Number(((Number(formData.basePrice) || 0) * formUnitsPerPackage).toFixed(2));
                             setFormData((prev: any) => ({ ...prev, pricePackage: calculated }));
                           }}
                           className="text-[11px] font-bold text-primary hover:underline cursor-pointer bg-surface px-2.5 py-1 rounded-md border border-primary/20 shadow-2xs"
                           title="Preço proporcional exato das unidades avulsas somadas"
                         >
-                          ⚡ Proporcional (R$ {((Number(formData.basePrice) || 0) * Number(formData.unitsPerPackage)).toFixed(2)})
+                          ⚡ Proporcional (R$ {((Number(formData.basePrice) || 0) * formUnitsPerPackage).toFixed(2)})
                         </button>
 
                         {Number(formData.basePrice) > 0 && (
@@ -2415,7 +2417,7 @@ export default function Stock() {
                             type="button"
                             onClick={() => {
                               // Desconto atrativo de atacado/fardo de 5% sobre o proporcional
-                              const prop = (Number(formData.basePrice) || 0) * Number(formData.unitsPerPackage);
+                              const prop = (Number(formData.basePrice) || 0) * formUnitsPerPackage;
                               const discounted = Number((prop * 0.95).toFixed(2));
                               setFormData((prev: any) => ({ ...prev, pricePackage: discounted }));
                             }}
@@ -2453,7 +2455,7 @@ export default function Stock() {
                             const fardoPrice = Number(formData.pricePackage) || 0;
                             const fardoCost = parseFloat(formData.purchaseTotalCost) > 0 
                               ? parseFloat(formData.purchaseTotalCost) 
-                              : (Number(formData.unitCost) * Number(formData.unitsPerPackage));
+                              : (Number(formData.unitCost) * formUnitsPerPackage);
                             const profit = fardoPrice - fardoCost;
                             const marginPercent = fardoCost > 0 ? ((profit / fardoCost) * 100).toFixed(0) : '0';
                             return (
@@ -2826,7 +2828,7 @@ export default function Stock() {
                   </p>
                 </div>
 
-                {Number(formData.unitsPerPackage) > 1 ? (
+                {formUnitsPerPackage > 1 ? (
                   <div className="col-span-1 sm:col-span-2 p-3.5 bg-muted/50 border border-border rounded-xl space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-foreground">
@@ -2844,12 +2846,12 @@ export default function Stock() {
                         <input 
                           type="number"
                           min={0}
-                          value={Math.floor(Number(formData.initialStock !== undefined ? formData.initialStock : formData.stock) / Number(formData.unitsPerPackage))}
+                          value={Math.floor(Number(formData.initialStock !== undefined ? formData.initialStock : formData.stock) / formUnitsPerPackage)}
                           onChange={e => {
                             const pkgs = Math.max(0, parseInt(e.target.value) || 0);
                             const currentTotal = Number(formData.initialStock !== undefined ? formData.initialStock : formData.stock);
-                            const loose = currentTotal % Number(formData.unitsPerPackage);
-                            const totalUnits = (pkgs * Number(formData.unitsPerPackage)) + loose;
+                            const loose = currentTotal % formUnitsPerPackage;
+                            const totalUnits = (pkgs * formUnitsPerPackage) + loose;
                             setFormData({ ...formData, initialStock: totalUnits });
                           }}
                           className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground font-bold text-sm"
@@ -2862,12 +2864,12 @@ export default function Stock() {
                         <input 
                           type="number"
                           min={0}
-                          value={Number(formData.initialStock !== undefined ? formData.initialStock : formData.stock) % Number(formData.unitsPerPackage)}
+                          value={Number(formData.initialStock !== undefined ? formData.initialStock : formData.stock) % formUnitsPerPackage}
                           onChange={e => {
                             const loose = Math.max(0, parseInt(e.target.value) || 0);
                             const currentTotal = Number(formData.initialStock !== undefined ? formData.initialStock : formData.stock);
-                            const pkgs = Math.floor(currentTotal / Number(formData.unitsPerPackage));
-                            const totalUnits = (pkgs * Number(formData.unitsPerPackage)) + loose;
+                            const pkgs = Math.floor(currentTotal / formUnitsPerPackage);
+                            const totalUnits = (pkgs * formUnitsPerPackage) + loose;
                             setFormData({ ...formData, initialStock: totalUnits });
                           }}
                           className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground font-bold text-sm"
@@ -2934,7 +2936,7 @@ export default function Stock() {
                   </p>
                 </div>
 
-                {Number(formData.unitsPerPackage) > 1 ? (
+                {formUnitsPerPackage > 1 ? (
                   <div className="col-span-1 sm:col-span-2 p-3.5 bg-muted/50 border border-border rounded-xl space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-foreground">
@@ -2952,11 +2954,11 @@ export default function Stock() {
                         <input 
                           type="number"
                           min={0}
-                          value={Math.floor(Number(formData.stock || 0) / Number(formData.unitsPerPackage))}
+                          value={Math.floor(Number(formData.stock || 0) / formUnitsPerPackage)}
                           onChange={e => {
                             const pkgs = Math.max(0, parseInt(e.target.value) || 0);
-                            const loose = Number(formData.stock || 0) % Number(formData.unitsPerPackage);
-                            const totalUnits = (pkgs * Number(formData.unitsPerPackage)) + loose;
+                            const loose = Number(formData.stock || 0) % formUnitsPerPackage;
+                            const totalUnits = (pkgs * formUnitsPerPackage) + loose;
                             setFormData({ ...formData, stock: totalUnits });
                           }}
                           className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground font-bold text-sm"
@@ -2969,11 +2971,11 @@ export default function Stock() {
                         <input 
                           type="number"
                           min={0}
-                          value={Number(formData.stock || 0) % Number(formData.unitsPerPackage)}
+                          value={Number(formData.stock || 0) % formUnitsPerPackage}
                           onChange={e => {
                             const loose = Math.max(0, parseInt(e.target.value) || 0);
-                            const pkgs = Math.floor(Number(formData.stock || 0) / Number(formData.unitsPerPackage));
-                            const totalUnits = (pkgs * Number(formData.unitsPerPackage)) + loose;
+                            const pkgs = Math.floor(Number(formData.stock || 0) / formUnitsPerPackage);
+                            const totalUnits = (pkgs * formUnitsPerPackage) + loose;
                             setFormData({ ...formData, stock: totalUnits });
                           }}
                           className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground font-bold text-sm"
@@ -3162,7 +3164,7 @@ export default function Stock() {
                     type="button"
                     onClick={() => {
                       const cur = editingInitialStockProduct.stock;
-                      const unitsPkg = editingInitialStockProduct.unitsPerPackage > 0 ? editingInitialStockProduct.unitsPerPackage : 1;
+                      const unitsPkg = getPackageUnits(editingInitialStockProduct);
                       if (unitsPkg > 1) {
                         setInitialStockEditPackages(Math.floor(cur / unitsPkg));
                         setInitialStockEditLoose(cur % unitsPkg);
@@ -3177,11 +3179,11 @@ export default function Stock() {
                   </button>
                 </div>
 
-                {editingInitialStockProduct.unitsPerPackage > 1 ? (
+                {getPackageUnits(editingInitialStockProduct) > 1 ? (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <span className="text-xs text-muted-foreground block mb-1">
-                        {editingInitialStockProduct.purchaseForm === 'fardo' ? 'Fardos' : 'Pacotes'} (c/ {editingInitialStockProduct.unitsPerPackage} un.)
+                        {editingInitialStockProduct.purchaseForm === 'fardo' ? 'Fardos' : 'Pacotes'} (c/ {getPackageUnits(editingInitialStockProduct)} un.)
                       </span>
                       <input
                         type="number"
@@ -3202,7 +3204,7 @@ export default function Stock() {
                       />
                     </div>
                     <div className="col-span-2 text-xs text-primary font-semibold">
-                      Total Inicial Calculado: {(initialStockEditPackages * editingInitialStockProduct.unitsPerPackage) + initialStockEditLoose} unidades
+                      Total Inicial Calculado: {(initialStockEditPackages * getPackageUnits(editingInitialStockProduct)) + initialStockEditLoose} unidades
                     </div>
                   </div>
                 ) : (
@@ -3597,6 +3599,11 @@ export default function Stock() {
         isOpen={isCameraModalOpen}
         onClose={() => setIsCameraModalOpen(false)}
         availableCategories={categories}
+        onRecognized={(product, imageUrl) => {
+          if (isModalOpen) {
+            setFormData((prev: any) => ({ ...prev, name: product.name, category: product.category, imageUrl }));
+          }
+        }}
         onProductSaved={(name) => {
           setToastMessage(`✓ Produto "${name}" cadastrado com sucesso por foto!`);
           setTimeout(() => setToastMessage(null), 5000);

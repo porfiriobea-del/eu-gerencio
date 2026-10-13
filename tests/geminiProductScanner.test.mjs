@@ -35,3 +35,11 @@ test('surfaces server failures and rejects incomplete or non-JSON responses', as
   globalThis.fetch = async () => new Response('<html>proxy error</html>', { status: 502 });
   await assert.rejects(recognizeProductFromImage(image), /status 502/);
 });
+
+
+test('network errors and static deployment HTML produce friendly errors', async t => {
+  t.mock.method(globalThis, 'fetch', async () => { throw new TypeError('Failed to fetch'); });
+  await assert.rejects(recognizeProductFromImage(image), /Verifique sua conexão/);
+  globalThis.fetch = async () => new Response('<html>SPA</html>', { status: 200 });
+  await assert.rejects(recognizeProductFromImage(image), /serviço.*não está disponível/);
+});

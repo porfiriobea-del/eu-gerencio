@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { getCigaretteFormats, getPackageUnits, calculateStockUpdates } from '../lib/productUnits';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   subscribeProducts, 
   subscribeCustomers, 
@@ -116,13 +117,16 @@ export default function POS() {
   }, [products, search, selectedCategory]);
 
   const addToCart = (product: Product, format: string, price: number, stockDeduction: number) => {
-    setCart(prev => {
-      const existing = prev.find(i => i.product.id === product.id && i.format === format);
-      if (existing) {
-        return prev.map(i => i === existing ? { ...i, quantity: i.quantity + 1 } : i);
-      }
-      return [...prev, { product, format, quantity: 1, price, stockDeduction }];
-    });
+    const existing = cart.find(i => i.product.id === product.id && i.format === format);
+    const nextCart = existing
+      ? cart.map(i => i === existing ? { ...i, quantity: i.quantity + 1 } : i)
+      : [...cart, { product, format, quantity: 1, price, stockDeduction }];
+    try {
+      calculateStockUpdates(nextCart, products);
+      setCart(nextCart);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Não foi possível adicionar o produto.');
+    }
   };
 
   const removeFromCart = (index: number) => {
@@ -160,8 +164,34 @@ export default function POS() {
 
   const change = Math.max(0, amountReceived - finalTotal);
 
+  const [isCompletingSale, setIsCompletingSale] = useState(false);
+  const checkoutInProgressRef = useRef(false);
+
   const handleCheckout = async () => {
+    if (checkoutInProgressRef.current) return;
+    checkoutInProgressRef.current = true;
+    setIsCompletingSale(true);
+    try {
+      await completeCheckout();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Não foi possível concluir a venda. Tente novamente.');
+    } finally {
+      checkoutInProgressRef.current = false;
+      setIsCompletingSale(false);
+    }
+  };
+
+  const completeCheckout = async () => {
     if (cart.length === 0) return;
+
+    let productsToUpdate: { id: string; newStock: number }[];
+    try {
+      // Use the latest product balances and sum all formats of the same product.
+      productsToUpdate = calculateStockUpdates(cart, products);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Não foi possível validar o estoque.');
+      return;
+    }
 
     let finalCustomerId = selectedCustomerId;
 
@@ -198,20 +228,8 @@ export default function POS() {
       format: i.format,
       quantity: i.quantity,
       price: i.price,
-      unitCost: i.product.unitCost,
+      unitCost: i.product.unitCost * i.stockDeduction,
     }));
-
-    // Calculate new stock (aggregate by product id)
-    const stockUpdates: Record<string, number> = {};
-    cart.forEach(i => {
-      const pid = i.product.id!;
-      if (stockUpdates[pid] === undefined) {
-        stockUpdates[pid] = i.product.stock;
-      }
-      stockUpdates[pid] -= (i.quantity * i.stockDeduction);
-    });
-
-    const productsToUpdate = Object.keys(stockUpdates).map(id => ({ id, newStock: stockUpdates[id] }));
 
     await recordSale(
       { 
@@ -492,9 +510,9 @@ export default function POS() {
                   <span className="text-[10px] font-semibold text-primary bg-palette-1 px-1.5 py-0.5 rounded">
                     {p.category}
                   </span>
-                  {p.unitsPerPackage > 1 ? (
+                  {getPackageUnits(p) > 1 ? (
                     <span className="text-[11px] text-muted-foreground font-medium">
-                      📦 {Math.floor(p.stock / p.unitsPerPackage)} {p.purchaseForm === 'fardo' ? 'fardos' : 'pac.'} + {p.stock % p.unitsPerPackage} un.
+                      📦 {Math.floor(p.stock / getPackageUnits(p))} {p.purchaseForm === 'fardo' ? 'fardos' : 'pac.'} + {p.stock % getPackageUnits(p)} un.
                     </span>
                   ) : (
                     <span className="text-[11px] text-muted-foreground">{p.stock} un.</span>
@@ -527,51 +545,23 @@ export default function POS() {
               <div className="mt-3">
                 {p.type === 'cigarro' ? (
                   <div className="flex flex-col gap-1.5">
-                    {(() => {
-                      const pricePack = p.pricePack !== undefined ? p.pricePack : Number((p.basePrice * 200).toFixed(2));
-                      const priceCart = p.priceCart !== undefined ? p.priceCart : Number((p.basePrice * 20).toFixed(2));
-                      const priceHalf = p.priceHalfCart !== undefined ? p.priceHalfCart : Number((p.basePrice * 10).toFixed(2));
-                      const priceUnit = p.priceUnit !== undefined ? p.priceUnit : p.basePrice;
-
+                    {getCigaretteFormats(p).map(option => {
+                      const reserved = cart.filter(item => item.product.id === p.id)
+                        .reduce((total, item) => total + item.quantity * item.stockDeduction, 0);
                       return (
-                        <>
-                          <button 
-                            onClick={() => addToCart(p, 'Maço (10 cart.)', pricePack, 200)} 
-                            disabled={p.stock < 200}
-                            className="w-full text-left text-xs px-2.5 py-1.5 bg-muted/60 hover:bg-palette-1 border border-border hover:border-primary/40 rounded-lg flex items-center justify-between transition-colors disabled:opacity-40 cursor-pointer"
-                          >
-                            <span className="font-semibold text-foreground">📦 Maço (200 un.)</span> 
-                            <span className="font-bold text-primary">R$ {pricePack.toFixed(2)}</span>
-                          </button>
-                          <button 
-                            onClick={() => addToCart(p, 'Carteira (20 un.)', priceCart, 20)} 
-                            disabled={p.stock < 20}
-                            className="w-full text-left text-xs px-2.5 py-1.5 bg-muted/60 hover:bg-palette-1 border border-border hover:border-primary/40 rounded-lg flex items-center justify-between transition-colors disabled:opacity-40 cursor-pointer"
-                          >
-                            <span className="font-semibold text-foreground">🏷️ Carteira (20 un.)</span> 
-                            <span className="font-bold text-primary">R$ {priceCart.toFixed(2)}</span>
-                          </button>
-                          <button 
-                            onClick={() => addToCart(p, 'Meia Cart. (10 un.)', priceHalf, 10)} 
-                            disabled={p.stock < 10}
-                            className="w-full text-left text-xs px-2.5 py-1.5 bg-muted/60 hover:bg-palette-1 border border-border hover:border-primary/40 rounded-lg flex items-center justify-between transition-colors disabled:opacity-40 cursor-pointer"
-                          >
-                            <span className="font-semibold text-foreground">✂️ Meia Cart. (10 un.)</span> 
-                            <span className="font-bold text-primary">R$ {priceHalf.toFixed(2)}</span>
-                          </button>
-                          <button 
-                            onClick={() => addToCart(p, 'Unidade Avulsa', priceUnit, 1)} 
-                            disabled={p.stock < 1}
-                            className="w-full text-left text-xs px-2.5 py-1.5 bg-muted/60 hover:bg-palette-1 border border-border hover:border-primary/40 rounded-lg flex items-center justify-between transition-colors disabled:opacity-40 cursor-pointer"
-                          >
-                            <span className="font-semibold text-foreground">🚬 Unidade Avulsa</span> 
-                            <span className="font-bold text-primary">R$ {priceUnit.toFixed(2)}</span>
-                          </button>
-                        </>
+                        <button
+                          key={option.label}
+                          onClick={() => addToCart(p, option.label, option.price, option.units)}
+                          disabled={p.stock - reserved < option.units}
+                          className="w-full text-left text-xs px-2.5 py-1.5 bg-muted/60 hover:bg-palette-1 border border-border hover:border-primary/40 rounded-lg flex items-center justify-between transition-colors disabled:opacity-40 cursor-pointer"
+                        >
+                          <span className="font-semibold text-foreground">{option.label}</span>
+                          <span className="font-bold text-primary">R$ {option.price.toFixed(2)}</span>
+                        </button>
                       );
-                    })()}
+                    })}
                   </div>
-                ) : p.unitsPerPackage > 1 ? (
+                ) : getPackageUnits(p) > 1 ? (
                   <div className="flex flex-col gap-1.5">
                     {/* Venda de Unidade Avulsa - Deduz APENAS 1 unidade no estoque */}
                     <button 
@@ -1135,10 +1125,10 @@ export default function POS() {
               <button onClick={() => setIsCheckoutOpen(false)} className="px-6 py-3 border border-border rounded-xl hover:bg-muted font-medium text-muted-foreground cursor-pointer">Cancelar</button>
               <button 
                 onClick={handleCheckout} 
-                disabled={
+                disabled={isCompletingSale || (
                   paymentType === 'fiado' && 
                   !selectedCustomerId && 
-                  (!isCreatingNewCustomer || !newCustomerName.trim())
+                  (!isCreatingNewCustomer || !newCustomerName.trim()))
                 }
                 className="px-6 py-3 bg-primary text-white rounded-xl hover:opacity-90 font-bold flex items-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
               >

@@ -4,7 +4,7 @@ import {
   AlertCircle, Plus, Minus, Tag,
   Barcode, Loader2, ArrowRight, Image as ImageIcon
 } from 'lucide-react';
-import { recognizeProductFromImage, RecognizedProduct } from '../lib/geminiProductScanner';
+import { recognizeProductFromImage, prepareProductImage, RecognizedProduct } from '../lib/geminiProductScanner';
 import { addMultipleProducts } from '../lib/api';
 import { Product } from '../types';
 
@@ -23,6 +23,7 @@ interface CameraCaptureModalProps {
   isOpen: boolean;
   onClose: () => void;
   availableCategories: string[];
+  onRecognized?: (product: RecognizedProduct, imageUrl: string) => void;
   onProductSaved?: (productName: string) => void;
   onSelectForEdit?: (draft: CameraProductDraft) => void;
 }
@@ -32,6 +33,7 @@ export function CameraCaptureModal({
   onClose,
   availableCategories,
   onProductSaved,
+  onRecognized,
   onSelectForEdit
 }: CameraCaptureModalProps) {
   const [mode, setMode] = useState<'camera' | 'preview'>('camera');
@@ -145,13 +147,14 @@ export function CameraCaptureModal({
     }
     const video = videoRef.current;
     const canvas = canvasRef.current || document.createElement('canvas');
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
 
     stopCamera();
     setCapturedImage(dataUrl);
@@ -160,31 +163,27 @@ export function CameraCaptureModal({
   };
 
   // Upload photo from file input
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
     e.target.value = '';
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 15 * 1024 * 1024) {
-      setCameraError('Escolha uma imagem JPEG, PNG ou WebP de até 15 MB.');
-      return;
-    }
-
-    const reader = new FileReader();
+    if (!file) return;
     const analysisId = ++analysisIdRef.current;
-    reader.onload = (event) => {
+    stopCamera();
+    setMode('preview');
+    resetDraft();
+    setCapturedImage(null);
+    setAnalysisError(null);
+    setIsAnalyzing(true);
+    try {
+      const dataUrl = await prepareProductImage(file);
       if (analysisId !== analysisIdRef.current) return;
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        stopCamera();
-        setCapturedImage(dataUrl);
-        setMode('preview');
-        analyzeImage(dataUrl);
-      }
-    };
-    reader.onerror = () => {
-      if (analysisId === analysisIdRef.current) setCameraError('Não foi possível abrir a foto. Escolha outra imagem.');
-    };
-    reader.readAsDataURL(file);
+      setCapturedImage(dataUrl);
+      await analyzeImage(dataUrl);
+    } catch (error) {
+      if (analysisId !== analysisIdRef.current) return;
+      setAnalysisError(error instanceof Error ? error.message : 'Não foi possível processar a foto.');
+      setIsAnalyzing(false);
+    }
   };
 
   const resetDraft = () => {
@@ -212,6 +211,7 @@ export function CameraCaptureModal({
       setRecognizedProduct(result);
       setEditName(result.name);
       setEditCategory(result.category);
+      onRecognized?.(result, dataUrl);
     } catch (err: unknown) {
       if (analysisId !== analysisIdRef.current) return;
       setAnalysisError(err instanceof Error ? err.message : 'Não foi possível ler o rótulo. Preencha manualmente.');
@@ -271,9 +271,9 @@ export function CameraCaptureModal({
         basePrice: basePrice,
         barcode: editBarcode.trim() || undefined,
         imageUrl: capturedImage || undefined,
-        pricePack: isCigarro ? Number((basePrice * 130).toFixed(2)) : undefined,
-        priceCart: isCigarro ? Number((basePrice * 13.5).toFixed(2)) : undefined,
-        priceHalfCart: isCigarro ? Number((basePrice * 7).toFixed(2)) : undefined,
+        pricePack: isCigarro ? Number((basePrice * 200).toFixed(2)) : undefined,
+        priceCart: isCigarro ? Number((basePrice * 20).toFixed(2)) : undefined,
+        priceHalfCart: isCigarro ? Number((basePrice * 10).toFixed(2)) : undefined,
         priceUnit: isCigarro ? basePrice : undefined,
         pricePackage: !isCigarro && unitsPerPkg > 1 ? Number((basePrice * unitsPerPkg * 0.95).toFixed(2)) : undefined
       };
@@ -443,7 +443,7 @@ export function CameraCaptureModal({
                     <div className="space-y-2">
                       <div className="inline-flex items-center gap-2 text-primary font-bold text-sm">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Lendo rótulo...
+                        Processando imagem com IA...
                       </div>
                       <p className="text-xs text-muted-foreground">
                         Identificando apenas o nome e a categoria do produto...

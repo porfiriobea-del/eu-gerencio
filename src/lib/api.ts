@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, writeBatch, runTransaction } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { 
   OperationType, 
@@ -301,6 +301,31 @@ export const addMultipleProducts = async (productsList: Omit<Product, 'id'|'owne
   }).catch(() => {});
 
   return count;
+};
+
+// Apply quick stock entries to the current database balance, not a stale UI snapshot.
+export const adjustProductStock = async (id: string, individualUnits: number) => {
+  const uid = getEffectiveOwnerId();
+  if (!uid) throw new Error('Unauthenticated');
+  if (!Number.isSafeInteger(individualUnits)) throw new Error('Informe uma quantidade inteira de unidades.');
+  const result = await runTransaction(db, async transaction => {
+    const ref = doc(db, 'products', id);
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists()) throw new Error('Produto não encontrado.');
+    const product = snapshot.data() as Product;
+    if (product.ownerId !== uid) throw new Error('Sem acesso a este produto.');
+    const newStock = Number(product.stock) + individualUnits;
+    if (newStock < 0) throw new Error('Estoque insuficiente.');
+    transaction.update(ref, { stock: newStock, updatedAt: Date.now() });
+    return { name: product.name, newStock };
+  });
+  updateProductStockInSupabase(result.name, result.newStock).catch(() => {});
+  recordMovement({
+    type: 'product_update', entityId: id, entityName: result.name,
+    description: `Estoque de ${result.name}: ${individualUnits > 0 ? '+' : ''}${individualUnits} unidades avulsas.`,
+    quantity: individualUnits
+  }).catch(() => {});
+  return result.newStock;
 };
 
 export const updateProduct = async (id: string, data: Partial<Product>) => {
