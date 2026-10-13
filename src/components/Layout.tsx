@@ -4,7 +4,7 @@ import {
   Home, ShoppingCart, Package, DollarSign, Users, Settings as SettingsIcon, 
   HelpCircle, LogOut, MailPlus, ShoppingBag, Menu,
   Sun, Moon, WifiOff, RefreshCw, CheckCircle2, MessageSquareQuote, 
-  Sparkles, Eye,  Activity, LogIn, X, Briefcase
+  Sparkles, Eye,  Activity, LogIn, X, Briefcase, Pin, PinOff
 } from 'lucide-react';
 import { logout } from '../lib/auth';
 import { subscribeSettings, getActiveStoreSession, type ActiveStoreSession } from '../lib/api';
@@ -16,7 +16,12 @@ import { InviteModal } from './InviteModal';
 import { EmployeeSwitchModal } from './EmployeeSwitchModal';
 import { GlobalMovementHistory } from './GlobalMovementHistory';
 
-export function Layout() {
+interface LayoutProps {
+  menuPinned: boolean;
+  onToggleMenuPinned: () => void;
+}
+
+export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
   const [storeName, setStoreName] = useState('Eu Gerencio!');
   const [logoUrl, setLogoUrl] = useState<string | undefined>();
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -102,8 +107,11 @@ export function Layout() {
 
   return (
     <div className="flex h-[100dvh] min-h-0 bg-background text-foreground font-sans">
-      <div ref={mainRef} className="flex min-w-0 flex-1 flex-col">
-        <header id="app-top-toolbar" className="flex min-h-16 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 sm:px-6">
+      <div ref={mainRef} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        <header
+          id="app-top-toolbar"
+          className={`${menuPinned ? 'sticky top-0' : 'relative'} z-30 flex min-h-16 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 sm:px-6`}
+        >
           <button ref={menuButtonRef} type="button" onClick={() => setMenuOpen(true)}
             aria-label="Abrir menu de navegação" aria-expanded={menuOpen} aria-controls="app-navigation-drawer"
             className="flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl border border-border px-3 text-sm font-medium hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
@@ -113,6 +121,16 @@ export function Layout() {
             <p className="truncate text-sm font-semibold" title={storeName}>{storeName}</p>
             <p className="truncate text-xs text-muted-foreground">{NAV_ITEMS.find(item => item.to === location.pathname)?.label || t('nav.home')}</p>
           </div>
+          <button
+            type="button"
+            onClick={onToggleMenuPinned}
+            aria-pressed={menuPinned}
+            aria-label={menuPinned ? 'Desafixar menu' : 'Fixar menu'}
+            title={menuPinned ? 'Desafixar menu' : 'Fixar menu'}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+          >
+            {menuPinned ? <Pin className="h-5 w-5 text-primary" aria-hidden="true" /> : <PinOff className="h-5 w-5" aria-hidden="true" />}
+          </button>
           <div role="status" aria-live="polite" className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
             {!isOnline ? <WifiOff className="h-4 w-4 text-amber-600" /> : isReconnecting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
             <span>{!isOnline ? 'Offline' : isReconnecting ? 'Sincronizando' : reconnectedJustNow ? 'Reconectado' : 'Online'}</span>
@@ -163,7 +181,7 @@ export function Layout() {
         )}
 
 
-        <main className="min-h-0 flex-1 overflow-auto p-4 sm:p-6 md:p-8">
+        <main className="flex-1 p-4 sm:p-6 md:p-8">
           <div className="mx-auto w-full min-w-0 max-w-6xl">
             <Outlet />
             <GlobalMovementHistory />

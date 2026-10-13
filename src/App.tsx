@@ -28,6 +28,22 @@ import { EmployeeProvider } from './lib/employeeContext';
 import { TermsModal, PrivacyModal } from './components/LegalModals';
 
 export default function App() {
+  const [menuPinned, setMenuPinned] = useState(() => {
+    try {
+      return localStorage.getItem('eu_gerencio_menu_pinned') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('eu_gerencio_menu_pinned', String(menuPinned));
+    } catch {
+      // The toggle still works when browser storage is unavailable.
+    }
+  }, [menuPinned]);
+
   const [needsAuth, setNeedsAuth] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -271,7 +287,7 @@ export default function App() {
     <BrowserRouter>
       <EmployeeProvider>
         <Routes>
-          <Route path="/" element={<Layout />}>
+          <Route path="/" element={<Layout menuPinned={menuPinned} onToggleMenuPinned={() => setMenuPinned(previous => !previous)} />}>
             <Route index element={<Dashboard />} />
             <Route path="caixa" element={<POS />} />
             <Route path="estoque" element={<Stock />} />
