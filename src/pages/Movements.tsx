@@ -1,3 +1,4 @@
+import { showToast, showActionError } from '../lib/actionFeedback';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Activity, Users, ShoppingCart, Package, DollarSign, LogIn, LogOut, 
@@ -57,6 +58,8 @@ export default function Movements() {
   const [empPin, setEmpPin] = useState('');
   const [empColor, setEmpColor] = useState('bg-blue-500');
   const [empFormError, setEmpFormError] = useState('');
+  const [isSavingEmployee, setIsSavingEmployee] = useState(false);
+  const [isDeletingEmployee, setIsDeletingEmployee] = useState(false);
   const [empToDelete, setEmpToDelete] = useState<Employee | null>(null);
 
   // Password verification state when switching employee in Movements.tsx
@@ -220,7 +223,7 @@ export default function Movements() {
       }
 
       // Record movement
-      await recordMovement({
+      const movementId = await recordMovement({
         timestamp: Date.now(),
         employeeId: activeEmp.id || 'employee',
         employeeName: activeEmp.name,
@@ -233,14 +236,17 @@ export default function Movements() {
         notes: manualNotes.trim() || undefined
       });
 
+      if (!movementId) throw new Error('Não foi possível confirmar o histórico da movimentação.');
+      showToast('✓ Movimentação registrada com sucesso!');
       // Reset form
       setManualProduct('');
       setManualQty('1');
       setManualNotes('');
       setIsManualModalOpen(false);
     } catch (err) {
-      console.error('Error submitting manual movement:', err);
+      showActionError(err, 'Não foi possível confirmar a movimentação. Confira os dados antes de repetir.');
     } finally {
+      setIsManualModalOpen(false);
       setIsSubmittingManual(false);
     }
   };
@@ -258,6 +264,8 @@ export default function Movements() {
       return;
     }
 
+    if (isSavingEmployee) return;
+    setIsSavingEmployee(true);
     try {
       if (editingEmployee && editingEmployee.id) {
         await editEmployee(editingEmployee.id, {
@@ -277,6 +285,7 @@ export default function Movements() {
           isActive: true
         });
       }
+      showToast(editingEmployee ? '✓ Alterações salvas!' : '✓ Funcionário cadastrado com sucesso!');
       setIsEmployeeModalOpen(false);
       setEditingEmployee(null);
       setEmpName('');
@@ -285,7 +294,25 @@ export default function Movements() {
       setEmpFormError('');
     } catch (err) {
       console.error('Error saving employee:', err);
-      setEmpFormError('Erro ao salvar funcionário.');
+      showActionError(err, 'Não foi possível salvar o funcionário. Confira os dados antes de repetir.');
+    } finally {
+      setIsEmployeeModalOpen(false);
+      setEditingEmployee(null);
+      setIsSavingEmployee(false);
+    }
+  };
+
+  const handleDeleteEmployee = async () => {
+    if (!empToDelete?.id || isDeletingEmployee) return;
+    setIsDeletingEmployee(true);
+    try {
+      await removeEmployee(empToDelete.id);
+      showToast('✓ Funcionário removido com sucesso!');
+    } catch (error) {
+      showActionError(error, 'Não foi possível remover o funcionário. Confira os dados antes de repetir.');
+    } finally {
+      setEmpToDelete(null);
+      setIsDeletingEmployee(false);
     }
   };
 
@@ -321,25 +348,26 @@ export default function Movements() {
 
   const handleConfirmLogin = async () => {
     if (!selectedEmpForLogin) return;
-
     if (!loginPasswordInput.trim()) {
       setLoginPasswordError('Por favor, digite a senha para entrar.');
       return;
     }
-
-    if (selectedEmpForLogin.pin) {
-      if (selectedEmpForLogin.pin !== loginPasswordInput.trim()) {
-        setLoginPasswordError('Senha incorreta. Tente novamente.');
-        return;
-      }
-    } else if (selectedEmpForLogin.id) {
-      // Salva a nova senha se o funcionário não tinha
-      await editEmployee(selectedEmpForLogin.id, { pin: loginPasswordInput.trim() });
+    if (selectedEmpForLogin.pin && selectedEmpForLogin.pin !== loginPasswordInput.trim()) {
+      setLoginPasswordError('Senha incorreta. Tente novamente.');
+      return;
     }
-
-    await loginEmployee(selectedEmpForLogin);
-    setSelectedEmpForLogin(null);
-    setLoginPasswordInput('');
+    try {
+      if (!selectedEmpForLogin.pin && selectedEmpForLogin.id) {
+        await editEmployee(selectedEmpForLogin.id, { pin: loginPasswordInput.trim() });
+      }
+      await loginEmployee(selectedEmpForLogin);
+      showToast('✓ Entrada do funcionário registrada!');
+    } catch (error) {
+      showActionError(error, 'Não foi possível confirmar a entrada do funcionário. Confira antes de repetir.');
+    } finally {
+      setSelectedEmpForLogin(null);
+      setLoginPasswordInput('');
+    }
   };
 
   // Helper badge for movement type
@@ -1180,7 +1208,7 @@ export default function Movements() {
                 </button>
                 <button
                   type="submit"
-                  disabled={!empName.trim() || !empPin.trim()}
+                  disabled={isSavingEmployee || !empName.trim() || !empPin.trim()}
                   className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
                 >
                   Salvar
@@ -1295,12 +1323,8 @@ export default function Movements() {
               </button>
               <button
                 type="button"
-                onClick={async () => {
-                  if (empToDelete.id) {
-                    await removeEmployee(empToDelete.id);
-                  }
-                  setEmpToDelete(null);
-                }}
+                onClick={handleDeleteEmployee}
+                disabled={isDeletingEmployee}
                 className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
               >
                 <Trash2 className="w-3.5 h-3.5" />

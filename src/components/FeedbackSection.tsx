@@ -1,3 +1,4 @@
+import { showToast, showActionError } from '../lib/actionFeedback';
 import { useState, useEffect } from 'react';
 import { 
   MessageSquare, Star, Send, CheckCircle2, AlertCircle, 
@@ -48,13 +49,14 @@ export function FeedbackSection({ storeName, defaultContact = '', className = ''
         storeName: storeName || undefined
       });
 
+      showToast('✓ Feedback enviado com sucesso!');
       setSubmitSuccess(true);
       setMessage('');
       setTimeout(() => {
         setSubmitSuccess(false);
       }, 6000);
     } catch (err: any) {
-      console.error('Erro ao enviar feedback:', err);
+      showActionError(err, 'Não foi possível confirmar o envio. Confira antes de repetir.');
       setErrorMessage(
         err?.message || 'Não foi possível enviar seu feedback agora. Verifique sua conexão e tente novamente.'
       );

@@ -1,3 +1,4 @@
+import { showToast, showActionError } from '../lib/actionFeedback';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   subscribeCustomers, 
@@ -39,6 +40,8 @@ export default function Debt() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
   const [isDeletingCustomer, setIsDeletingCustomer] = useState(false);
+  const [isSavingCustomer, setIsSavingCustomer] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
   // Customer Form State
@@ -108,28 +111,38 @@ export default function Debt() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    await addCustomer({
-      name: formData.name,
-      phone: formData.phone,
-      previousDebt: Number(formData.previousDebt) || 0,
-      totalDebt: Number(formData.previousDebt) || 0,
-      notes: formData.notes
-    });
-    setIsModalOpen(false);
-    setFormData({ name: '', phone: '', previousDebt: 0, notes: '' });
+    if (isSavingCustomer) return;
+    setIsSavingCustomer(true);
+    try {
+      await addCustomer({
+        name: formData.name, phone: formData.phone,
+        previousDebt: Number(formData.previousDebt) || 0,
+        totalDebt: Number(formData.previousDebt) || 0, notes: formData.notes
+      });
+      showToast('✓ Cliente cadastrado com sucesso!');
+      setFormData({ name: '', phone: '', previousDebt: 0, notes: '' });
+    } catch (error) {
+      showActionError(error, 'Não foi possível cadastrar o cliente. Confira os dados e tente novamente.');
+    } finally {
+      setIsModalOpen(false);
+      setIsSavingCustomer(false);
+    }
   };
 
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedCustomer && payAmount > 0) {
-      await recordPayment(
-        selectedCustomer.id!, 
-        Number(payAmount), 
-        payMethod,
-        currentEmployee ? { id: currentEmployee.id || 'employee', name: currentEmployee.name } : undefined
-      );
-      setIsPayModalOpen(false);
+    if (!selectedCustomer || payAmount <= 0 || isPaying) return;
+    setIsPaying(true);
+    try {
+      await recordPayment(selectedCustomer.id!, Number(payAmount), payMethod,
+        currentEmployee ? { id: currentEmployee.id || 'employee', name: currentEmployee.name } : undefined);
+      showToast('✓ Pagamento registrado com sucesso!');
       setPayAmount(0);
+    } catch (error) {
+      showActionError(error, 'Não foi possível registrar o pagamento. Confira os dados antes de tentar novamente.');
+    } finally {
+      setIsPayModalOpen(false);
+      setIsPaying(false);
     }
   };
 
@@ -139,10 +152,11 @@ export default function Debt() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!customerToDelete?.id) return;
+    if (!customerToDelete?.id || isDeletingCustomer) return;
     try {
       setIsDeletingCustomer(true);
       await deleteCustomer(customerToDelete.id, customerToDelete.name);
+      showToast('✓ Cliente removido com sucesso!');
       
       // If the customer was open in history modal, close it
       if (selectedCustomer?.id === customerToDelete.id) {
@@ -152,8 +166,10 @@ export default function Debt() {
       setIsDeleteModalOpen(false);
       setCustomerToDelete(null);
     } catch (err: any) {
-      alert('Erro ao excluir cliente: ' + (err?.message || 'Erro inesperado'));
+      showActionError(err, 'Não foi possível remover o cliente. Confira os dados antes de tentar novamente.');
     } finally {
+      setIsDeleteModalOpen(false);
+      setCustomerToDelete(null);
       setIsDeletingCustomer(false);
     }
   };
@@ -768,7 +784,7 @@ export default function Debt() {
                   Cancelar
                 </button>
                 <button 
-                  type="submit" 
+                  type="submit" disabled={isSavingCustomer}
                   className="px-4 py-2 bg-primary text-white rounded-xl hover:opacity-90 text-sm font-semibold transition-opacity cursor-pointer shadow-xs"
                 >
                   Salvar Cliente
@@ -843,7 +859,7 @@ export default function Debt() {
                   Cancelar
                 </button>
                 <button 
-                  type="submit" 
+                  type="submit" disabled={isPaying}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-opacity cursor-pointer shadow-xs"
                 >
                   Confirmar Pagamento

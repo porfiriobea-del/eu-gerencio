@@ -1,3 +1,4 @@
+import { showToast, showActionError } from '../lib/actionFeedback';
 import { isValidStockQuantity } from '../lib/productUnits';
 import { useState, useRef, useEffect } from 'react';
 import { 
@@ -306,13 +307,12 @@ export function CameraCaptureModal({
         onProductSaved(editName.trim());
       }
 
-      // Allow user to immediately scan next or close
-      alert(`✓ "${editName.trim()}" cadastrado com sucesso no estoque!`);
-      handleRetake();
+      showToast(`✓ "${editName.trim()}" cadastrado com sucesso no estoque!`);
     } catch (err: any) {
-      alert('Erro ao salvar produto: ' + err.message);
+      showActionError(err, 'Não foi possível cadastrar o produto. Confira o estoque antes de repetir.');
     } finally {
       setIsSaving(false);
+      onClose();
     }
   };
 

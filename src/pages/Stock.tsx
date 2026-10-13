@@ -1,3 +1,4 @@
+import { showToast, showActionError, ConfirmationTimeoutError } from '../lib/actionFeedback';
 import { getPackageUnits, getCigaretteFormats, CIGARETTE_UNITS, isValidStockQuantity } from '../lib/productUnits';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
@@ -63,7 +64,7 @@ export default function Stock() {
   const [initialStockEditPackages, setInitialStockEditPackages] = useState<number>(0);
   const [initialStockEditLoose, setInitialStockEditLoose] = useState<number>(0);
   const [isSavingInitialStock, setIsSavingInitialStock] = useState<boolean>(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
 
   // States for deleting product (single & multiple)
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
@@ -369,12 +370,18 @@ export default function Stock() {
       }
     }
 
-    if (editingId) {
-      await updateProduct(editingId, payload);
-    } else {
-      await addProduct(payload);
+    if (isSavingProduct) return;
+    setIsSavingProduct(true);
+    try {
+      if (editingId) await updateProduct(editingId, payload);
+      else await addProduct(payload);
+      showToast(editingId ? '✓ Alterações salvas!' : '✓ Produto cadastrado com sucesso!');
+    } catch (error) {
+      showActionError(error, 'Não foi possível salvar o produto. Confira os dados e tente novamente.');
+    } finally {
+      setIsModalOpen(false);
+      setIsSavingProduct(false);
     }
-    setIsModalOpen(false);
   };
 
   // Delete product action with loading state & optimistic update
@@ -390,8 +397,7 @@ export default function Stock() {
 
     try {
       await deleteProduct(targetId, targetProduct.name);
-      setToastMessage(`✓ Produto "${targetProduct.name}" excluído.`);
-      setTimeout(() => setToastMessage(null), 4000);
+      showToast(`✓ Produto "${targetProduct.name}" excluído.`);
       setProductToDelete(null);
       if (editingId === targetId) {
         setIsModalOpen(false);
@@ -400,10 +406,10 @@ export default function Stock() {
     } catch (err) {
       console.error('Erro ao excluir produto no banco de dados:', err);
       // Caso ocorra erro na exclusão, recarrega o item de volta ao estado local
-      setProducts(prev => prev.some(p => p.id === targetId) ? prev : [...prev, targetProduct]);
-      setToastMessage(`⚠️ Erro ao excluir "${targetProduct.name}". O produto foi recarregado no estoque.`);
-      setTimeout(() => setToastMessage(null), 6000);
+      if (!(err instanceof ConfirmationTimeoutError)) setProducts(prev => prev.some(p => p.id === targetId) ? prev : [...prev, targetProduct]);
+      showActionError(err, `Não foi possível excluir ${targetProduct.name}. Confira os dados antes de repetir.`);
     } finally {
+      setProductToDelete(null);
       setIsDeleting(false);
     }
   };
@@ -448,32 +454,30 @@ export default function Stock() {
     // Remove todos os itens selecionados da tela instantaneamente assim que a exclusão for confirmada
     setProducts(prev => prev.filter(p => !p.id || !idsToDelete.includes(p.id)));
 
-    // Fecha a subtela/modal e limpa a seleção imediatamente
-    setIsBulkDeleteModalOpen(false);
-    setSelectedProductIds([]);
+    // Fecha um cadastro que pertence aos produtos selecionados.
     if (editingId && idsToDelete.includes(editingId)) {
       setIsModalOpen(false);
       setEditingId(null);
     }
 
-    setToastMessage(`✓ ${idsToDelete.length} item(ns) excluído(s) com sucesso.`);
-    setTimeout(() => setToastMessage(null), 4000);
 
     // 2. Exclusão em Lote (Bulk Delete): Executa uma única requisição rápida (.in('id', idsSelecionados))
     setIsBulkDeleting(true);
     try {
       await deleteMultipleProducts(idsToDelete);
+      setSelectedProductIds([]);
+      showToast(`✓ ${idsToDelete.length} item(ns) excluído(s) com sucesso.`);
     } catch (err) {
       console.error('Erro na exclusão em lote de produtos:', err);
       // Rollback otimista: recarrega os itens que falharam de volta ao estado local
-      setProducts(prev => {
+      if (!(err instanceof ConfirmationTimeoutError)) setProducts(prev => {
         const existingIds = new Set(prev.map(p => p.id));
         const toRestore = itemsToDelete.filter(item => !existingIds.has(item.id));
         return [...prev, ...toRestore];
       });
-      setToastMessage(`⚠️ Erro ao excluir os itens selecionados. Os produtos foram recarregados.`);
-      setTimeout(() => setToastMessage(null), 6000);
+      showActionError(err, 'Não foi possível excluir os itens selecionados. Confira os dados antes de repetir.');
     } finally {
+      setIsBulkDeleteModalOpen(false);
       setIsBulkDeleting(false);
     }
   };
@@ -579,12 +583,12 @@ export default function Stock() {
         initialStockDate: initialStockEditDate || format(new Date(), 'yyyy-MM-dd')
       });
 
-      setToastMessage(`Estoque inicial e data de "${editingInitialStockProduct.name}" atualizados com sucesso!`);
+      showToast(`Estoque inicial e data de "${editingInitialStockProduct.name}" atualizados com sucesso!`);
       setEditingInitialStockProduct(null);
-      setTimeout(() => setToastMessage(null), 4000);
     } catch (err: any) {
-      alert('Erro ao atualizar estoque inicial: ' + err.message);
+      showActionError(err, 'Não foi possível atualizar o estoque inicial. Confira os dados antes de repetir.');
     } finally {
+      setEditingInitialStockProduct(null);
       setIsSavingInitialStock(false);
     }
   };
@@ -601,12 +605,12 @@ export default function Stock() {
           initialStockDate: turnoverDate
         });
       }
-      setToastMessage(`Virada de mês aplicada com sucesso a ${products.length} produtos para a data ${format(new Date(turnoverDate + 'T12:00:00'), 'dd/MM/yyyy')}!`);
+      showToast(`Virada de mês aplicada com sucesso a ${products.length} produtos para a data ${format(new Date(turnoverDate + 'T12:00:00'), 'dd/MM/yyyy')}!`);
       setIsMonthlyTurnoverOpen(false);
-      setTimeout(() => setToastMessage(null), 5000);
     } catch (err: any) {
-      alert('Erro ao aplicar virada de mês: ' + err.message);
+      showActionError(err, 'Não foi possível concluir a virada de mês. Confira os dados antes de repetir.');
     } finally {
+      setIsMonthlyTurnoverOpen(false);
       setIsSavingTurnover(false);
     }
   };
@@ -654,10 +658,9 @@ export default function Stock() {
         description: `Carga de produtos: +${count} produtos do catálogo cadastrados no estoque com valores de venda completos.`,
         quantity: count
       }).catch(() => {});
-      setToastMessage(`✓ ${count} produtos do catálogo cadastrados com sucesso com os valores de venda certinhos! Você já pode fazer a contagem.`);
-      setTimeout(() => setToastMessage(null), 6000);
+      showToast(`✓ ${count} produtos do catálogo cadastrados com sucesso com os valores de venda certinhos! Você já pode fazer a contagem.`);
     } catch (err: any) {
-      alert('Erro ao cadastrar produtos: ' + err.message);
+      showActionError(err, 'Não foi possível confirmar o cadastro dos produtos. Confira o estoque antes de repetir.');
     } finally {
       setIsInsertingPhotoProducts(false);
     }
@@ -665,19 +668,7 @@ export default function Stock() {
 
   return (
     <div className="space-y-6">
-      {/* Toast Notification */}
-      {toastMessage && (() => {
-        const isError = toastMessage.includes('⚠️') || toastMessage.toLowerCase().includes('erro');
-        return (
-          <div className={`fixed bottom-6 right-6 z-50 ${isError ? 'bg-red-600' : 'bg-emerald-600'} text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-5 max-w-md`}>
-            {isError ? <AlertTriangle className="w-5 h-5 shrink-0" /> : <CheckCircle2 className="w-5 h-5 shrink-0" />}
-            <span className="text-sm font-medium">{toastMessage}</span>
-            <button onClick={() => setToastMessage(null)} className="ml-2 text-white/80 hover:text-white shrink-0 cursor-pointer">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        );
-      })()}
+
 
       {/* Header & Metrics */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -2994,7 +2985,7 @@ export default function Stock() {
                     Cancelar
                   </button>
                   <button 
-                    type="submit" 
+                    type="submit" disabled={isSavingProduct}
                     className="px-5 py-2.5 bg-primary text-white rounded-xl hover:opacity-90 font-bold cursor-pointer shadow-sm"
                   >
                     Salvar Produto
@@ -3507,8 +3498,7 @@ export default function Stock() {
         isOpen={isPreAddModalOpen}
         onClose={() => setIsPreAddModalOpen(false)}
         onSuccess={(count) => {
-          setToastMessage(`${count} produtos pré-adicionados com sucesso ao estoque!`);
-          setTimeout(() => setToastMessage(null), 5000);
+          showToast(`${count} produtos pré-adicionados com sucesso ao estoque!`);
         }}
         existingProductNames={products.map(p => p.name)}
       />
@@ -3525,8 +3515,7 @@ export default function Stock() {
           }
         }}
         onProductSaved={(name) => {
-          setToastMessage(`✓ Produto "${name}" cadastrado com sucesso por foto!`);
-          setTimeout(() => setToastMessage(null), 5000);
+          showToast(`✓ Produto "${name}" cadastrado com sucesso por foto!`);
         }}
         onSelectForEdit={(draft) => {
           const isCigarette = draft.type === 'cigarro' || /\bcigarros?\b/.test(normalizeCategory(draft.category));

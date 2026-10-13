@@ -1,3 +1,4 @@
+import { showToast, showActionError } from '../lib/actionFeedback';
 import { useState, useEffect, useMemo } from 'react';
 import { subscribeProducts, subscribePurchases, recordPurchase, deletePurchase } from '../lib/api';
 import { exportPurchasesToCSV } from '../lib/exportUtils';
@@ -52,7 +53,7 @@ export default function Purchases() {
   const [promoDiscountPercent, setPromoDiscountPercent] = useState<number | ''>('');
   const [applyPromoToProduct, setApplyPromoToProduct] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [isDeletingPurchase, setIsDeletingPurchase] = useState(false);
 
   // Quick manual add for products not in replenish list
   const [isProductPickerOpen, setIsProductPickerOpen] = useState(false);
@@ -77,14 +78,6 @@ export default function Purchases() {
       unsubPurchases();
     };
   }, []);
-
-  // Toast timeout
-  useEffect(() => {
-    if (successToast) {
-      const timer = setTimeout(() => setSuccessToast(null), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [successToast]);
 
   // Categories derived from products
   const categories = useMemo(() => {
@@ -339,19 +332,22 @@ export default function Purchases() {
         }
       );
 
-      setSuccessToast(`Estoque de "${selectedProduct.name}" atualizado (+${finalUnits} un.)!`);
+      showToast(`Estoque de "${selectedProduct.name}" atualizado (+${finalUnits} un.)!`);
       setIsPurchaseModalOpen(false);
       setSelectedProduct(null);
     } catch (err) {
-      console.error('Erro ao registrar compra:', err);
+      showActionError(err, 'Não foi possível registrar a compra. Confira os dados antes de repetir.');
     } finally {
+      setIsPurchaseModalOpen(false);
+      setSelectedProduct(null);
       setIsSubmitting(false);
     }
   };
 
   // Delete purchase handler
   const handleConfirmDelete = async () => {
-    if (!purchaseToDelete || !purchaseToDelete.id) return;
+    if (!purchaseToDelete || !purchaseToDelete.id || isDeletingPurchase) return;
+    setIsDeletingPurchase(true);
     try {
       await deletePurchase(
         purchaseToDelete.id,
@@ -362,14 +358,17 @@ export default function Purchases() {
             }
           : undefined
       );
-      setSuccessToast(
+      showToast(
         revertStockOnDelete 
           ? `Registro removido e estoque estornado em -${purchaseToDelete.quantity} un.` 
           : 'Registro de compra removido do histórico.'
       );
       setPurchaseToDelete(null);
     } catch (err) {
-      console.error('Erro ao excluir compra:', err);
+      showActionError(err, 'Não foi possível excluir a compra. Confira os dados antes de repetir.');
+    } finally {
+      setPurchaseToDelete(null);
+      setIsDeletingPurchase(false);
     }
   };
 
@@ -384,15 +383,7 @@ export default function Purchases() {
   return (
     <div className="space-y-6 pb-12">
       {/* Toast */}
-      {successToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-5">
-          <CheckCircle2 className="w-5 h-5" />
-          <span className="text-sm font-medium">{successToast}</span>
-          <button onClick={() => setSuccessToast(null)} className="ml-2 text-white/80 hover:text-white">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -1656,6 +1647,7 @@ export default function Purchases() {
               </button>
               <button
                 onClick={handleConfirmDelete}
+                disabled={isDeletingPurchase}
                 className="px-4 py-2 rounded-xl bg-red-600 text-white hover:bg-red-700 text-xs font-bold transition-colors cursor-pointer"
               >
                 Confirmar Exclusão

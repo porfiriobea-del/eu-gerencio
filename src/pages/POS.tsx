@@ -1,3 +1,4 @@
+import { showToast, showActionError } from '../lib/actionFeedback';
 import { getCigaretteFormats, getPackageUnits, calculateStockUpdates } from '../lib/productUnits';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { 
@@ -174,7 +175,7 @@ export default function POS() {
     try {
       await completeCheckout();
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Não foi possível concluir a venda. Tente novamente.');
+      showActionError(error, 'Não foi possível confirmar a venda. Confira os dados antes de repetir.');
     } finally {
       checkoutInProgressRef.current = false;
       setIsCompletingSale(false);
@@ -216,7 +217,7 @@ export default function POS() {
           setSelectedCustomerId(finalCustomerId);
           setNewlyCreatedCustomerName(newCustomerName.trim());
         } catch (err: any) {
-          alert('Erro ao cadastrar novo cliente de fiado: ' + err.message);
+          showActionError(err, 'Não foi possível cadastrar o cliente. Confira os dados antes de repetir.');
           setIsSubmittingNewCustomer(false);
           return;
         } finally {
@@ -237,17 +238,22 @@ export default function POS() {
       unitCost: i.product.unitCost * i.stockDeduction,
     }));
 
-    await recordSale(
-      { 
-        total: finalTotal, 
-        type: paymentType, 
-        customerId: finalCustomerId,
-        employeeId: currentEmployee?.id || 'owner',
-        employeeName: currentEmployee?.name || 'Proprietário'
-      },
-      items,
-      productsToUpdate
-    );
+    try {
+      await recordSale(
+        {
+          total: finalTotal,
+          type: paymentType,
+          customerId: finalCustomerId,
+          employeeId: currentEmployee?.id || 'owner',
+          employeeName: currentEmployee?.name || 'Proprietário'
+        },
+        items,
+        productsToUpdate
+      );
+      showToast('✓ Venda concluída com sucesso!');
+    } finally {
+      setIsCheckoutOpen(false);
+    }
 
     setCart([]);
     setIsCheckoutOpen(false);
@@ -279,6 +285,7 @@ export default function POS() {
       if (createdId) {
         setSelectedCustomerId(createdId);
         setNewlyCreatedCustomerName(newCustomerName.trim());
+        showToast('✓ Cliente cadastrado com sucesso!');
         setIsCreatingNewCustomer(false);
         setNewCustomerName('');
         setNewCustomerPhone('');
@@ -286,8 +293,9 @@ export default function POS() {
         setNewCustomerNotes('');
       }
     } catch (err: any) {
-      alert('Erro ao cadastrar novo cliente de fiado: ' + err.message);
+      showActionError(err, 'Não foi possível cadastrar o cliente. Confira os dados antes de repetir.');
     } finally {
+      setIsCreatingNewCustomer(false);
       setIsSubmittingNewCustomer(false);
     }
   };
@@ -329,12 +337,13 @@ export default function POS() {
         difference: d,
         notes: closureNotes.trim()
       });
-      setClosureSuccessMsg('Fechamento de caixa registrado e salvo com sucesso!');
+      showToast('✓ Fechamento de caixa salvo com sucesso!');
       setTimeout(() => setClosureSuccessMsg(''), 4000);
     } catch (err) {
       console.error(err);
-      alert('Erro ao registrar fechamento.');
+      showActionError(err, 'Não foi possível confirmar o fechamento. Confira os dados antes de repetir.');
     } finally {
+      setIsCashClosureOpen(false);
       setIsSavingClosure(false);
     }
   };

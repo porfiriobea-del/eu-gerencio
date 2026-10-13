@@ -1,3 +1,4 @@
+import { showToast, showActionError } from '../lib/actionFeedback';
 import React, { useState } from 'react';
 import { 
   Users, LogIn, LogOut, Plus, X, Shield, Clock, 
@@ -95,6 +96,7 @@ export const EmployeeSwitchModal: React.FC = () => {
       return;
     }
 
+    let didStartRequest = false;
     setIsVerifying(true);
     setPasswordError('');
 
@@ -109,11 +111,14 @@ export const EmployeeSwitchModal: React.FC = () => {
       } else {
         // Se ainda não tinha senha (legado), salva a senha informada agora
         if (selectedToLogin.id) {
+          didStartRequest = true;
           await editEmployee(selectedToLogin.id, { pin: passwordInput.trim() });
         }
       }
 
+      didStartRequest = true;
       await loginEmployee(selectedToLogin);
+      showToast('✓ Operador alterado com sucesso!');
       setFeedbackSuccess(`Operador alterado para ${selectedToLogin.name}! Turno iniciado.`);
       setTimeout(() => setFeedbackSuccess(null), 3000);
       setSelectedToLogin(null);
@@ -121,9 +126,10 @@ export const EmployeeSwitchModal: React.FC = () => {
       setModalMode('list');
     } catch (err: any) {
       console.error('Erro ao efetuar login de funcionário:', err);
-      setPasswordError(err.message || 'Erro ao alternar de funcionário.');
+      showActionError(err, 'Não foi possível confirmar a troca de operador. Confira a equipe antes de repetir.');
     } finally {
       setIsVerifying(false);
+      if (didStartRequest) closeSwitchModal();
     }
   };
 
@@ -223,11 +229,13 @@ export const EmployeeSwitchModal: React.FC = () => {
         setTimeout(() => setFeedbackSuccess(null), 3500);
         setModalMode('list');
       }
+      showToast('✓ Dados do funcionário salvos com sucesso!');
     } catch (err: any) {
       console.error('Error saving employee:', err);
-      setFormError(err.message || 'Erro ao salvar funcionário.');
+      showActionError(err, 'Não foi possível salvar o funcionário. Confira a equipe antes de repetir.');
     } finally {
       setIsSubmitting(false);
+      closeSwitchModal();
     }
   };
 
@@ -240,14 +248,17 @@ export const EmployeeSwitchModal: React.FC = () => {
     try {
       const deletedName = employeeToDelete.name;
       await removeEmployee(employeeToDelete.id);
+      showToast('✓ Funcionário removido com sucesso!');
       setEmployeeToDelete(null);
       setFeedbackSuccess(`Funcionário "${deletedName}" foi excluído da equipe.`);
       setTimeout(() => setFeedbackSuccess(null), 3500);
     } catch (err: any) {
       console.error('Error deleting employee:', err);
-      setFormError(err.message || 'Erro ao excluir funcionário.');
+      showActionError(err, 'Não foi possível remover o funcionário. Confira a equipe antes de repetir.');
     } finally {
+      setEmployeeToDelete(null);
       setIsSubmitting(false);
+      closeSwitchModal();
     }
   };
 

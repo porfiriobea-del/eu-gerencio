@@ -1,3 +1,4 @@
+import { showToast, showActionError, withActionDeadline } from '../lib/actionFeedback';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -128,17 +129,20 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
         fiadoInflow
       });
 
+      showToast('✓ Relatório exportado com sucesso!');
       setStatusMessage({
         type: 'success',
         text: `Relatório exportado com sucesso! Arquivo baixado com ${sales.length} vendas e ${purchases.length} compras.`
       });
     } catch (err: any) {
+      showActionError(err, 'Não foi possível exportar o relatório. Tente novamente.');
       setStatusMessage({
         type: 'error',
         text: `Erro ao exportar planilha: ${err.message || 'Erro desconhecido'}`
       });
     } finally {
       setIsExporting(false);
+      onClose();
     }
   };
 
@@ -148,25 +152,28 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
       setIsExporting(true);
       setStatusMessage(null);
 
-      const url = await exportToSheets({
+      const url = await withActionDeadline(exportToSheets)({
         sales,
         expenses: [],
         customers,
         purchases
       });
 
+      showToast('✓ Relatório exportado com sucesso!');
       setStatusMessage({
         type: 'success',
         text: 'Relatório criado com sucesso no seu Google Drive/Google Sheets!'
       });
       window.open(url, '_blank');
     } catch (err: any) {
+      showActionError(err, 'Não foi possível exportar o relatório. Tente novamente.');
       setStatusMessage({
         type: 'error',
         text: `Erro ao enviar para Google Sheets: ${err.message || 'Erro desconhecido'}`
       });
     } finally {
       setIsExporting(false);
+      onClose();
     }
   };
 

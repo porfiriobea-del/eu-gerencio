@@ -1,3 +1,4 @@
+import { showToast, showActionError } from '../lib/actionFeedback';
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -53,6 +54,7 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
     setErrorMessage('');
     setIsSubmitting(true);
 
+    let registered = false;
     try {
       const cleanEmail = email.trim().toLowerCase();
 
@@ -79,7 +81,7 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
       });
 
       // 3. Registra no histórico de movimentações
-      await recordMovement({
+      recordMovement({
         timestamp: Date.now(),
         employeeId: 'owner',
         employeeName: 'Proprietário',
@@ -94,6 +96,10 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
       if (onEmployeeAdded) onEmployeeAdded();
 
       const text = generateInviteText(inviteUrl);
+      registered = true;
+      showToast('✓ Convite cadastrado com sucesso!');
+      setIsSubmitting(false);
+      handleReset();
 
       if (method === 'email') {
         const subject = encodeURIComponent(`Convite para a Equipe - Eu Gerencio (${role})`);
@@ -109,12 +115,14 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
         setTimeout(() => setCopiedLinkOnly(false), 3000);
       }
 
-      setSentSuccess(true);
+
     } catch (err: any) {
       console.error('Error inviting employee:', err);
-      setErrorMessage(err.message || 'Erro ao gerar o convite do funcionário.');
+      if (registered) showToast('Convite cadastrado. Não foi possível concluir o compartilhamento; confira a equipe.', 'warning');
+      else showActionError(err, 'Não foi possível concluir o convite. Confira a equipe antes de tentar novamente.');
     } finally {
       setIsSubmitting(false);
+      if (!registered) handleReset();
     }
   };
 

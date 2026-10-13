@@ -1,3 +1,4 @@
+import { showToast, showActionError } from '../lib/actionFeedback';
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { subscribeProducts, updateProduct, getMonthlyFinancials } from '../lib/api';
@@ -33,7 +34,12 @@ export default function Pricing() {
   }, [selectedMonthOffset]);
 
   const handleUpdatePrice = async (id: string, newPrice: number) => {
-    await updateProduct(id, { basePrice: newPrice });
+    try {
+      await updateProduct(id, { basePrice: newPrice });
+      showToast('✓ Preço atualizado com sucesso!');
+    } catch (error) {
+      showActionError(error, 'Não foi possível confirmar a alteração do preço. Confira antes de repetir.');
+    }
   };
 
   return (

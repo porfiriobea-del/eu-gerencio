@@ -1,3 +1,4 @@
+import { showToast, showActionError } from '../lib/actionFeedback';
 import { useState, useId, useRef } from 'react';
 import { 
   X, Sparkles, Check, CheckCircle2, Image as ImageIcon, Upload, Trash2, 
@@ -157,14 +158,13 @@ export function PreAddProductsModal({ isOpen, onClose, onSuccess, existingProduc
       }).catch(() => {});
 
       setFeedbackMessage(`${count} produtos adicionados com sucesso ao estoque!`);
-      setTimeout(() => {
-        onSuccess(count);
-        onClose();
-      }, 1000);
+      showToast(`✓ ${count} produtos cadastrados com sucesso!`);
+      onSuccess(count);
     } catch (err: any) {
-      alert('Erro ao adicionar produtos: ' + err.message);
+      showActionError(err, 'Não foi possível confirmar o cadastro dos produtos. Confira o estoque antes de repetir.');
     } finally {
       setIsSubmitting(false);
+      onClose();
     }
   };
 
@@ -339,14 +339,13 @@ export function PreAddProductsModal({ isOpen, onClose, onSuccess, existingProduc
       }).catch(() => {});
 
       setFeedbackMessage(`${count} produtos importados das imagens com sucesso!`);
-      setTimeout(() => {
-        onSuccess(count);
-        onClose();
-      }, 1000);
+      showToast(`✓ ${count} produtos cadastrados com sucesso!`);
+      onSuccess(count);
     } catch (err: any) {
-      alert('Erro ao cadastrar produtos: ' + err.message);
+      showActionError(err, 'Não foi possível confirmar o cadastro dos produtos. Confira o estoque antes de repetir.');
     } finally {
       setIsSubmitting(false);
+      onClose();
     }
   };
 

@@ -1,3 +1,4 @@
+import { withActionDeadline, ConfirmationTimeoutError } from './actionFeedback';
 import { normalizeCigaretteStock, cigaretteStockFields, isValidStockQuantity } from './productUnits';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, writeBatch, runTransaction } from 'firebase/firestore';
 import { db, auth } from './firebase';
@@ -41,6 +42,7 @@ export function removeUndefinedFields<T extends Record<string, any>>(obj: T): Pa
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  if (error instanceof ConfirmationTimeoutError) throw error;
   const errCode = (error as any)?.code;
   const errMsg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   const isOfflineOrUnavailable = 
@@ -71,6 +73,9 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     console.warn('Firestore offline/reconectando:', JSON.stringify(errInfo));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('firestore-offline', { detail: errInfo }));
+    }
+    if ([OperationType.CREATE, OperationType.UPDATE, OperationType.DELETE, OperationType.WRITE].includes(operationType)) {
+      throw new Error('Não foi possível confirmar a gravação. Verifique sua conexão e confira os dados antes de repetir.');
     }
     return;
   }
@@ -163,9 +168,9 @@ export const saveStoreProfile = async (profile: {storeName: string, cnpj: string
   }
 };
 
-export const updateSettings = async (data: Partial<Settings>) => {
+export const updateSettings = withActionDeadline(async (data: Partial<Settings>) => {
   const uid = auth.currentUser?.uid;
-  if (!uid) return;
+  if (!uid) throw new Error('Unauthenticated');
   const path = `settings/${uid}`;
   try {
     const { id, ...cleanData } = data as any;
@@ -193,7 +198,7 @@ export const updateSettings = async (data: Partial<Settings>) => {
     handleFirestoreError(error, OperationType.WRITE, path);
     throw error;
   }
-};
+});
 
 // ---------------------------------------------------------------------------
 // PRODUCTS
@@ -207,7 +212,7 @@ export const subscribeProducts = (callback: (p: Product[]) => void) => {
   }, (error) => handleFirestoreError(error, OperationType.LIST, 'products'));
 };
 
-export const addProduct = async (product: Omit<Product, 'id'|'ownerId'|'createdAt'|'updatedAt'>) => {
+export const addProduct = withActionDeadline(async (product: Omit<Product, 'id'|'ownerId'|'createdAt'|'updatedAt'>) => {
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   const path = 'products';
@@ -246,9 +251,9 @@ export const addProduct = async (product: Omit<Product, 'id'|'ownerId'|'createdA
   } catch (err) {
     handleFirestoreError(err, OperationType.CREATE, path);
   }
-};
+});
 
-export const addMultipleProducts = async (productsList: Omit<Product, 'id'|'ownerId'|'createdAt'|'updatedAt'>[]): Promise<number> => {
+export const addMultipleProducts = withActionDeadline(async (productsList: Omit<Product, 'id'|'ownerId'|'createdAt'|'updatedAt'>[]): Promise<number> => {
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   if (!productsList || productsList.length === 0) return 0;
@@ -302,10 +307,10 @@ export const addMultipleProducts = async (productsList: Omit<Product, 'id'|'owne
   }).catch(() => {});
 
   return count;
-};
+});
 
 // Apply quick stock entries to the current database balance, not a stale UI snapshot.
-export const adjustProductStock = async (id: string, individualUnits: number) => {
+export const adjustProductStock = withActionDeadline(async (id: string, individualUnits: number) => {
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   if (!isValidStockQuantity(Math.abs(individualUnits))) throw new Error('Quantidade inválida: use incrementos de 0,05 carteira.');
@@ -327,9 +332,9 @@ export const adjustProductStock = async (id: string, individualUnits: number) =>
     quantity: individualUnits
   }).catch(() => {});
   return result.newStock;
-};
+});
 
-export const updateProduct = async (id: string, data: Partial<Product>) => {
+export const updateProduct = withActionDeadline(async (id: string, data: Partial<Product>) => {
   try {
     const current = await getDoc(doc(db, 'products', id));
     const stockFields = current.exists() ? cigaretteStockFields(current.data() as Product) : {};
@@ -371,9 +376,9 @@ export const updateProduct = async (id: string, data: Partial<Product>) => {
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, `products/${id}`);
   }
-};
+});
 
-export const deleteProduct = async (id: string, productName?: string) => {
+export const deleteProduct = withActionDeadline(async (id: string, productName?: string) => {
   try {
     await deleteDoc(doc(db, 'products', id));
 
@@ -392,7 +397,7 @@ export const deleteProduct = async (id: string, productName?: string) => {
     handleFirestoreError(err, OperationType.DELETE, `products/${id}`);
     throw err;
   }
-};
+});
 
 // ---------------------------------------------------------------------------
 // CUSTOMERS
@@ -406,7 +411,7 @@ export const subscribeCustomers = (callback: (c: Customer[]) => void) => {
   }, (error) => handleFirestoreError(error, OperationType.LIST, 'customers'));
 };
 
-export const addCustomer = async (customer: Omit<Customer, 'id'|'ownerId'|'createdAt'|'updatedAt'>): Promise<string> => {
+export const addCustomer = withActionDeadline(async (customer: Omit<Customer, 'id'|'ownerId'|'createdAt'|'updatedAt'>): Promise<string> => {
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   try {
@@ -428,18 +433,18 @@ export const addCustomer = async (customer: Omit<Customer, 'id'|'ownerId'|'creat
     handleFirestoreError(err, OperationType.CREATE, 'customers');
     return '';
   }
-};
+});
 
-export const updateCustomer = async (id: string, data: Partial<Customer>) => {
+export const updateCustomer = withActionDeadline(async (id: string, data: Partial<Customer>) => {
   try {
     const cleanData = removeUndefinedFields(data as any);
     await updateDoc(doc(db, 'customers', id), { ...cleanData, updatedAt: Date.now() });
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, `customers/${id}`);
   }
-};
+});
 
-export const deleteCustomer = async (id: string, customerName?: string): Promise<void> => {
+export const deleteCustomer = withActionDeadline(async (id: string, customerName?: string): Promise<void> => {
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
 
@@ -461,12 +466,12 @@ export const deleteCustomer = async (id: string, customerName?: string): Promise
     handleFirestoreError(err, OperationType.DELETE, `customers/${id}`);
     throw err;
   }
-};
+});
 
 // ---------------------------------------------------------------------------
 // SALES & PAYMENTS
 // ---------------------------------------------------------------------------
-export const recordSale = async (
+export const recordSale = withActionDeadline(async (
   sale: { total: number, type: 'cash' | 'card' | 'fiado', customerId: string, employeeId?: string, employeeName?: string },
   items: Omit<SaleItem, 'id'|'ownerId'|'createdAt'>[],
   productsToUpdate: {id: string, newStock: number}[]
@@ -560,9 +565,9 @@ export const recordSale = async (
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, 'sales (batch)');
   }
-};
+});
 
-export const recordPayment = async (
+export const recordPayment = withActionDeadline(async (
   customerId: string, 
   amount: number, 
   method: 'cash'|'card',
@@ -613,7 +618,7 @@ export const recordPayment = async (
   } catch(err) {
     handleFirestoreError(err, OperationType.WRITE, 'payments (batch)');
   }
-};
+});
 
 export const subscribeTodaySales = (callback: (s: Sale[]) => void) => {
   const uid = getEffectiveOwnerId();
@@ -791,7 +796,7 @@ export const getMonthlyFinancials = async (targetDate: Date = new Date()): Promi
 // ---------------------------------------------------------------------------
 // CASH CLOSURES (FECHAMENTO DE CAIXA)
 // ---------------------------------------------------------------------------
-export const saveCashClosure = async (closure: Omit<CashClosure, 'id'|'ownerId'|'createdAt'>): Promise<string> => {
+export const saveCashClosure = withActionDeadline(async (closure: Omit<CashClosure, 'id'|'ownerId'|'createdAt'>): Promise<string> => {
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   const path = 'cashClosures';
@@ -825,7 +830,7 @@ export const saveCashClosure = async (closure: Omit<CashClosure, 'id'|'ownerId'|
     handleFirestoreError(err, OperationType.CREATE, path);
     return '';
   }
-};
+});
 
 export const subscribeCashClosures = (callback: (closures: CashClosure[]) => void) => {
   const uid = getEffectiveOwnerId();
@@ -935,7 +940,7 @@ export const subscribePurchases = (callback: (purchases: Purchase[]) => void) =>
   }, (error) => handleFirestoreError(error, OperationType.LIST, 'purchases'));
 };
 
-export const recordPurchase = async (
+export const recordPurchase = withActionDeadline(async (
   purchase: Omit<Purchase, 'id' | 'ownerId' | 'createdAt'>,
   options?: { 
     updateProductStock?: boolean; 
@@ -1017,9 +1022,9 @@ export const recordPurchase = async (
     handleFirestoreError(err, OperationType.WRITE, 'purchases');
     throw err;
   }
-};
+});
 
-export const deletePurchase = async (purchaseId: string, revertStock?: { productId: string; quantityToSubtract: number }) => {
+export const deletePurchase = withActionDeadline(async (purchaseId: string, revertStock?: { productId: string; quantityToSubtract: number }) => {
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
 
@@ -1042,7 +1047,7 @@ export const deletePurchase = async (purchaseId: string, revertStock?: { product
     handleFirestoreError(err, OperationType.DELETE, `purchases/${purchaseId}`);
     throw err;
   }
-};
+});
 
 export const getPurchasesByDateRange = async (startTimestamp: number, endTimestamp: number): Promise<Purchase[]> => {
   const uid = getEffectiveOwnerId();
@@ -1066,7 +1071,7 @@ export const getPurchasesByDateRange = async (startTimestamp: number, endTimesta
 // ---------------------------------------------------------------------------
 // FEEDBACK & USER SUGGESTIONS
 // ---------------------------------------------------------------------------
-export const submitFeedback = async (feedbackData: {
+export const submitFeedback = withActionDeadline(async (feedbackData: {
   category: string;
   message: string;
   rating?: number;
@@ -1103,7 +1108,7 @@ export const submitFeedback = async (feedbackData: {
     handleFirestoreError(err, OperationType.WRITE, `feedbacks/${feedbackId}`);
     throw err;
   }
-};
+});
 
 export const subscribeFeedbacks = (callback: (feedbacks: Feedback[]) => void) => {
   const uid = auth.currentUser?.uid;
@@ -1176,7 +1181,7 @@ export const subscribeEmployees = (callback: (employees: Employee[]) => void) =>
   }, (err) => handleFirestoreError(err, OperationType.LIST, 'employees'));
 };
 
-export const addEmployee = async (
+export const addEmployee = withActionDeadline(async (
   employee: Omit<Employee, 'id' | 'ownerId' | 'createdAt' | 'updatedAt'>
 ): Promise<string> => {
   const uid = getEffectiveOwnerId();
@@ -1199,9 +1204,9 @@ export const addEmployee = async (
     handleFirestoreError(err, OperationType.CREATE, 'employees');
     throw err;
   }
-};
+});
 
-export const updateEmployee = async (id: string, data: Partial<Employee>): Promise<void> => {
+export const updateEmployee = withActionDeadline(async (id: string, data: Partial<Employee>): Promise<void> => {
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
 
@@ -1215,9 +1220,9 @@ export const updateEmployee = async (id: string, data: Partial<Employee>): Promi
     handleFirestoreError(err, OperationType.UPDATE, `employees/${id}`);
     throw err;
   }
-};
+});
 
-export const deleteEmployee = async (id: string, employeeName?: string): Promise<void> => {
+export const deleteEmployee = withActionDeadline(async (id: string, employeeName?: string): Promise<void> => {
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
 
@@ -1239,12 +1244,12 @@ export const deleteEmployee = async (id: string, employeeName?: string): Promise
     handleFirestoreError(err, OperationType.DELETE, `employees/${id}`);
     throw err;
   }
-};
+});
 
 // ---------------------------------------------------------------------------
 // MOVEMENTS & AUDIT HISTORY (HISTÓRICO DE MOVIMENTAÇÃO)
 // ---------------------------------------------------------------------------
-export const recordMovement = async (
+export const recordMovement = withActionDeadline(async (
   movement: {
     type: MovementType;
     description: string;
@@ -1315,7 +1320,7 @@ export const recordMovement = async (
     console.warn('Movement record failed softly:', err);
     return '';
   }
-};
+});
 
 export const subscribeMovements = (callback: (movements: Movement[]) => void) => {
   const uid = getEffectiveOwnerId();
@@ -1371,7 +1376,7 @@ export const getMovementsByDateRange = async (
 // ---------------------------------------------------------------------------
 // TEAM INVITATIONS & SUB-ACCOUNTS (SUB-CONTA DO ESTABELECIMENTO)
 // ---------------------------------------------------------------------------
-export const createTeamInvitation = async (data: {
+export const createTeamInvitation = withActionDeadline(async (data: {
   email: string;
   name: string;
   role: string;
@@ -1439,7 +1444,7 @@ export const createTeamInvitation = async (data: {
   const inviteUrl = `${origin}?invite=${ref.id}&store=${currentUid}`;
 
   return { inviteId: ref.id, inviteUrl };
-};
+});
 
 export const getStoreInvitationById = async (inviteId: string): Promise<TeamInvitation | null> => {
   if (!inviteId) return null;
@@ -1639,7 +1644,7 @@ export const getSaleItemsForSale = async (saleId: string): Promise<SaleItem[]> =
 };
 
 
-export async function deleteMultipleProducts(ids: string[]) {
+async function deleteMultipleProductsImpl(ids: string[]) {
   if (!ids || ids.length === 0) return;
   const { doc, writeBatch } = await import('firebase/firestore');
   const batch = writeBatch(db);
@@ -1651,3 +1656,5 @@ export async function deleteMultipleProducts(ids: string[]) {
   
   await batch.commit();
 }
+
+export const deleteMultipleProducts = withActionDeadline(deleteMultipleProductsImpl);

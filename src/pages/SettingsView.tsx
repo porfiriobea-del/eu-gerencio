@@ -1,3 +1,4 @@
+import { showToast, showActionError, withActionDeadline } from '../lib/actionFeedback';
 import { useState, useEffect, useRef } from 'react';
 import { subscribeSettings, updateSettings, subscribeCustomers, subscribeProducts, getSalesByDateRange, deleteEntireAccountData, getPurchasesByDateRange } from '../lib/api';
 import { deleteUserAccountAuth } from '../lib/auth';
@@ -205,7 +206,7 @@ function doPost(e) {
   }, []);
 
   // Função central de salvamento imediato (usada em ações diretas e auto-save)
-  const triggerImmediateSave = async (overrides?: Partial<Settings>, showFeedback: boolean = false) => {
+  const triggerImmediateSave = async (overrides?: Partial<Settings>, showFeedback: boolean = false, throwErrors = false) => {
     if (autoSaveDebounceRef.current) {
       clearTimeout(autoSaveDebounceRef.current);
       autoSaveDebounceRef.current = null;
@@ -246,6 +247,7 @@ function doPost(e) {
         });
         setTimeout(() => setSaveAllFeedback(null), 4000);
       }
+      return true;
     } catch (err) {
       console.error('Erro no salvamento automático:', err);
       setAutoSaveStatus('error');
@@ -256,13 +258,22 @@ function doPost(e) {
         });
         setTimeout(() => setSaveAllFeedback(null), 5000);
       }
+      if (throwErrors) throw err;
+      return false;
     }
   };
 
   const handleSaveAll = async (silent: boolean = false) => {
+    if (isSavingAll) return;
     setIsSavingAll(true);
-    await triggerImmediateSave(undefined, !silent);
-    setIsSavingAll(false);
+    try {
+      await triggerImmediateSave(undefined, !silent, true);
+      if (!silent) showToast('✓ Configurações salvas com sucesso!');
+    } catch (error) {
+      if (!silent) showActionError(error, 'Não foi possível confirmar o salvamento das configurações.');
+    } finally {
+      setIsSavingAll(false);
+    }
   };
 
   // Salvamento automático contínuo de todas as ações de digitação e ajustes (debounce 700ms)
@@ -350,18 +361,24 @@ function doPost(e) {
     }
     setIsSavingStore(true);
     setStoreFeedback(null);
-    await triggerImmediateSave({ 
-      storeName: storeName.trim(), 
-      cnpj: cnpj.trim(), 
-      phone: phone.trim(), 
-      logoUrl,
-      businessSector
-    });
-    saveBusinessSector(businessSector);
-    setCustomCategories(categoriesList);
-    setStoreFeedback({ type: 'success', text: 'Dados do comércio e categorias salvos com sucesso!' });
-    setTimeout(() => setStoreFeedback(null), 4000);
-    setIsSavingStore(false);
+    try {
+      await triggerImmediateSave({
+        storeName: storeName.trim(),
+        cnpj: cnpj.trim(),
+        phone: phone.trim(),
+        logoUrl,
+        businessSector
+      }, false, true);
+      saveBusinessSector(businessSector);
+      setCustomCategories(categoriesList);
+      setStoreFeedback({ type: 'success', text: 'Dados do comércio e categorias salvos com sucesso!' });
+      setTimeout(() => setStoreFeedback(null), 4000);
+      showToast('✓ Dados do comércio salvos com sucesso!');
+    } catch (error) {
+      showActionError(error, 'Não foi possível confirmar o salvamento dos dados do comércio.');
+    } finally {
+      setIsSavingStore(false);
+    }
   };
 
   const handleRemoveCategory = (cat: string) => {
@@ -410,10 +427,11 @@ function doPost(e) {
         defaultMargin: Number(defaultMargin) || 30, 
         dailyGoal: Number(dailyGoal) || 500 
       });
+      showToast('✓ Personalização salva com sucesso!');
       setCustomizationFeedback({ type: 'success', text: 'Personalização do sistema salva na nuvem com sucesso!' });
       setTimeout(() => setCustomizationFeedback(null), 4000);
     } catch (err) {
-      console.error('Erro ao salvar personalização:', err);
+      showActionError(err, 'Não foi possível confirmar o salvamento da personalização.');
       setCustomizationFeedback({ type: 'error', text: 'Erro ao salvar na nuvem. O tema e modo escuro permanecem ativos no navegador!' });
       setTimeout(() => setCustomizationFeedback(null), 5000);
     } finally {
@@ -425,10 +443,16 @@ function doPost(e) {
     e.preventDefault();
     setIsSavingGoal(true);
     setGoalFeedback(null);
-    await triggerImmediateSave({ dailyGoal: Number(dailyGoal), defaultMargin: Number(defaultMargin) });
-    setGoalFeedback({ type: 'success', text: 'Meta do dia salva com sucesso!' });
-    setTimeout(() => setGoalFeedback(null), 4000);
-    setIsSavingGoal(false);
+    try {
+      await triggerImmediateSave({ dailyGoal: Number(dailyGoal), defaultMargin: Number(defaultMargin) }, false, true);
+      setGoalFeedback({ type: 'success', text: 'Meta do dia salva com sucesso!' });
+      setTimeout(() => setGoalFeedback(null), 4000);
+      showToast('✓ Meta do dia salva com sucesso!');
+    } catch (error) {
+      showActionError(error, 'Não foi possível confirmar o salvamento da meta.');
+    } finally {
+      setIsSavingGoal(false);
+    }
   };
 
   const handleThemeChange = (newTheme: string) => {
@@ -662,7 +686,7 @@ function doPost(e) {
       setIsDeletingAccount(true);
       setDeleteError('');
       // 1. Delete all firestore user data
-      await deleteEntireAccountData();
+      await withActionDeadline(deleteEntireAccountData, 120000)();
       // 2. Clear browser client cache
       try {
         localStorage.clear();
@@ -671,12 +695,15 @@ function doPost(e) {
         console.warn('Error clearing storage:', e);
       }
       // 3. Delete auth user or sign out
-      await deleteUserAccountAuth();
+      await withActionDeadline(deleteUserAccountAuth)();
+      showToast('✓ Conta removida com sucesso!', 'success', true);
       // Redirect to root
       window.location.href = '/';
     } catch (err: any) {
       console.error('Error deleting account:', err);
-      setDeleteError(err.message || 'Erro ao excluir conta. Tente novamente.');
+      showActionError(err, 'Não foi possível concluir a exclusão da conta. Confira o estado da conta antes de repetir.');
+    } finally {
+      setShowDeleteModal(false);
       setIsDeletingAccount(false);
     }
   };
@@ -1519,7 +1546,7 @@ function doPost(e) {
       <div className="mt-6 mb-6">
         <CardFeeSettingsSection 
           settings={settings} 
-          onSave={triggerImmediateSave} 
+          onSave={async updates => { await triggerImmediateSave(updates, false, true); }}
           isSaving={autoSaveStatus === 'saving'} 
         />
       </div>

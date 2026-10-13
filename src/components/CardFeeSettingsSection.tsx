@@ -1,3 +1,4 @@
+import { showToast, showActionError } from '../lib/actionFeedback';
 import { useState, useEffect } from 'react';
 import { CreditCard, Percent, DollarSign, HelpCircle, ShieldCheck, CheckCircle2, Save, ArrowRight } from 'lucide-react';
 import { Settings } from '../types';
@@ -48,10 +49,11 @@ export function CardFeeSettingsSection({ settings, onSave, isSaving = false }: C
         passCardFeeToCustomer,
         cardFeeCalculationMode
       });
+      showToast('✓ Taxas da maquininha salvas com sucesso!');
       setFeedback('Taxas da maquininha salvas com sucesso!');
       setTimeout(() => setFeedback(null), 4000);
     } catch (err) {
-      console.error('Erro ao salvar taxas de cartão:', err);
+      showActionError(err, 'Não foi possível confirmar o salvamento das taxas.');
     }
   };
 
