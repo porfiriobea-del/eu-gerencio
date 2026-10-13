@@ -1,3 +1,4 @@
+import { isValidStockQuantity } from '../lib/productUnits';
 import { useState, useRef, useEffect } from 'react';
 import { 
   Camera, Upload, X, Sparkles, RefreshCw, Check, CheckCircle2, 
@@ -240,7 +241,7 @@ export function CameraCaptureModal({
     }
 
     if (!Number.isFinite(Number(editCost)) || Number(editCost) < 0 ||
-        !Number.isInteger(Number(editStock)) || Number(editStock) < 0) {
+        !(editCategory.toLowerCase().includes('cigar') ? isValidStockQuantity(Number(editStock)) : Number.isInteger(Number(editStock))) || Number(editStock) < 0) {
       alert('Informe um custo válido e uma quantidade inteira de estoque, ambos não negativos.');
       return;
     }
@@ -249,7 +250,7 @@ export function CameraCaptureModal({
     try {
       const todayStr = new Date().toISOString().split('T')[0];
       const isCigarro = editType === 'cigarro' || editCategory.toLowerCase().includes('cigar');
-      const unitsPerPkg = isCigarro ? 200 : (Number(editUnitsPerPackage) || 1);
+      const unitsPerPkg = isCigarro ? 10 : (Number(editUnitsPerPackage) || 1);
       const stockQty = Number(editStock) || 0;
       const basePrice = Number(editSalePrice) || 0;
       const uCost = Number(editCost) || 0;
@@ -257,6 +258,7 @@ export function CameraCaptureModal({
       const productPayload: Omit<Product, 'id' | 'ownerId' | 'createdAt' | 'updatedAt'> = {
         name: editName.trim(),
         type: isCigarro ? 'cigarro' : 'comum',
+        stockUnit: isCigarro ? 'carteira' : 'unidade',
         category: editCategory || 'Diversos',
         purchaseForm: editPurchaseForm,
         unitsPerPackage: unitsPerPkg,
@@ -571,7 +573,7 @@ export function CameraCaptureModal({
                   {/* Custo Unitário */}
                   <div>
                     <label className="block text-xs font-bold text-foreground mb-1">
-                      Custo Unitário (R$)
+                      Custo ({editCategory.toLowerCase().includes('cigar') ? 'por carteira' : 'unitário'}) (R$)
                     </label>
                     <div className="relative">
                       <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">R$</span>
@@ -590,7 +592,7 @@ export function CameraCaptureModal({
                   {/* Quantidade Inicial em Estoque */}
                   <div>
                     <label className="block text-xs font-bold text-foreground mb-1">
-                      Quantidade Inicial em Estoque (un.)
+                      Quantidade em Estoque ({editCategory.toLowerCase().includes('cigar') ? 'carteiras' : 'unidades'})
                     </label>
                     <div className="flex items-center gap-2">
                       <button
@@ -603,7 +605,7 @@ export function CameraCaptureModal({
                       <input
                         type="number"
                         min="0"
-                        step="1"
+                        step={editCategory.toLowerCase().includes('cigar') ? '0.05' : '1'}
                         placeholder="Quantidade"
                         value={editStock}
                         onChange={(e) => setEditStock(e.target.value === '' ? '' : Number(e.target.value))}

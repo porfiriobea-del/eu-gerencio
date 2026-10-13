@@ -512,10 +512,10 @@ export default function POS() {
                   </span>
                   {getPackageUnits(p) > 1 ? (
                     <span className="text-[11px] text-muted-foreground font-medium">
-                      📦 {Math.floor(p.stock / getPackageUnits(p))} {p.purchaseForm === 'fardo' ? 'fardos' : 'pac.'} + {p.stock % getPackageUnits(p)} un.
+                      📦 {Math.floor(p.stock / getPackageUnits(p))} {p.purchaseForm === 'fardo' ? 'fardos' : 'pac.'} + {Number((p.stock % getPackageUnits(p)).toFixed(2))} {p.type === 'cigarro' ? 'carteiras' : 'un.'}
                     </span>
                   ) : (
-                    <span className="text-[11px] text-muted-foreground">{p.stock} un.</span>
+                    <span className="text-[11px] text-muted-foreground">{p.stock} {p.type === 'cigarro' ? 'carteiras' : 'un.'}</span>
                   )}
                 </div>
 
@@ -552,7 +552,7 @@ export default function POS() {
                         <button
                           key={option.label}
                           onClick={() => addToCart(p, option.label, option.price, option.units)}
-                          disabled={p.stock - reserved < option.units}
+                          disabled={Math.round((p.stock - reserved) * 20) < Math.round(option.units * 20)}
                           className="w-full text-left text-xs px-2.5 py-1.5 bg-muted/60 hover:bg-palette-1 border border-border hover:border-primary/40 rounded-lg flex items-center justify-between transition-colors disabled:opacity-40 cursor-pointer"
                         >
                           <span className="font-semibold text-foreground">{option.label}</span>

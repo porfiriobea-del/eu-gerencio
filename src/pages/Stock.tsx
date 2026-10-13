@@ -1,4 +1,4 @@
-import { getPackageUnits, CIGARETTE_UNITS } from '../lib/productUnits';
+import { getPackageUnits, CIGARETTE_UNITS, isValidStockQuantity } from '../lib/productUnits';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteField } from 'firebase/firestore';
@@ -101,6 +101,7 @@ export default function Stock() {
   });
 
   const formUnitsPerPackage = getPackageUnits(formData);
+  const formCostPerUnit = Number(formData.unitCost) / (formData.type === 'cigarro' ? 20 : 1);
 
   const [isReadingLabel, setIsReadingLabel] = useState(false);
   const [labelReadError, setLabelReadError] = useState<string | null>(null);
@@ -170,8 +171,9 @@ export default function Stock() {
           category: cat,
           type: 'cigarro',
           purchaseForm: 'pacote',
-          unitsPerPackage: CIGARETTE_UNITS.pack, // 10 carteiras de 20 cigarros.
-          unitCost: Number(prev.unitCost) > 0 ? prev.unitCost : 0.45,
+          unitsPerPackage: CIGARETTE_UNITS.pack,
+          stockUnit: 'carteira', // 1 maço = 10 carteiras; 1 carteira = 20 avulsos.
+          unitCost: Number(prev.unitCost) > 0 ? prev.unitCost : 9,
           basePrice: baseUnit,
           priceUnit: baseUnit,
           pricePack: wasCigarette && prev.pricePack ? prev.pricePack : Number((baseUnit * 200).toFixed(2)),
@@ -179,8 +181,8 @@ export default function Stock() {
           priceHalfCart: wasCigarette && prev.priceHalfCart ? prev.priceHalfCart : Number((baseUnit * 10).toFixed(2)),
           pricePackage: undefined,
           purchaseTotalCost: wasCigarette ? prev.purchaseTotalCost : '',
-          safetyStock: Number(prev.safetyStock) > 10 ? prev.safetyStock : 40,
-          maxStock: Number(prev.maxStock) > 50 ? prev.maxStock : 400
+          safetyStock: Number(prev.safetyStock) > 2 ? prev.safetyStock : 2,
+          maxStock: Number(prev.maxStock) > 20 ? prev.maxStock : 20
         };
       }
 
@@ -190,6 +192,7 @@ export default function Stock() {
         ...prev,
         category: cat,
         type: 'comum',
+        stockUnit: 'unidade',
         purchaseForm: isBeverage ? 'fardo' : 'unidade',
         unitsPerPackage: isBeverage ? (keepPackage && Number(prev.unitsPerPackage) > 1 ? Number(prev.unitsPerPackage) : 12) : 1,
         pricePackage: keepPackage ? prev.pricePackage : undefined,
@@ -260,9 +263,8 @@ export default function Stock() {
     const maxNum = Number(formData.maxStock) || Math.max(stockNum, safetyNum * 2, 10);
     const initStockNum = Number(formData.initialStock !== undefined ? formData.initialStock : stockNum);
     const unitsPkg = getPackageUnits(formData);
-    if (!Number.isSafeInteger(stockNum) || stockNum < 0 ||
-        !Number.isSafeInteger(initStockNum) || initStockNum < 0) {
-      alert('Informe o estoque em unidades avulsas inteiras, sem valores negativos.');
+    if (!(formData.type === 'cigarro' ? isValidStockQuantity(stockNum) && isValidStockQuantity(initStockNum) : Number.isSafeInteger(stockNum) && stockNum >= 0 && Number.isSafeInteger(initStockNum) && initStockNum >= 0)) {
+      alert('Informe um estoque válido: cigarros em carteiras (incrementos de 0,05), demais produtos em unidades inteiras.');
       return;
     }
     if (formData.type === 'cigarro' && ['priceUnit', 'priceHalfCart', 'priceCart', 'pricePack'].some(field =>
@@ -274,6 +276,7 @@ export default function Stock() {
 
     const payload: any = {
       ...formData,
+      stockUnit: formData.type === 'cigarro' ? 'carteira' : 'unidade',
       unitsPerPackage: unitsPkg,
       purchaseForm: formData.type === 'cigarro' ? 'pacote' : formData.purchaseForm,
       unitCost: Number(formData.unitCost) || 0,
@@ -1303,8 +1306,8 @@ export default function Stock() {
                       <div className="text-2xl font-black text-foreground flex items-baseline gap-1 mt-0.5">
                         {getPackageUnits(p) > 1 ? (
                           <>
-                            <span>{Math.floor(p.stock / getPackageUnits(p))} fardos</span>
-                            <span className="text-xs font-normal text-muted-foreground">+ {p.stock % getPackageUnits(p)} un.</span>
+                            <span>{Math.floor(p.stock / getPackageUnits(p))} {p.type === 'cigarro' ? 'maços' : 'fardos'}</span>
+                            <span className="text-xs font-normal text-muted-foreground">+ {p.stock % getPackageUnits(p)} {p.type === 'cigarro' ? 'carteiras' : 'un.'}</span>
                           </>
                         ) : (
                           <>
@@ -1319,7 +1322,7 @@ export default function Stock() {
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        title="Diminuir 1 unidade física da prateleira"
+                        title={p.type === 'cigarro' ? 'Diminuir 1 carteira do estoque' : 'Diminuir 1 unidade física da prateleira'}
                         onClick={() => handleQuickAddStock(p, -1)}
                         className="w-9 h-9 rounded-xl bg-surface border border-border text-foreground hover:bg-muted font-bold flex items-center justify-center cursor-pointer shadow-2xs active:scale-95 transition-all"
                       >
@@ -1327,7 +1330,7 @@ export default function Stock() {
                       </button>
                       <button
                         type="button"
-                        title="Adicionar +1 unidade física na prateleira"
+                        title={p.type === 'cigarro' ? 'Adicionar 1 carteira ao estoque' : 'Adicionar 1 unidade física na prateleira'}
                         onClick={() => handleQuickAddStock(p, 1)}
                         className="w-9 h-9 rounded-xl bg-primary text-primary-foreground font-bold flex items-center justify-center cursor-pointer shadow-2xs active:scale-95 transition-all hover:opacity-90"
                       >
@@ -1336,11 +1339,11 @@ export default function Stock() {
                       {getPackageUnits(p) > 1 && (
                         <button
                           type="button"
-                          title={`Entrada rápida de +1 ${p.type === 'cigarro' ? 'pacote' : 'fardo'} (+${getPackageUnits(p)} un.)`}
+                          title={`Entrada rápida de +1 ${p.type === 'cigarro' ? 'pacote' : 'fardo'} (+${getPackageUnits(p)} ${p.type === 'cigarro' ? 'carteiras' : 'un.'})`}
                           onClick={() => handleQuickAddStock(p, getPackageUnits(p))}
                           className="px-2.5 h-9 rounded-xl bg-palette-1 border border-primary/25 text-primary text-xs font-bold flex items-center justify-center cursor-pointer shadow-2xs hover:bg-palette-1/80 active:scale-95 transition-all"
                         >
-                          +1 Fardo
+                          +1 {p.type === 'cigarro' ? 'Maço' : 'Fardo'}
                         </button>
                       )}
                     </div>
@@ -1583,7 +1586,7 @@ export default function Stock() {
                       {getPackageUnits(p) > 1 ? (
                         <div>
                           <div className="font-bold text-foreground">
-                            {Math.floor((p.initialStock !== undefined ? p.initialStock : p.stock) / getPackageUnits(p))} fardos + {((p.initialStock !== undefined ? p.initialStock : p.stock) % getPackageUnits(p))} un.
+                            {Math.floor((p.initialStock !== undefined ? p.initialStock : p.stock) / getPackageUnits(p))} {p.type === 'cigarro' ? 'maços' : 'fardos'} + {((p.initialStock !== undefined ? p.initialStock : p.stock) % getPackageUnits(p))} un.
                           </div>
                           <div className="text-xs text-muted-foreground font-medium">
                             ({p.initialStock !== undefined ? p.initialStock : p.stock} un. no total)
@@ -1612,7 +1615,7 @@ export default function Stock() {
                       {getPackageUnits(p) > 1 ? (
                         <div>
                           <div className={`font-bold text-base ${needsReplenish ? 'text-red-600' : 'text-foreground'}`}>
-                            {Math.floor(p.stock / getPackageUnits(p))} fardos + {p.stock % getPackageUnits(p)} un.
+                            {Math.floor(p.stock / getPackageUnits(p))} {p.type === 'cigarro' ? 'maços' : 'fardos'} + {p.stock % getPackageUnits(p)} un.
                           </div>
                           <div className="text-xs text-muted-foreground font-medium">
                             {p.stock} un. físicas no total
@@ -1646,7 +1649,7 @@ export default function Stock() {
                       </div>
                       <div className="mt-0.5">
                         <span className="text-muted-foreground">Ponto Repor: </span>
-                        <span className="font-semibold text-foreground">{Math.round(reorderPoint)} un.</span>
+                        <span className="font-semibold text-foreground">{Math.round(reorderPoint)} {p.type === 'cigarro' ? 'carteiras' : 'un.'}</span>
                       </div>
                       <div className="mt-0.5 text-primary font-bold">
                         <span>Estoque Máximo: </span>
@@ -1696,11 +1699,11 @@ export default function Stock() {
                       <div className="flex items-center justify-end gap-1">
                         {getPackageUnits(p) > 1 && (
                           <button
-                            title={`Entrada de +1 ${p.purchaseForm === 'fardo' ? 'fardo' : 'pacote'} (+${getPackageUnits(p)} un.)`}
+                            title={`Entrada de +1 ${p.purchaseForm === 'fardo' ? 'fardo' : 'pacote'} (+${getPackageUnits(p)} ${p.type === 'cigarro' ? 'carteiras' : 'un.'})`}
                             onClick={() => handleQuickAddStock(p, getPackageUnits(p))}
                             className="px-2 py-1 bg-palette-1 hover:opacity-90 text-primary rounded text-xs font-bold transition-opacity cursor-pointer border border-primary/20"
                           >
-                            +1 Fardo
+                            +1 {p.type === 'cigarro' ? 'Maço' : 'Fardo'}
                           </button>
                         )}
                         <button
@@ -2119,7 +2122,7 @@ export default function Stock() {
                     
                     <div>
                       <label className="block text-xs font-bold text-foreground mb-1">
-                        Quantas unidades vêm no {formData.purchaseForm === 'fardo' ? 'fardo' : formData.purchaseForm === 'pacote' ? 'pacote' : 'item'}? *
+                        Quantas {formData.type === 'cigarro' ? 'carteiras' : 'unidades'} vêm no {formData.purchaseForm === 'fardo' ? 'fardo' : formData.purchaseForm === 'pacote' ? 'pacote' : 'item'}? *
                       </label>
                       <div className="flex items-center gap-2">
                         <input 
@@ -2145,7 +2148,7 @@ export default function Stock() {
                           className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground font-bold text-sm" 
                         />
                         <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                          unidades
+                          {formData.type === 'cigarro' ? 'carteiras' : 'unidades'}
                         </span>
                       </div>
                       <span className="text-[11px] text-muted-foreground mt-0.5 block">
@@ -2178,7 +2181,7 @@ export default function Stock() {
                     </div>
                   )}
                   {formData.type === 'cigarro' && (
-                    <p className="text-xs text-muted-foreground">Pacote com 200 cigarros: 10 carteiras de 20 unidades.</p>
+                    <p className="text-xs text-muted-foreground">Estoque contado em carteiras: 1 maço = 10 carteiras; meia carteira = 0,5; avulso = 0,05.</p>
                   )}
 
                   {/* Campos de Valor de Compra e Custo por Unidade Automático + Editável */}
@@ -2225,7 +2228,7 @@ export default function Stock() {
                     <div className={`p-3 bg-surface rounded-xl border border-border ${formData.purchaseForm === 'unidade' ? 'col-span-1 sm:col-span-2' : ''}`}>
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-foreground">
-                          Custo por Unidade (R$) *
+                          Custo por {formData.type === 'cigarro' ? 'Carteira' : 'Unidade'} (R$) *
                         </label>
                         <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
                           Automático & Editável
@@ -2255,7 +2258,7 @@ export default function Stock() {
                       <div className="flex items-center justify-between mt-1 text-[11px] text-muted-foreground">
                         <span>
                           {formData.purchaseForm !== 'unidade' && formUnitsPerPackage > 1 && parseFloat(formData.purchaseTotalCost) > 0 ? (
-                            <>Calculado: R$ {parseFloat(formData.purchaseTotalCost).toFixed(2)} ÷ {formData.unitsPerPackage} un.</>
+                            <>Calculado: R$ {parseFloat(formData.purchaseTotalCost).toFixed(2)} ÷ {formUnitsPerPackage} {formData.type === 'cigarro' ? 'carteiras' : 'un.'}</>
                           ) : (
                             <>Custo individual de cada unidade para o estoque</>
                           )}
@@ -2289,16 +2292,16 @@ export default function Stock() {
                     <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
                       <Tag className="w-4 h-4 text-primary" /> Preço de Venda & Margem de Lucro da Unidade
                     </span>
-                    {Number(formData.unitCost) > 0 && Number(formData.basePrice) > 0 && (
+                    {formCostPerUnit > 0 && Number(formData.basePrice) > 0 && (
                       <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
-                        Number(formData.basePrice) > Number(formData.unitCost)
+                        Number(formData.basePrice) > formCostPerUnit
                           ? 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300'
                           : 'text-red-700 bg-red-50 border-red-200 dark:bg-red-950/40 dark:text-red-300'
                       }`}>
-                        {Number(formData.basePrice) > Number(formData.unitCost) ? (
+                        {Number(formData.basePrice) > formCostPerUnit ? (
                           <>
-                            +{(((Number(formData.basePrice) - Number(formData.unitCost)) / Number(formData.unitCost)) * 100).toFixed(0)}% de ganho
-                            (Lucro: R$ {(Number(formData.basePrice) - Number(formData.unitCost)).toFixed(2)}/un.)
+                            +{(((Number(formData.basePrice) - formCostPerUnit) / formCostPerUnit) * 100).toFixed(0)}% de ganho
+                            (Lucro: R$ {(Number(formData.basePrice) - formCostPerUnit).toFixed(2)}/un.)
                           </>
                         ) : (
                           <>Abaixo do custo!</>
@@ -2342,7 +2345,7 @@ export default function Stock() {
                     </div>
 
                     {/* Sugestões Rápidas de Margem de Lucro para a Unidade */}
-                    {Number(formData.unitCost) > 0 && (
+                    {formCostPerUnit > 0 && (
                       <div className="p-2.5 rounded-lg bg-palette-1/50 border border-primary/20 flex flex-col justify-between">
                         <span className="text-[11px] font-bold text-primary block mb-1">
                           💡 Sugestões de Preço de Venda p/ Unidade:
@@ -2353,7 +2356,7 @@ export default function Stock() {
                             { label: '40%', mult: 1.40 },
                             { label: '50%', mult: 1.50 }
                           ].map(sug => {
-                            const sugPrice = Number((Number(formData.unitCost) * sug.mult).toFixed(2));
+                            const sugPrice = Number((formCostPerUnit * sug.mult).toFixed(2));
                             const units = formUnitsPerPackage || 1;
                             return (
                               <button
@@ -2824,7 +2827,7 @@ export default function Stock() {
                     <h3 className="font-semibold text-foreground">Estoque Inicial & Data Base de Controle</h3>
                   </div>
                   <p className="text-xs text-muted-foreground mb-3">
-                    Defina a contagem inicial apurada no inventário. Você pode informar em fardos/pacotes fechados e unidades avulsas.
+                    Defina a contagem inicial em embalagens fechadas e {formData.type === 'cigarro' ? 'carteiras ou frações de carteira' : 'unidades avulsas'}.
                   </p>
                 </div>
 
@@ -2835,13 +2838,13 @@ export default function Stock() {
                         Contagem do Estoque Inicial:
                       </span>
                       <span className="text-xs font-bold text-primary bg-surface px-2.5 py-1 rounded-md border border-border">
-                        Total Inicial: {formData.initialStock !== undefined ? formData.initialStock : formData.stock} unidades
+                        Total Inicial: {formData.initialStock !== undefined ? formData.initialStock : formData.stock} {formData.type === 'cigarro' ? 'carteiras' : 'unidades'}
                       </span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-foreground mb-1">
-                          📦 Quantidade de {formData.purchaseForm === 'fardo' ? 'Fardos Fechados' : 'Pacotes Fechados'} ({formData.unitsPerPackage} un. cada)
+                          📦 Quantidade de {formData.purchaseForm === 'fardo' ? 'Fardos Fechados' : 'Pacotes Fechados'} ({formUnitsPerPackage} {formData.type === 'cigarro' ? 'carteiras' : 'un.'} cada)
                         </label>
                         <input 
                           type="number"
@@ -2859,14 +2862,15 @@ export default function Stock() {
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-foreground mb-1">
-                          🔹 Unidades Avulsas (Fora do fardo)
+                          🔹 {formData.type === 'cigarro' ? 'Carteiras/Frações (Fora do maço)' : 'Unidades Avulsas (Fora do fardo)'}
                         </label>
                         <input 
                           type="number"
                           min={0}
+                          step={formData.type === 'cigarro' ? '0.05' : '1'}
                           value={Number(formData.initialStock !== undefined ? formData.initialStock : formData.stock) % formUnitsPerPackage}
                           onChange={e => {
-                            const loose = Math.max(0, parseInt(e.target.value) || 0);
+                            const loose = Math.max(0, Number(e.target.value) || 0);
                             const currentTotal = Number(formData.initialStock !== undefined ? formData.initialStock : formData.stock);
                             const pkgs = Math.floor(currentTotal / formUnitsPerPackage);
                             const totalUnits = (pkgs * formUnitsPerPackage) + loose;
@@ -2932,7 +2936,7 @@ export default function Stock() {
                     <h3 className="font-semibold text-foreground">Estoque Atual Físico & Limites de Reposição</h3>
                   </div>
                   <p className="text-xs text-muted-foreground mb-3">
-                    Informe o estoque físico disponível hoje em fardos fechados e unidades avulsas, e defina o teto máximo de compra.
+                    Informe o estoque físico em embalagens fechadas e {formData.type === 'cigarro' ? 'carteiras ou frações de carteira' : 'unidades avulsas'}.
                   </p>
                 </div>
 
@@ -2943,13 +2947,13 @@ export default function Stock() {
                         Estoque Atual Físico em Prateleira/Depósito:
                       </span>
                       <span className="text-xs font-bold text-primary bg-surface px-2.5 py-1 rounded-md border border-border">
-                        Total Atual Físico: {formData.stock} unidades
+                        Total Atual Físico: {formData.stock} {formData.type === 'cigarro' ? 'carteiras' : 'unidades'}
                       </span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-foreground mb-1">
-                          📦 Quantidade de {formData.purchaseForm === 'fardo' ? 'Fardos Fechados' : 'Pacotes Fechados'} ({formData.unitsPerPackage} un. cada)
+                          📦 Quantidade de {formData.purchaseForm === 'fardo' ? 'Fardos Fechados' : 'Pacotes Fechados'} ({formUnitsPerPackage} {formData.type === 'cigarro' ? 'carteiras' : 'un.'} cada)
                         </label>
                         <input 
                           type="number"
@@ -2966,14 +2970,15 @@ export default function Stock() {
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-foreground mb-1">
-                          🔹 Unidades Avulsas Físicas (Fora do fardo)
+                          🔹 {formData.type === 'cigarro' ? 'Carteiras/Frações (Fora do maço)' : 'Unidades Avulsas Físicas (Fora do fardo)'}
                         </label>
                         <input 
                           type="number"
                           min={0}
+                          step={formData.type === 'cigarro' ? '0.05' : '1'}
                           value={Number(formData.stock || 0) % formUnitsPerPackage}
                           onChange={e => {
-                            const loose = Math.max(0, parseInt(e.target.value) || 0);
+                            const loose = Math.max(0, Number(e.target.value) || 0);
                             const pkgs = Math.floor(Number(formData.stock || 0) / formUnitsPerPackage);
                             const totalUnits = (pkgs * formUnitsPerPackage) + loose;
                             setFormData({ ...formData, stock: totalUnits });
@@ -3018,7 +3023,8 @@ export default function Stock() {
                     type="number" 
                     required 
                     min={0}
-                    value={formData.safetyStock} 
+                    step={formData.type === 'cigarro' ? '0.05' : '1'}
+                      value={formData.safetyStock}
                     onChange={e => setFormData({...formData, safetyStock: e.target.value})} 
                     className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground" 
                   />
@@ -3194,17 +3200,18 @@ export default function Stock() {
                       />
                     </div>
                     <div>
-                      <span className="text-xs text-muted-foreground block mb-1">Unidades Avulsas</span>
+                      <span className="text-xs text-muted-foreground block mb-1">{editingInitialStockProduct.type === 'cigarro' ? 'Carteiras/Frações' : 'Unidades Avulsas'}</span>
                       <input
                         type="number"
                         min={0}
+                        step={editingInitialStockProduct.type === 'cigarro' ? '0.05' : '1'}
                         value={initialStockEditLoose}
-                        onChange={e => setInitialStockEditLoose(Math.max(0, parseInt(e.target.value) || 0))}
+                        onChange={e => setInitialStockEditLoose(Math.max(0, Number(e.target.value) || 0))}
                         className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground font-bold"
                       />
                     </div>
                     <div className="col-span-2 text-xs text-primary font-semibold">
-                      Total Inicial Calculado: {(initialStockEditPackages * getPackageUnits(editingInitialStockProduct)) + initialStockEditLoose} unidades
+                      Total Inicial Calculado: {(initialStockEditPackages * getPackageUnits(editingInitialStockProduct)) + initialStockEditLoose} {editingInitialStockProduct.type === 'cigarro' ? 'carteiras' : 'unidades'}
                     </div>
                   </div>
                 ) : (
@@ -3528,7 +3535,7 @@ export default function Stock() {
                       <span className="text-muted-foreground ml-1.5 text-[11px]">({prod.category})</span>
                     </div>
                     <div className="shrink-0 flex items-center gap-2">
-                      <span className="text-muted-foreground">{prod.stock} un.</span>
+                      <span className="text-muted-foreground">{prod.stock} {prod.type === 'cigarro' ? 'carteiras' : 'un.'}</span>
                       <span className="font-semibold text-foreground">R$ {prod.basePrice?.toFixed(2)}</span>
                     </div>
                   </div>

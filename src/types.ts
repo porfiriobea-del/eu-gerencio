@@ -2,12 +2,13 @@ export interface Product {
   id?: string;
   name: string;
   type: 'comum' | 'cigarro';
+  stockUnit?: 'unidade' | 'carteira'; // Missing marker on cigarettes indicates legacy avulso balances.
   category: string;
   imageUrl?: string;
   barcode?: string;
   purchaseForm: 'pacote' | 'fardo' | 'unidade';
   unitsPerPackage: number;
-  unitCost: number;
+  unitCost: number; // Per stock unit: carteira for cigarettes, individual unit otherwise.
   stock: number;
   safetyStock: number;
   maxStock?: number;

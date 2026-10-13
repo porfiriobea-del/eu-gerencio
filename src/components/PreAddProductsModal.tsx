@@ -130,14 +130,15 @@ export function PreAddProductsModal({ isOpen, onClose, onSuccess, existingProduc
           type: p.type,
           category: p.category,
           purchaseForm: p.purchaseForm,
-          unitsPerPackage: p.unitsPerPackage,
-          unitCost: p.unitCost,
+          stockUnit: p.type === 'cigarro' ? 'carteira' : 'unidade',
+          unitsPerPackage: p.type === 'cigarro' ? 10 : p.unitsPerPackage,
+          unitCost: p.type === 'cigarro' ? p.unitCost * 20 : p.unitCost,
           stock: customStock,
-          safetyStock: p.safetyStock,
-          maxStock: p.maxStock,
+          safetyStock: p.type === 'cigarro' ? p.safetyStock/20 : p.safetyStock,
+          maxStock: p.type === 'cigarro' && p.maxStock !== undefined ? p.maxStock/20 : p.maxStock,
           initialStock: customStock,
           initialStockDate: todayStr,
-          dailyAverageSales: p.dailyAverageSales,
+          dailyAverageSales: p.type === 'cigarro' ? p.dailyAverageSales/20 : p.dailyAverageSales,
           replacementDays: p.replacementDays,
           basePrice: p.basePrice,
           pricePackage: p.pricePackage,
@@ -281,7 +282,7 @@ export function PreAddProductsModal({ isOpen, onClose, onSuccess, existingProduc
       if (field === 'type' && value === 'cigarro') {
         updated.category = 'Cigarros';
         updated.purchaseForm = 'pacote';
-        updated.unitsPerPackage = 200;
+        updated.unitsPerPackage = 10;
       }
       return updated;
     }));
@@ -299,7 +300,7 @@ export function PreAddProductsModal({ isOpen, onClose, onSuccess, existingProduc
       const todayStr = new Date().toISOString().split('T')[0];
       const payload: Omit<Product, 'id' | 'ownerId' | 'createdAt' | 'updatedAt'>[] = validDrafts.map(d => {
         const isCigarro = d.type === 'cigarro';
-        const unitsPerPkg = isCigarro ? 200 : (Number(d.unitsPerPackage) || 1);
+        const unitsPerPkg = isCigarro ? 10 : (Number(d.unitsPerPackage) || 1);
         const basePrice = Number(d.basePrice) || 0;
         const uCost = Number(d.unitCost) || 0;
         const stockQty = Number(d.stock) || 0;
@@ -307,6 +308,7 @@ export function PreAddProductsModal({ isOpen, onClose, onSuccess, existingProduc
         return {
           name: d.name.trim(),
           type: d.type,
+          stockUnit: isCigarro ? 'carteira' : 'unidade',
           category: d.category || 'Diversos',
           purchaseForm: d.purchaseForm,
           unitsPerPackage: unitsPerPkg,

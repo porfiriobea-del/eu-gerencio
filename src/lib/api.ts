@@ -1,3 +1,4 @@
+import { normalizeCigaretteStock, cigaretteStockFields, isValidStockQuantity } from './productUnits';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, writeBatch, runTransaction } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { 
@@ -202,7 +203,7 @@ export const subscribeProducts = (callback: (p: Product[]) => void) => {
   if (!uid) return () => {};
   const q = query(collection(db, 'products'), where('ownerId', '==', uid));
   return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
+    callback(snapshot.docs.map(doc => normalizeCigaretteStock({ id: doc.id, ...doc.data() } as Product)));
   }, (error) => handleFirestoreError(error, OperationType.LIST, 'products'));
 };
 
@@ -213,7 +214,7 @@ export const addProduct = async (product: Omit<Product, 'id'|'ownerId'|'createdA
   try {
     const ref = doc(collection(db, path));
     const now = Date.now();
-    const cleanProduct = removeUndefinedFields(product as any);
+    const cleanProduct = removeUndefinedFields(normalizeCigaretteStock(product) as any);
     await setDoc(ref, {
       ...cleanProduct,
       ownerId: uid,
@@ -264,7 +265,7 @@ export const addMultipleProducts = async (productsList: Omit<Product, 'id'|'owne
 
     for (const prod of chunk) {
       const ref = doc(collection(db, path));
-      const cleanProduct = removeUndefinedFields(prod as any);
+      const cleanProduct = removeUndefinedFields(normalizeCigaretteStock(prod) as any);
       batch.set(ref, {
         ...cleanProduct,
         ownerId: uid,
@@ -307,22 +308,22 @@ export const addMultipleProducts = async (productsList: Omit<Product, 'id'|'owne
 export const adjustProductStock = async (id: string, individualUnits: number) => {
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
-  if (!Number.isSafeInteger(individualUnits)) throw new Error('Informe uma quantidade inteira de unidades.');
+  if (!isValidStockQuantity(Math.abs(individualUnits))) throw new Error('Quantidade inválida: use incrementos de 0,05 carteira.');
   const result = await runTransaction(db, async transaction => {
     const ref = doc(db, 'products', id);
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists()) throw new Error('Produto não encontrado.');
-    const product = snapshot.data() as Product;
+    const product = normalizeCigaretteStock(snapshot.data() as Product);
     if (product.ownerId !== uid) throw new Error('Sem acesso a este produto.');
-    const newStock = Number(product.stock) + individualUnits;
+    const newStock = (Math.round(Number(product.stock) * 20) + Math.round(individualUnits * 20)) / 20;
     if (newStock < 0) throw new Error('Estoque insuficiente.');
-    transaction.update(ref, { stock: newStock, updatedAt: Date.now() });
+    transaction.update(ref, { ...cigaretteStockFields(product), stock: newStock, updatedAt: Date.now() });
     return { name: product.name, newStock };
   });
   updateProductStockInSupabase(result.name, result.newStock).catch(() => {});
   recordMovement({
     type: 'product_update', entityId: id, entityName: result.name,
-    description: `Estoque de ${result.name}: ${individualUnits > 0 ? '+' : ''}${individualUnits} unidades avulsas.`,
+    description: `Estoque de ${result.name}: ${individualUnits > 0 ? '+' : ''}${individualUnits} unidades de estoque.`,
     quantity: individualUnits
   }).catch(() => {});
   return result.newStock;
@@ -330,7 +331,9 @@ export const adjustProductStock = async (id: string, individualUnits: number) =>
 
 export const updateProduct = async (id: string, data: Partial<Product>) => {
   try {
-    const cleanData = removeUndefinedFields(data as any);
+    const current = await getDoc(doc(db, 'products', id));
+    const stockFields = current.exists() ? cigaretteStockFields(current.data() as Product) : {};
+    const cleanData = removeUndefinedFields({ ...stockFields, ...data } as any);
     const now = Date.now();
     await updateDoc(doc(db, 'products', id), { ...cleanData, updatedAt: now });
 
@@ -499,9 +502,12 @@ export const recordSale = async (
     });
   });
 
-  productsToUpdate.forEach(p => {
-    batch.update(doc(db, 'products', p.id), { stock: p.newStock, updatedAt: now });
-  });
+  for (const p of productsToUpdate) {
+    const ref = doc(db, 'products', p.id);
+    const snapshot = await getDoc(ref);
+    const stockFields = snapshot.exists() ? cigaretteStockFields(snapshot.data() as Product) : {};
+    batch.update(ref, { ...stockFields, stock: p.newStock, updatedAt: now });
+  }
 
   if (sale.type === 'fiado' && sale.customerId) {
     const custRef = doc(db, 'customers', sale.customerId);
@@ -957,8 +963,9 @@ export const recordPurchase = async (
     const prodRef = doc(db, 'products', purchase.productId);
     const prodDoc = await getDoc(prodRef);
     if (prodDoc.exists()) {
-      const p = prodDoc.data() as Product;
+      const p = normalizeCigaretteStock(prodDoc.data() as Product);
       const updatePayload: any = {
+        ...cigaretteStockFields(p),
         updatedAt: now
       };
 
