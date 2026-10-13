@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { 
   Home, ShoppingCart, Package, DollarSign, Users, Settings as SettingsIcon, 
-  HelpCircle, LogOut, MailPlus, ShoppingBag, PanelLeftClose, PanelLeftOpen,
-  Sun, Moon, WifiOff, RefreshCw, CheckCircle2, MessageSquareQuote, ShieldAlert,
-  Sparkles, Eye, EyeOff, Activity, ChevronDown, LogIn, X, Briefcase
+  HelpCircle, LogOut, MailPlus, ShoppingBag, Menu,
+  Sun, Moon, WifiOff, RefreshCw, CheckCircle2, MessageSquareQuote, 
+  Sparkles, Eye,  Activity, LogIn, X, Briefcase
 } from 'lucide-react';
 import { logout } from '../lib/auth';
-import { subscribeSettings, getActiveStoreSession, leaveStoreSubAccount, ActiveStoreSession } from '../lib/api';
+import { subscribeSettings, getActiveStoreSession, type ActiveStoreSession } from '../lib/api';
 import { usePreferences } from '../lib/preferencesContext';
 import { useOnlineStatus } from '../lib/useOnlineStatus';
 import { useEmployee } from '../lib/employeeContext';
@@ -24,13 +24,10 @@ export function Layout() {
   const location = useLocation();
   const { isOnline, wasOffline, isReconnecting, reconnectedJustNow, syncNow } = useOnlineStatus();
   const { currentEmployee, activeAnnouncement, clearAnnouncement, openSwitchModal } = useEmployee();
-  const [isCollapsed, setIsCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem('sidebar_collapsed') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
   const { t, v, darkMode, setDarkMode, isBasicMode, simpleViewMode, toggleSimpleViewMode } = usePreferences();
 
   useEffect(() => {
@@ -41,15 +38,45 @@ export function Layout() {
     return () => window.removeEventListener('store-session-changed', handleSessionChange);
   }, []);
 
-  const toggleCollapse = () => {
-    setIsCollapsed(prev => {
-      const next = !prev;
-      try {
-        localStorage.setItem('sidebar_collapsed', String(next));
-      } catch {}
-      return next;
-    });
-  };
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    mainRef.current?.setAttribute('inert', '');
+    const drawer = drawerRef.current;
+    const getFocusable = () => Array.from(drawer?.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), [tabindex="0"]'
+    ) ?? []).filter(element => element.getClientRects().length > 0);
+    getFocusable()[0]?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMenuOpen(false);
+      }
+      if (event.key === 'Tab') {
+        const items = getFocusable();
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (!first || !last) return;
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault(); last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault(); first.focus();
+        }
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      mainRef.current?.removeAttribute('inert');
+      document.removeEventListener('keydown', handleKeyDown);
+      menuButtonRef.current?.focus();
+    };
+  }, [menuOpen]);
 
   const NAV_ITEMS = [
     { to: '/', icon: Home, label: t('nav.home'), id: 'nav-item-home' },
@@ -74,348 +101,23 @@ export function Layout() {
   }, []);
 
   return (
-    <div className="flex h-screen bg-background text-foreground font-sans">
-      <aside 
-        className={`${
-          isCollapsed ? 'w-20' : 'w-64'
-        } bg-surface border-r border-border flex flex-col transition-all duration-300 ease-in-out shrink-0`}
-      >
-        {/* Header / Brand & Toggle */}
-        <div className={`p-4 flex items-center ${isCollapsed ? 'flex-col gap-3 justify-center' : 'justify-between'} border-b border-border/50`}>
-          {!isCollapsed ? (
-            <div className="flex items-center gap-2.5 overflow-hidden flex-1 mr-2">
-              {logoUrl ? (
-                <img 
-                  src={logoUrl} 
-                  alt={storeName} 
-                  className="w-9 h-9 rounded-lg object-cover shrink-0 border border-primary/20 shadow-xs" 
-                />
-              ) : (
-                <div className="w-9 h-9 rounded-lg bg-palette-1 text-primary flex items-center justify-center font-bold text-base shrink-0 border border-primary/20">
-                  {storeName.charAt(0).toUpperCase()}
-                </div>
-              )}
-              <h1 className="text-lg font-bold font-heading text-foreground tracking-tight leading-tight truncate" title={storeName}>
-                {storeName}
-              </h1>
-            </div>
-          ) : (
-            <div 
-              className="cursor-pointer" 
-              title={storeName}
-              onClick={toggleCollapse}
-            >
-              {logoUrl ? (
-                <img 
-                  src={logoUrl} 
-                  alt={storeName} 
-                  className="w-10 h-10 rounded-xl object-cover shrink-0 border border-primary/20 shadow-xs" 
-                />
-              ) : (
-                <div className="w-10 h-10 rounded-xl bg-palette-1 text-primary flex items-center justify-center font-bold text-lg shrink-0 shadow-xs border border-primary/20">
-                  {storeName.charAt(0).toUpperCase()}
-                </div>
-              )}
-            </div>
-          )}
-
-          <button
-            onClick={toggleCollapse}
-            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-            title={isCollapsed ? "Expandir menu lateral" : "Minimizar menu lateral (apenas ícones)"}
-            aria-label={isCollapsed ? "Expandir menu" : "Minimizar menu"}
-          >
-            {isCollapsed ? (
-              <PanelLeftOpen className="w-5 h-5 text-primary" />
-            ) : (
-              <PanelLeftClose className="w-5 h-5" />
-            )}
+    <div className="flex h-[100dvh] min-h-0 bg-background text-foreground font-sans">
+      <div ref={mainRef} className="flex min-w-0 flex-1 flex-col">
+        <header id="app-top-toolbar" className="flex min-h-16 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 sm:px-6">
+          <button ref={menuButtonRef} type="button" onClick={() => setMenuOpen(true)}
+            aria-label="Abrir menu de navegação" aria-expanded={menuOpen} aria-controls="app-navigation-drawer"
+            className="flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl border border-border px-3 text-sm font-medium hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+            <Menu className="h-5 w-5" aria-hidden="true" /><span className="hidden sm:inline">Menu</span>
           </button>
-        </div>
-
-        {/* Navigation Items */}
-        <nav className="flex-1 px-3 py-3 space-y-1.5 overflow-y-auto overflow-x-hidden">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              id={item.id}
-              title={isCollapsed ? item.label : undefined}
-              className={({ isActive }) =>
-                `flex items-center rounded-xl text-sm font-medium transition-all group ${
-                  isCollapsed ? 'justify-center p-3' : 'gap-3 px-3.5 py-2.5'
-                } ${
-                  isActive
-                    ? 'bg-palette-1 text-primary font-semibold shadow-xs'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                }`
-              }
-            >
-              <item.icon className="w-5 h-5 shrink-0 transition-transform group-hover:scale-105" />
-              {!isCollapsed && (
-                <span className="truncate">{item.label}</span>
-              )}
-            </NavLink>
-          ))}
-        </nav>
-
-        {/* Bottom Actions */}
-        <div className="p-3 border-t border-border space-y-1.5">
-          {/* Acesso Rápido ao Modo do Funcionário */}
-          <button
-            onClick={openSwitchModal}
-            id="sidebar-employee-mode-btn"
-            title={isCollapsed ? (currentEmployee ? `Modo Funcionário: ${currentEmployee.name}` : "Modo do Funcionário") : undefined}
-            className={`flex items-center w-full rounded-xl text-sm font-medium transition-colors cursor-pointer ${
-              currentEmployee 
-                ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-200 border border-emerald-500/30' 
-                : 'text-foreground hover:bg-muted'
-            } ${
-              isCollapsed ? 'justify-center p-3' : 'gap-3 px-3.5 py-2.5'
-            }`}
-          >
-            <Users className={`w-5 h-5 shrink-0 ${currentEmployee ? 'text-emerald-600 dark:text-emerald-400' : 'text-primary'}`} />
-            {!isCollapsed && (
-              <div className="flex-1 text-left overflow-hidden">
-                <span className="block truncate font-bold text-xs">
-                  {currentEmployee ? currentEmployee.name : 'Modo do Funcionário'}
-                </span>
-                <span className="block text-[10px] text-muted-foreground truncate">
-                  {currentEmployee ? 'Colaborador em turno' : 'Trocar com senha • Equipe'}
-                </span>
-              </div>
-            )}
-          </button>
-
-          <button
-            onClick={() => setShowInviteModal(true)}
-            title={isCollapsed ? t('nav.invite') : undefined}
-            className={`flex items-center w-full rounded-xl text-sm font-medium text-primary hover:bg-palette-1 transition-colors cursor-pointer ${
-              isCollapsed ? 'justify-center p-3' : 'gap-3 px-3.5 py-2'
-            }`}
-          >
-            <MailPlus className="w-5 h-5 shrink-0" />
-            {!isCollapsed && <span className="truncate">{t('nav.invite')}</span>}
-          </button>
-
-          <button
-            onClick={logout}
-            title={isCollapsed ? t('nav.logout') : undefined}
-            className={`flex items-center w-full rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer ${
-              isCollapsed ? 'justify-center p-3' : 'gap-3 px-3.5 py-2'
-            }`}
-          >
-            <LogOut className="w-5 h-5 shrink-0" />
-            {!isCollapsed && <span className="truncate">{t('nav.logout')}</span>}
-          </button>
-
-          {/* Quick collapse footer button when expanded */}
-          {!isCollapsed && (
-            <button
-              onClick={toggleCollapse}
-              className="mt-2 flex items-center justify-center gap-2 w-full py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-colors cursor-pointer"
-            >
-              <PanelLeftClose className="w-3.5 h-3.5" />
-              <span>Minimizar menu</span>
-            </button>
-          )}
-        </div>
-      </aside>
-
-      {/* Main Content Area with Top Toolbar */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Barra de Ferramentas Superior (Top Toolbar) */}
-        <header 
-          id="app-top-toolbar" 
-          className="h-16 border-b border-border bg-surface px-4 sm:px-6 flex items-center justify-between shrink-0 z-20 gap-3 shadow-2xs"
-        >
-          {/* Left: Store identity & Connection/Sync Status Indicator */}
-          <div className="flex items-center gap-3 overflow-hidden">
-            <span className="font-heading font-semibold text-foreground text-sm sm:text-base hidden md:inline truncate max-w-[200px]">
-              {storeName}
-            </span>
-
-            {/* Sub-conta Indicator Badge */}
-            {storeSession?.isEmployee && (
-              <div 
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200 text-xs font-semibold"
-                title={`Você está conectado como funcionário com uma sub-conta vinculada a este estabelecimento (${storeSession.employeeName || 'Colaborador'} - ${storeSession.employeeRole || 'Equipe'}).`}
-              >
-                <Briefcase className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span className="truncate">Sub-conta: {storeSession.employeeName || 'Funcionário'}</span>
-              </div>
-            )}
-
-            <span className="text-border hidden md:inline">•</span>
-
-            {/* Offline Status Indicator */}
-            {!isOnline && (
-              <div 
-                id="offline-indicator-badge"
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs font-semibold animate-pulse shadow-xs"
-                role="status"
-                aria-live="polite"
-                title="Você está sem internet no momento. Todas as suas vendas, compras e registros ficam salvos localmente e serão sincronizados automaticamente com a nuvem assim que a conexão retornar."
-              >
-                <WifiOff className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                <span className="truncate">Modo Offline • Ações salvas e sincronizadas ao voltar</span>
-              </div>
-            )}
-
-            {/* Reconnecting / Syncing Status Indicator */}
-            {isOnline && isReconnecting && (
-              <div 
-                id="syncing-indicator-badge"
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-700 dark:text-blue-300 text-xs font-semibold shadow-xs"
-                role="status"
-                aria-live="polite"
-              >
-                <RefreshCw className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 animate-spin" />
-                <span className="truncate">Internet restabelecida! Sincronizando dados com a nuvem...</span>
-              </div>
-            )}
-
-            {/* Reconnected Just Now Success Toast */}
-            {isOnline && !isReconnecting && reconnectedJustNow && (
-              <div 
-                id="reconnected-indicator-badge"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold shadow-xs transition-all"
-                role="status"
-              >
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span>Online & Tudo sincronizado!</span>
-              </div>
-            )}
-
-            {/* Normal Online Indicator */}
-            {isOnline && !isReconnecting && !reconnectedJustNow && (
-              <div 
-                id="online-indicator-badge"
-                className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full bg-palette-1 border border-primary/20 text-xs text-muted-foreground"
-                title="Conexão com Firestore ativa: seus dados estão sincronizados em tempo real."
-              >
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                <span className="font-medium text-foreground/80">Online & Sincronizado</span>
-              </div>
-            )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold" title={storeName}>{storeName}</p>
+            <p className="truncate text-xs text-muted-foreground">{NAV_ITEMS.find(item => item.to === location.pathname)?.label || t('nav.home')}</p>
           </div>
-
-          {/* Right: Quick Actions Toolbar */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {/* Active Employee Switcher Button */}
-            <button
-              type="button"
-              onClick={openSwitchModal}
-              id="topbar-employee-switcher"
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-2xs border ${
-                currentEmployee
-                  ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-200 border-emerald-500/30 hover:bg-emerald-500/20'
-                  : 'bg-muted/70 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
-              }`}
-              title={
-                currentEmployee
-                  ? `Modo do Funcionário ativo: ${currentEmployee.name} (${currentEmployee.role}). Clique para mudar de colaborador com senha ou registrar saída.`
-                  : 'Modo do Funcionário: Adicione, exclua ou alterne de colaborador com senha protegida.'
-              }
-            >
-              {currentEmployee ? (
-                <>
-                  <span className="relative flex h-2 w-2 shrink-0">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  <span className="truncate max-w-[120px] font-bold text-foreground">
-                    {currentEmployee.name}
-                  </span>
-                  <span className="hidden lg:inline text-[10px] text-muted-foreground font-medium">
-                    (Modo Funcionário)
-                  </span>
-                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-                </>
-              ) : (
-                <>
-                  <Users className="w-3.5 h-3.5 text-primary shrink-0" />
-                  <span className="font-semibold text-foreground">Modo do Funcionário</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-                </>
-              )}
-            </button>
-
-            {/* Quick Simple / Complete View Mode Toggle for Basic Mode */}
-            {isBasicMode && (
-              <button
-                id="topbar-quick-simple-mode-toggle"
-                type="button"
-                onClick={toggleSimpleViewMode}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-2xs border ${
-                  simpleViewMode
-                    ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700/60'
-                    : 'bg-muted/80 text-foreground border-border hover:bg-muted'
-                }`}
-                title={
-                  simpleViewMode
-                    ? "Interface simplificada ativa: detalhes técnicos ficam minimizados. Clique para expandir todos os detalhes."
-                    : "Visão detalhada ativa. Clique para voltar à interface simples e limpa."
-                }
-              >
-                {simpleViewMode ? (
-                  <>
-                    <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span className="hidden sm:inline">Interface Simples</span>
-                    <span className="text-[10px] bg-amber-200/80 dark:bg-amber-900/60 px-1.5 py-0.5 rounded-md font-bold">Ativa</span>
-                  </>
-                ) : (
-                  <>
-                    <Eye className="w-3.5 h-3.5 text-primary shrink-0" />
-                    <span className="hidden sm:inline">Visão Completa</span>
-                    <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-md text-muted-foreground font-medium">Expandida</span>
-                  </>
-                )}
-              </button>
-            )}
-
-            {/* Quick Feedback Button */}
-            <NavLink
-              to="/tutorial?tab=feedback"
-              id="topbar-quick-feedback-btn"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium border border-primary/25 bg-palette-1 hover:bg-palette-3/30 text-primary transition-colors cursor-pointer shadow-2xs"
-              title="Envie sua sugestão, elogio ou relato de problema diretamente para a equipe"
-            >
-              <MessageSquareQuote className="w-4 h-4 shrink-0 text-primary" />
-              <span className="hidden sm:inline">Dar Feedback</span>
-            </NavLink>
-
-            {/* Quick Dark / Light Mode Toggle Button */}
-            <button
-              id="topbar-quick-theme-toggle"
-              type="button"
-              onClick={() => setDarkMode(!darkMode)}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-muted/50 hover:bg-muted text-foreground transition-all cursor-pointer text-xs sm:text-sm font-medium shadow-2xs group"
-              title={
-                darkMode 
-                  ? "Alternar para Tema Claro (Modo Dia)" 
-                  : "Alternar para Tema Escuro (Ideal para ambientes com pouca luz)"
-              }
-              aria-label={darkMode ? "Alternar para Tema Claro" : "Alternar para Tema Escuro"}
-            >
-              {darkMode ? (
-                <>
-                  <Sun className="w-4 h-4 text-amber-400 shrink-0 transition-transform group-hover:rotate-45" />
-                  <span className="hidden md:inline font-medium">Tema Claro</span>
-                </>
-              ) : (
-                <>
-                  <Moon className="w-4 h-4 text-primary shrink-0 transition-transform group-hover:-rotate-12" />
-                  <span className="hidden md:inline font-medium">Tema Escuro</span>
-                </>
-              )}
-            </button>
+          <div role="status" aria-live="polite" className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+            {!isOnline ? <WifiOff className="h-4 w-4 text-amber-600" /> : isReconnecting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+            <span>{!isOnline ? 'Offline' : isReconnecting ? 'Sincronizando' : reconnectedJustNow ? 'Reconectado' : 'Online'}</span>
           </div>
         </header>
-
         {/* ANNOUNCEMENT BANNER FOR EMPLOYEE ENTRY & EXIT */}
         {activeAnnouncement && (
           <div 
@@ -451,7 +153,8 @@ export function Layout() {
 
             <button
               onClick={clearAnnouncement}
-              className="p-1.5 rounded-lg opacity-70 hover:opacity-100 transition-opacity cursor-pointer shrink-0"
+              aria-label="Dispensar aviso"
+              className="min-h-[44px] min-w-[44px] p-1.5 rounded-lg opacity-70 hover:opacity-100 transition-opacity cursor-pointer shrink-0"
               title="Dispensar aviso"
             >
               <X className="w-4 h-4" />
@@ -459,15 +162,121 @@ export function Layout() {
           </div>
         )}
 
-        {/* Main Content View */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
-          <div className="max-w-6xl mx-auto">
+
+        <main className="min-h-0 flex-1 overflow-auto p-4 sm:p-6 md:p-8">
+          <div className="mx-auto w-full min-w-0 max-w-6xl">
             <Outlet />
-            {/* Histórico de Movimentações fixado no fim de cada página em modo suspenso (retrátil e limpo) */}
             <GlobalMovementHistory />
           </div>
         </main>
       </div>
+
+      {menuOpen && (
+        <div className="fixed inset-0 z-40">
+          <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={() => setMenuOpen(false)} />
+          <aside ref={drawerRef} id="app-navigation-drawer" role="dialog" aria-modal="true" aria-labelledby="navigation-title"
+            className="absolute inset-y-0 left-0 flex w-[min(88vw,340px)] flex-col border-r border-border bg-surface shadow-xl">
+            <div className="flex shrink-0 items-center gap-3 border-b border-border p-4">
+              {logoUrl ? <img src={logoUrl} alt="" className="h-10 w-10 shrink-0 rounded-xl object-cover" /> : <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-palette-1 font-bold text-primary">{storeName.charAt(0).toUpperCase()}</div>}
+              <div className="min-w-0 flex-1"><h2 id="navigation-title" className="font-semibold">Menu</h2><p className="truncate text-xs text-muted-foreground">{storeName}</p></div>
+              <button type="button" onClick={() => setMenuOpen(false)} aria-label="Fechar menu" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl hover:bg-muted"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
+              <nav aria-label="Navegação principal" className="space-y-1">
+                {NAV_ITEMS.map(item => (
+                  <NavLink key={item.to} to={item.to} end={item.to === '/'} id={item.id} onClick={() => setMenuOpen(false)}
+                    className={({ isActive }) => `flex min-h-[48px] items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-medium transition-colors ${isActive ? 'bg-palette-1 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
+                    <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" /><span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </nav>
+              <div className="mt-4 space-y-2 border-t border-border pt-4">
+                <button type="button" id="sidebar-employee-mode-btn" onClick={() => { setMenuOpen(false); openSwitchModal(); }} className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm hover:bg-muted">
+                  <Users className="h-5 w-5 shrink-0 text-primary" /><span className="min-w-0"><span className="block truncate font-medium">{currentEmployee ? currentEmployee.name : 'Modo do Funcionário'}</span><span className="block text-xs text-muted-foreground">{currentEmployee ? 'Colaborador em turno' : 'Trocar com senha • Equipe'}</span></span>
+                </button>
+                <button type="button" onClick={() => { setMenuOpen(false); setShowInviteModal(true); }} className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3.5 py-3 text-sm text-primary hover:bg-muted"><MailPlus className="h-5 w-5" />{t('nav.invite')}</button>
+                <button type="button" onClick={logout} className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3.5 py-3 text-sm text-red-600 hover:bg-muted"><LogOut className="h-5 w-5" />{t('nav.logout')}</button>
+              </div>
+              <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4 [&>button]:min-h-[44px] [&>a]:min-h-[44px]">
+            {/* Quick Simple / Complete View Mode Toggle for Basic Mode */}
+            {isBasicMode && (
+              <button
+                id="topbar-quick-simple-mode-toggle"
+                type="button"
+                onClick={toggleSimpleViewMode}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-2xs border ${
+                  simpleViewMode
+                    ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700/60'
+                    : 'bg-muted/80 text-foreground border-border hover:bg-muted'
+                }`}
+                title={
+                  simpleViewMode
+                    ? "Interface simplificada ativa: detalhes técnicos ficam minimizados. Clique para expandir todos os detalhes."
+                    : "Visão detalhada ativa. Clique para voltar à interface simples e limpa."
+                }
+              >
+                {simpleViewMode ? (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span className="">Interface Simples</span>
+                    <span className="text-[10px] bg-amber-200/80 dark:bg-amber-900/60 px-1.5 py-0.5 rounded-md font-bold">Ativa</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-3.5 h-3.5 text-primary shrink-0" />
+                    <span className="">Visão Completa</span>
+                    <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-md text-muted-foreground font-medium">Expandida</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* Quick Feedback Button */}
+            <NavLink
+              to="/tutorial?tab=feedback"
+              onClick={() => setMenuOpen(false)}
+              id="topbar-quick-feedback-btn"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium border border-primary/25 bg-palette-1 hover:bg-palette-3/30 text-primary transition-colors cursor-pointer shadow-2xs"
+              title="Envie sua sugestão, elogio ou relato de problema diretamente para a equipe"
+            >
+              <MessageSquareQuote className="w-4 h-4 shrink-0 text-primary" />
+              <span className="">Dar Feedback</span>
+            </NavLink>
+
+            {/* Quick Dark / Light Mode Toggle Button */}
+            <button
+              id="topbar-quick-theme-toggle"
+              type="button"
+              onClick={() => setDarkMode(!darkMode)}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-muted/50 hover:bg-muted text-foreground transition-all cursor-pointer text-xs sm:text-sm font-medium shadow-2xs group"
+              title={
+                darkMode 
+                  ? "Alternar para Tema Claro (Modo Dia)" 
+                  : "Alternar para Tema Escuro (Ideal para ambientes com pouca luz)"
+              }
+              aria-label={darkMode ? "Alternar para Tema Claro" : "Alternar para Tema Escuro"}
+            >
+              {darkMode ? (
+                <>
+                  <Sun className="w-4 h-4 text-amber-400 shrink-0 transition-transform group-hover:rotate-45" />
+                  <span className=" font-medium">Tema Claro</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-4 h-4 text-primary shrink-0 transition-transform group-hover:-rotate-12" />
+                  <span className=" font-medium">Tema Escuro</span>
+                </>
+              )}
+            </button>
+
+              </div>
+              {storeSession?.isEmployee && <div className="mt-4 rounded-xl bg-muted p-3 text-xs text-muted-foreground"><Briefcase className="mb-1 h-4 w-4" />Sub-conta: {storeSession.employeeName || 'Funcionário'}</div>}
+              {!isOnline && <p className="mt-4 text-xs text-muted-foreground">Sem conexão. Aguarde o retorno da internet para sincronizar os registros.</p>}
+              {isOnline && wasOffline && <button type="button" onClick={syncNow} className="mt-3 flex min-h-[44px] items-center gap-2 rounded-xl px-3 text-sm hover:bg-muted"><RefreshCw className="h-4 w-4" />Sincronizar agora</button>}
+            </div>
+          </aside>
+        </div>
+      )}
 
       <TutorialModal />
       <InviteModal isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} />
@@ -475,4 +284,3 @@ export function Layout() {
     </div>
   );
 }
-
