@@ -16,12 +16,6 @@ import { useEmployee } from '../lib/employeeContext';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO, subDays, subMonths } from 'date-fns';
 import { BUSINESS_SECTORS, getSavedBusinessSector, saveBusinessSector, getCustomCategories, setCustomCategories, saveCustomCategory, removeCustomCategory, getAllCategories } from '../lib/categories';
 import { 
-  SUPABASE_REST_URL, 
-  SUPABASE_ANON_KEY, 
-  testSupabaseConnection, 
-  SUPABASE_FIX_RLS_SQL, 
-  flushPendingSupabaseSync, 
-  getPendingSupabaseCount,
   GOOGLE_SHEETS_WEBHOOK_URL,
   getGoogleSheetsWebhookUrl,
   setGoogleSheetsWebhookUrl,
@@ -88,78 +82,6 @@ export default function SettingsView() {
   const [lastBackupTime, setLastBackupTime] = useState<number | null>(null);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [backupSuccessMessage, setBackupSuccessMessage] = useState('');
-
-  // Supabase State
-  const [supabaseTesting, setSupabaseTesting] = useState(false);
-  const [copiedSql, setCopiedSql] = useState(false);
-  const [isFlushingQueue, setIsFlushingQueue] = useState(false);
-  const [flushFeedback, setFlushFeedback] = useState<string | null>(null);
-  const [pendingCount, setPendingCount] = useState(() => getPendingSupabaseCount());
-  const [supabaseStatus, setSupabaseStatus] = useState<{
-    tested: boolean;
-    connected?: boolean;
-    message?: string;
-    produtosTableOk?: boolean;
-    movimentacoesTableOk?: boolean;
-    rlsBlocked?: boolean;
-    pendingCount?: number;
-  } | null>(null);
-
-  useEffect(() => {
-    const handleQueueChange = (e: any) => {
-      setPendingCount(e.detail?.count ?? getPendingSupabaseCount());
-    };
-    window.addEventListener('supabase-queue-updated', handleQueueChange);
-    return () => window.removeEventListener('supabase-queue-updated', handleQueueChange);
-  }, []);
-
-  const handleTestSupabase = async () => {
-    setSupabaseTesting(true);
-    setFlushFeedback(null);
-    try {
-      const res = await testSupabaseConnection();
-      setSupabaseStatus({ tested: true, ...res });
-      setPendingCount(res.pendingCount);
-    } catch (err: any) {
-      setSupabaseStatus({
-        tested: true,
-        connected: false,
-        message: err?.message || 'Falha na conexão com Supabase'
-      });
-    } finally {
-      setSupabaseTesting(false);
-    }
-  };
-
-  const handleCopySql = () => {
-    navigator.clipboard.writeText(SUPABASE_FIX_RLS_SQL).then(() => {
-      setCopiedSql(true);
-      setTimeout(() => setCopiedSql(false), 3000);
-    }).catch(() => {
-      setCopiedSql(true);
-      setTimeout(() => setCopiedSql(false), 3000);
-    });
-  };
-
-  const handleFlushPending = async () => {
-    setIsFlushingQueue(true);
-    setFlushFeedback(null);
-    try {
-      const res = await flushPendingSupabaseSync();
-      setPendingCount(res.remaining);
-      if (res.synced > 0) {
-        setFlushFeedback(`✓ ${res.synced} item(ns) sincronizados com sucesso no Supabase!`);
-      } else if (res.rlsBlocked) {
-        setFlushFeedback('Atenção: Gravação ainda bloqueada por RLS no Supabase. Execute o script SQL no painel antes de reenviar.');
-      } else {
-        setFlushFeedback('Nenhum item pendente para sincronizar.');
-      }
-    } catch (e: any) {
-      setFlushFeedback('Erro ao sincronizar fila: ' + (e?.message || 'Tente novamente'));
-    } finally {
-      setIsFlushingQueue(false);
-    }
-  };
 
   // Google Sheets Webhook State & Handlers
   const [sheetsWebhookUrl, setSheetsWebhookUrl] = useState(() => getGoogleSheetsWebhookUrl());
@@ -2193,166 +2115,6 @@ function doPost(e) {
         )}
       </div>
 
-      {/* Integração com Banco de Dados Supabase */}
-      <div className="bg-white dark:bg-[#12131c] p-6 rounded-2xl shadow-sm border border-emerald-100 dark:border-emerald-900/40">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-border">
-          <div>
-            <div className="flex items-center gap-2.5 text-foreground font-bold text-lg mb-1">
-              <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600">
-                <Database className="w-5 h-5" />
-              </div>
-              <span>Banco de Dados Supabase (SDK Ativo)</span>
-              <span className="text-[11px] font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                Conectado
-              </span>
-            </div>
-            <p className="text-sm text-muted-foreground max-w-2xl">
-              As vendas, movimentações e catálogo de produtos são gravados e sincronizados com o Supabase nas tabelas <strong className="text-foreground">PRODUTOS</strong> e <strong className="text-foreground">MOVIMENTAÇOES</strong>.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleTestSupabase}
-            disabled={supabaseTesting}
-            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-semibold transition-all text-xs whitespace-nowrap flex items-center gap-2 cursor-pointer shadow-xs"
-          >
-            <RefreshCcw className={`w-3.5 h-3.5 ${supabaseTesting ? 'animate-spin' : ''}`} />
-            {supabaseTesting ? 'Testando Conexão...' : 'Testar Comunicação Supabase'}
-          </button>
-        </div>
-
-        {/* Informações de Credenciais e Tabelas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-          <div className="p-3.5 rounded-xl bg-muted/40 border border-border space-y-2">
-            <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
-              <span>ENDPOINT REST CONECTADO</span>
-              <span className="text-emerald-600 font-mono text-[11px]">200 OK</span>
-            </div>
-            <div className="font-mono text-xs text-foreground bg-surface p-2 rounded-lg border border-border break-all select-all">
-              {SUPABASE_REST_URL}
-            </div>
-            <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Chave Anon JWT ativa e inicializada no JavaScript principal</span>
-            </div>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-muted/40 border border-border space-y-2">
-            <div className="text-xs font-semibold text-muted-foreground">
-              TABELAS SINCRONIZADAS EM TEMPO REAL
-            </div>
-            <div className="space-y-1.5 text-xs text-foreground">
-              <div className="flex items-center gap-2 p-1.5 rounded-lg bg-surface border border-border">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <div>
-                  <strong className="font-mono">PRODUTOS:</strong>
-                  <span className="text-muted-foreground ml-1">nome, preço de venda, custo e estoque atualizado</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 p-1.5 rounded-lg bg-surface border border-border">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <div>
-                  <strong className="font-mono">MOVIMENTAÇOES:</strong>
-                  <span className="text-muted-foreground ml-1">vendas, entradas de estoque e auditoria com valor e data</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Resultado do Teste e Diagnóstico */}
-        {supabaseStatus?.tested && (
-          <div className={`mt-4 p-4 rounded-xl text-xs border flex items-start gap-3 ${
-            supabaseStatus.connected && !supabaseStatus.rlsBlocked
-              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300' 
-              : supabaseStatus.connected && supabaseStatus.rlsBlocked
-              ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200'
-              : 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300'
-          }`}>
-            {supabaseStatus.connected && !supabaseStatus.rlsBlocked ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-            ) : supabaseStatus.connected && supabaseStatus.rlsBlocked ? (
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-            )}
-            <div className="space-y-1 w-full">
-              <div className="font-semibold text-sm">{supabaseStatus.message}</div>
-              <div className="text-[11px] opacity-90">
-                Tabela PRODUTOS: {supabaseStatus.produtosTableOk ? '✓ Reconhecida' : 'Verificar'} • Tabela MOVIMENTAÇÕES: {supabaseStatus.movimentacoesTableOk ? '✓ Reconhecida' : 'Verificar'}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Guia e Solução do Erro de Permissão RLS (Row Level Security 42501) */}
-        <div className="mt-4 p-4 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 text-xs text-amber-900 dark:text-amber-200 space-y-3">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-2 font-bold text-amber-950 dark:text-amber-100">
-              <ShieldCheck className="w-4 h-4 text-amber-600" />
-              <span>Liberar Permissões de Gravação no Supabase (Desativar RLS / Adicionar Políticas)</span>
-            </div>
-            <button
-              type="button"
-              onClick={handleCopySql}
-              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-            >
-              {copiedSql ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-white" />
-                  <span>SQL Copiado!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copiar SQL de Liberação</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          <p className="leading-relaxed text-[11px] text-amber-800 dark:text-amber-300">
-            Se ao cadastrar produtos ou registrar vendas você observar o erro de permissão <strong className="font-mono">42501 (violates row-level security policy)</strong>, basta abrir o painel do seu Supabase, ir no menu <strong>SQL Editor</strong>, colar o comando abaixo e clicar em <strong>Run</strong>:
-          </p>
-
-          <div className="relative font-mono text-[11px] bg-black/85 text-emerald-400 p-3 rounded-lg border border-border select-all overflow-x-auto leading-relaxed">
-            {SUPABASE_FIX_RLS_SQL}
-          </div>
-
-          <div className="text-[11px] text-amber-800 dark:text-amber-300">
-            ✓ O aplicativo enfileira automaticamente quaisquer gravações locais para que nenhum dado de venda ou produto seja perdido caso o banco esteja bloqueado no momento.
-          </div>
-        </div>
-
-        {/* Fila de Sincronização Pendente */}
-        {pendingCount > 0 && (
-          <div className="mt-4 p-3.5 rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/60 dark:bg-blue-950/20 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-blue-900 dark:text-blue-200">
-              <Clock className="w-4 h-4 text-blue-600 shrink-0" />
-              <span>
-                Há <strong>{pendingCount} item(ns)</strong> aguardando sincronização no Supabase.
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={handleFlushPending}
-              disabled={isFlushingQueue}
-              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-medium text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0"
-            >
-              <RefreshCcw className={`w-3.5 h-3.5 ${isFlushingQueue ? 'animate-spin' : ''}`} />
-              {isFlushingQueue ? 'Sincronizando...' : 'Sincronizar Pendentes Agora'}
-            </button>
-          </div>
-        )}
-
-        {flushFeedback && (
-          <div className="mt-2 text-xs text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
-            <span>{flushFeedback}</span>
-          </div>
-        )}
-      </div>
-
       {/* Integração com Google Sheets via Webhook (Google Apps Script) */}
       <div className="bg-white dark:bg-[#12131c] p-6 rounded-2xl shadow-sm border border-emerald-100 dark:border-emerald-900/40">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-border">
@@ -2371,7 +2133,7 @@ function doPost(e) {
               </span>
             </div>
             <p className="text-sm text-muted-foreground max-w-2xl">
-              Toda vez que uma venda ou movimentação for registrada com sucesso no Supabase, os dados são automaticamente transmitidos via POST para a sua planilha Google Sheets.
+              Ao registrar uma venda ou movimentação, os dados são enviados automaticamente para a sua planilha Google Sheets.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -2441,7 +2203,7 @@ function doPost(e) {
             )}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Sempre que uma venda ou movimentação for salva no Supabase, este endpoint recebe um JSON completo com data, tipo, produto, quantidade, valor, operador e array <code className="text-foreground font-mono">linha</code> formatado.
+            Sempre que uma venda ou movimentação for salva, este endpoint recebe um JSON completo com data, tipo, produto, quantidade, valor, operador e array <code className="text-foreground font-mono">linha</code> formatado.
           </p>
         </div>
 

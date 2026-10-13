@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { subscribeProducts, subscribeTodaySales, subscribeCustomers, subscribeSettings, getSaleItems, getPurchasesByDateRange, addMultipleProducts } from '../lib/api';
+import { subscribeProducts, subscribeTodaySales, subscribeCustomers, subscribeSettings, getSaleItems, getPurchasesByDateRange } from '../lib/api';
 import { Product, Sale, Customer, Settings, SaleItem } from '../types';
-import { Package, TrendingUp, AlertTriangle, Users, Eye, X, ShoppingBag, ShoppingCart, PlusCircle, ArrowDownLeft, ArrowUpRight, Wallet, Sparkles, Compass, FileSpreadsheet, ChevronDown, ChevronUp, BarChart3, Check } from 'lucide-react';
+import { Package, TrendingUp, AlertTriangle, Users, Eye, X, ShoppingBag, ShoppingCart, PlusCircle, ArrowDownLeft, ArrowUpRight, Wallet, Sparkles, Compass, FileSpreadsheet, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import { usePreferences } from '../lib/preferencesContext';
 import { PocketTip } from '../components/PocketTip';
@@ -10,8 +10,6 @@ import { GuidedTour } from '../components/GuidedTour';
 import { ExportPeriodModal } from '../components/ExportPeriodModal';
 import { VisualReportsPanel } from '../components/VisualReportsPanel';
 import { MonthlyProfitChart } from '../components/MonthlyProfitChart';
-import { PreAddProductsModal } from '../components/PreAddProductsModal';
-import { PRELOADED_PRODUCTS } from '../lib/preloadedProducts';
 
 export default function Dashboard() {
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
@@ -24,8 +22,6 @@ export default function Dashboard() {
   const [isExportPeriodModalOpen, setIsExportPeriodModalOpen] = useState(false);
   const [isVisualReportsOpen, setIsVisualReportsOpen] = useState(!simpleViewMode);
   const [isSalesDetailedTableOpen, setIsSalesDetailedTableOpen] = useState(!simpleViewMode);
-  const [isPreAddModalOpen, setIsPreAddModalOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Tour guiado interativo
   const [isTourOpen, setIsTourOpen] = useState(false);
@@ -100,53 +96,6 @@ export default function Dashboard() {
   
   const toReplenish = products.filter(p => p.stock <= p.safetyStock + (p.dailyAverageSales * p.replacementDays));
 
-  const [isInsertingPhotoProducts, setIsInsertingPhotoProducts] = useState(false);
-
-  const handleInsertPhotoProductsDirectly = async () => {
-    setIsInsertingPhotoProducts(true);
-    try {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const existingLower = new Set(products.map(p => p.name.toLowerCase().trim()));
-      const toInsert = PRELOADED_PRODUCTS.filter(p => !existingLower.has(p.name.toLowerCase().trim()));
-
-      if (toInsert.length === 0) {
-        alert('Todos os produtos das fotos já foram cadastrados no seu estoque anteriormente!');
-        setIsInsertingPhotoProducts(false);
-        return;
-      }
-
-      const payload: Omit<Product, 'id' | 'ownerId' | 'createdAt' | 'updatedAt'>[] = toInsert.map(p => ({
-        name: p.name,
-        type: p.type,
-        category: p.category,
-        purchaseForm: p.purchaseForm,
-        unitsPerPackage: p.unitsPerPackage,
-        unitCost: p.unitCost,
-        stock: 0,
-        safetyStock: p.safetyStock,
-        maxStock: p.maxStock,
-        initialStock: 0,
-        initialStockDate: todayStr,
-        dailyAverageSales: p.dailyAverageSales,
-        replacementDays: p.replacementDays,
-        basePrice: p.basePrice,
-        pricePackage: p.pricePackage,
-        pricePack: p.pricePack,
-        priceCart: p.priceCart,
-        priceHalfCart: p.priceHalfCart,
-        priceUnit: p.priceUnit
-      }));
-
-      const count = await addMultipleProducts(payload);
-      setToastMessage(`✓ ${count} produtos das fotos cadastrados com sucesso com os valores de venda certinhos! Você já pode fazer a contagem no estoque.`);
-      setTimeout(() => setToastMessage(null), 6000);
-    } catch (err: any) {
-      alert('Erro ao cadastrar produtos das fotos: ' + err.message);
-    } finally {
-      setIsInsertingPhotoProducts(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div id="dashboard-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -158,16 +107,6 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={handleInsertPhotoProductsDirectly}
-            disabled={isInsertingPhotoProducts}
-            className="px-3.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800/60 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
-            title="Cadastrar os produtos das fotos com os valores de venda prontos"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>{isInsertingPhotoProducts ? 'Cadastrando...' : 'Inserir Produtos das Fotos'}</span>
-          </button>
 
           <button
             type="button"
@@ -180,152 +119,6 @@ export default function Dashboard() {
             <span>Tour Guiado</span>
           </button>
         </div>
-      </div>
-
-      {/* Banner de Destaque: Inserir Produtos das Fotos Anexadas */}
-      {products.length === 0 && (
-        <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-surface border border-amber-300 dark:border-amber-800/60 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
-          <div className="flex items-start gap-3.5">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-sm sm:text-base font-bold text-foreground">
-                  Produtos das Fotos Anexadas Prontos para Cadastrar
-                </h3>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                  Valores de Venda Certinhos
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl">
-                Cigarros com valores nos 4 formatos (Maço, Carteira, Meia e Avulso), Bebidas, Doces, Sedas, Isqueiros e Mercearia já configurados com seus valores de venda. Deixamos tudo pronto e 100% editável para você fazer a contagem de estoque!
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0">
-            <button
-              onClick={() => setIsPreAddModalOpen(true)}
-              className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl border border-border bg-surface hover:bg-muted text-foreground text-xs font-semibold cursor-pointer transition-colors shadow-2xs"
-            >
-              Ver Lista / Filtros
-            </button>
-            <button
-              onClick={handleInsertPhotoProductsDirectly}
-              disabled={isInsertingPhotoProducts}
-              className="flex-1 sm:flex-none px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              {isInsertingPhotoProducts ? (
-                <span>Cadastrando...</span>
-              ) : (
-                <>
-                  <Check className="w-4 h-4" />
-                  <span>Cadastrar Produtos das Fotos Agora</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Banner de Boas-Vindas ao Tour para novos usuários */}
-      {showWelcomeTourBanner && (
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-palette-1 via-palette-1/60 to-surface border-2 border-primary/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center shrink-0 shadow-sm">
-              <Compass className="w-5 h-5 animate-spin-slow" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-bold text-sm sm:text-base text-foreground">
-                  Primeiros passos no Eu Gerencio!
-                </h3>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                  Tour de 1 minuto
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Faça o tour guiado interativo para conhecer os principais botões de navegação (Caixa, Estoque, Compras e Fiado).
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                setShowWelcomeTourBanner(false);
-                try { localStorage.setItem('eu_gerencio_guided_tour_completed', 'true'); } catch {}
-              }}
-              className="text-xs text-muted-foreground hover:text-foreground px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
-            >
-              Agora não
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowWelcomeTourBanner(false);
-                setIsTourOpen(true);
-              }}
-              className="px-4 py-1.5 bg-primary text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
-            >
-              <Compass className="w-3.5 h-3.5" />
-              <span>Iniciar Tour Guiado</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Dicas de Bolso: O Dia a Dia em 2 Passos */}
-      <div id="dashboard-pocket-tip">
-        <PocketTip
-          id="dashboard-guide"
-          badgeText="Dicas de Bolso"
-          title="O Dia a Dia do Comércio em 2 Passos"
-          subtitle="Aprenda rapidinho a registrar vendas ou anotar compras sem complicação."
-          helpfulNote="Dica: o sistema calcula tudo no final do dia para você saber exatamente quanto sobrou no bolso!"
-          sections={[
-            {
-              id: 'registrar-venda',
-              badge: 'Vender para o cliente',
-              title: 'Como registrar uma nova venda',
-              subtitle: 'Toda vez que um cliente comprar algo na sua loja, faça assim:',
-              step1: {
-                label: '1. Abra o Caixa (Vender)',
-                description: 'Clique no botão "Ir para o Caixa" abaixo ou no menu lateral. A lista de produtos vai aparecer na tela.'
-              },
-              step2: {
-                label: '2. Toque no item e finalize',
-                description: 'Clique no produto que o cliente escolheu e depois aperte o botão verde "Finalizar Venda". Escolha se foi dinheiro, cartão ou fiado!'
-              },
-              actionButton: {
-                label: 'Ir para o Caixa (Vender Agora)',
-                to: '/caixa',
-                icon: <ShoppingCart className="w-4 h-4" />
-              }
-            },
-            {
-              id: 'entrada-estoque',
-              badge: 'Chegou mercadoria',
-              title: 'Como anotar mercadorias que chegaram (Compras)',
-              subtitle: 'Sempre que você comprar produtos do fornecedor para reabastecer a loja:',
-              step1: {
-                label: '1. Abra a aba de Compras',
-                description: 'Clique em "Anotar Compra / Reposição" abaixo. Você verá o histórico e o botão para nova compra.'
-              },
-              step2: {
-                label: '2. Escolha o item e quantos chegaram',
-                description: 'Selecione o produto, coloque a quantidade e o preço pago. O sistema já soma no estoque na hora sozinho!'
-              },
-              actionButton: {
-                label: 'Anotar Compra / Reposição',
-                to: '/compras',
-                icon: <PlusCircle className="w-4 h-4" />
-              }
-            }
-          ]}
-        />
       </div>
 
       {/* CARD DE 'RESUMO DO DIA' / PAINEL FINANCEIRO SIMPLIFICADO */}
@@ -708,6 +501,105 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* Banner de Boas-Vindas ao Tour para novos usuários */}
+      {showWelcomeTourBanner && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-palette-1 via-palette-1/60 to-surface border-2 border-primary/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Compass className="w-5 h-5 animate-spin-slow" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-bold text-sm sm:text-base text-foreground">
+                  Primeiros passos no Eu Gerencio!
+                </h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                  Tour de 1 minuto
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Faça o tour guiado interativo para conhecer os principais botões de navegação (Caixa, Estoque, Compras e Fiado).
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setShowWelcomeTourBanner(false);
+                try { localStorage.setItem('eu_gerencio_guided_tour_completed', 'true'); } catch {}
+              }}
+              className="text-xs text-muted-foreground hover:text-foreground px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+            >
+              Agora não
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowWelcomeTourBanner(false);
+                setIsTourOpen(true);
+              }}
+              className="px-4 py-1.5 bg-primary text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
+            >
+              <Compass className="w-3.5 h-3.5" />
+              <span>Iniciar Tour Guiado</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Dicas de Bolso: O Dia a Dia em 2 Passos */}
+      <div id="dashboard-pocket-tip">
+        <PocketTip
+          id="dashboard-guide"
+          badgeText="Dicas de Bolso"
+          title="O Dia a Dia do Comércio em 2 Passos"
+          subtitle="Aprenda rapidinho a registrar vendas ou anotar compras sem complicação."
+          helpfulNote="Dica: o sistema calcula tudo no final do dia para você saber exatamente quanto sobrou no bolso!"
+          sections={[
+            {
+              id: 'registrar-venda',
+              badge: 'Vender para o cliente',
+              title: 'Como registrar uma nova venda',
+              subtitle: 'Toda vez que um cliente comprar algo na sua loja, faça assim:',
+              step1: {
+                label: '1. Abra o Caixa (Vender)',
+                description: 'Clique no botão "Ir para o Caixa" abaixo ou no menu lateral. A lista de produtos vai aparecer na tela.'
+              },
+              step2: {
+                label: '2. Toque no item e finalize',
+                description: 'Clique no produto que o cliente escolheu e depois aperte o botão verde "Finalizar Venda". Escolha se foi dinheiro, cartão ou fiado!'
+              },
+              actionButton: {
+                label: 'Ir para o Caixa (Vender Agora)',
+                to: '/caixa',
+                icon: <ShoppingCart className="w-4 h-4" />
+              }
+            },
+            {
+              id: 'entrada-estoque',
+              badge: 'Chegou mercadoria',
+              title: 'Como anotar mercadorias que chegaram (Compras)',
+              subtitle: 'Sempre que você comprar produtos do fornecedor para reabastecer a loja:',
+              step1: {
+                label: '1. Abra a aba de Compras',
+                description: 'Clique em "Anotar Compra / Reposição" abaixo. Você verá o histórico e o botão para nova compra.'
+              },
+              step2: {
+                label: '2. Escolha o item e quantos chegaram',
+                description: 'Selecione o produto, coloque a quantidade e o preço pago. O sistema já soma no estoque na hora sozinho!'
+              },
+              actionButton: {
+                label: 'Anotar Compra / Reposição',
+                to: '/compras',
+                icon: <PlusCircle className="w-4 h-4" />
+              }
+            }
+          ]}
+        />
+      </div>
+
       {/* Modal de Detalhes dos Itens da Venda */}
       {selectedSale && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs">
@@ -811,27 +703,7 @@ export default function Dashboard() {
         onClose={() => setIsExportPeriodModalOpen(false)}
       />
 
-      {/* Pre-Add Products & Image Import Modal */}
-      <PreAddProductsModal
-        isOpen={isPreAddModalOpen}
-        onClose={() => setIsPreAddModalOpen(false)}
-        onSuccess={(count) => {
-          setToastMessage(`${count} produtos pré-adicionados com sucesso ao estoque!`);
-          setTimeout(() => setToastMessage(null), 5000);
-        }}
-        existingProductNames={products.map(p => p.name)}
-      />
 
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-5">
-          <Sparkles className="w-5 h-5" />
-          <span className="text-sm font-medium">{toastMessage}</span>
-          <button onClick={() => setToastMessage(null)} className="ml-2 text-white/80 hover:text-white cursor-pointer">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
     </div>
   );
 }
