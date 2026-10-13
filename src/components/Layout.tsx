@@ -83,6 +83,11 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
     };
   }, [menuOpen]);
 
+  const handleToggleMenuPinned = () => {
+    setMenuOpen(false);
+    onToggleMenuPinned();
+  };
+
   const NAV_ITEMS = [
     { to: '/', icon: Home, label: t('nav.home'), id: 'nav-item-home' },
     { to: '/caixa', icon: ShoppingCart, label: v('nav.pos', t('nav.pos')), id: 'nav-item-caixa' },
@@ -108,10 +113,12 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
   return (
     <div className="flex h-[100dvh] min-h-0 bg-background text-foreground font-sans">
       <div ref={mainRef} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        {menuPinned ? (
         <header
           id="app-top-toolbar"
-          className={`${menuPinned ? 'sticky top-0' : 'relative'} z-30 flex min-h-16 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 sm:px-6`}
+          className="sticky top-0 z-50 shrink-0 border-b border-border bg-surface"
         >
+          <div className="flex min-h-16 items-center gap-3 px-4 sm:px-6">
           <button ref={menuButtonRef} type="button" onClick={() => setMenuOpen(true)}
             aria-label="Abrir menu de navegação" aria-expanded={menuOpen} aria-controls="app-navigation-drawer"
             className="flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl border border-border px-3 text-sm font-medium hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
@@ -123,7 +130,7 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
           </div>
           <button
             type="button"
-            onClick={onToggleMenuPinned}
+            onClick={handleToggleMenuPinned}
             aria-pressed={menuPinned}
             aria-label={menuPinned ? 'Desafixar menu' : 'Fixar menu'}
             title={menuPinned ? 'Desafixar menu' : 'Fixar menu'}
@@ -135,7 +142,35 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
             {!isOnline ? <WifiOff className="h-4 w-4 text-amber-600" /> : isReconnecting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
             <span>{!isOnline ? 'Offline' : isReconnecting ? 'Sincronizando' : reconnectedJustNow ? 'Reconectado' : 'Online'}</span>
           </div>
+          </div>
+          <nav aria-label="Menu fixo" className="flex gap-1 overflow-x-auto border-t border-border px-4 py-2 sm:px-6">
+            {NAV_ITEMS.map(item => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                id={`${item.id}-pinned`}
+                className={({ isActive }) => `flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-3 text-sm font-medium ${isActive ? 'bg-palette-1 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+              >
+                <item.icon className="h-4 w-4" aria-hidden="true" />
+                <span>{item.label}</span>
+              </NavLink>
+            ))}
+          </nav>
         </header>
+        ) : (
+          <button
+            ref={menuButtonRef}
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            aria-label="Abrir menu de navegação"
+            aria-expanded={menuOpen}
+            aria-controls="app-navigation-drawer"
+            className="fixed left-4 top-4 z-50 flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-surface shadow-lg hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+          >
+            <Menu className="h-5 w-5" aria-hidden="true" />
+          </button>
+        )}
         {/* ANNOUNCEMENT BANNER FOR EMPLOYEE ENTRY & EXIT */}
         {activeAnnouncement && (
           <div 
@@ -181,7 +216,7 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
         )}
 
 
-        <main className="flex-1 p-4 sm:p-6 md:p-8">
+        <main className={`flex-1 p-4 sm:p-6 md:p-8 ${menuPinned ? '' : 'pt-20 sm:pt-20 md:pt-20'}`}>
           <div className="mx-auto w-full min-w-0 max-w-6xl">
             <Outlet />
             <GlobalMovementHistory />
@@ -190,13 +225,23 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
       </div>
 
       {menuOpen && (
-        <div className="fixed inset-0 z-40">
+        <div className="fixed inset-0 z-[60]">
           <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={() => setMenuOpen(false)} />
           <aside ref={drawerRef} id="app-navigation-drawer" role="dialog" aria-modal="true" aria-labelledby="navigation-title"
             className="absolute inset-y-0 left-0 flex w-[min(88vw,340px)] flex-col border-r border-border bg-surface shadow-xl">
             <div className="flex shrink-0 items-center gap-3 border-b border-border p-4">
               {logoUrl ? <img src={logoUrl} alt="" className="h-10 w-10 shrink-0 rounded-xl object-cover" /> : <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-palette-1 font-bold text-primary">{storeName.charAt(0).toUpperCase()}</div>}
               <div className="min-w-0 flex-1"><h2 id="navigation-title" className="font-semibold">Menu</h2><p className="truncate text-xs text-muted-foreground">{storeName}</p></div>
+              <button
+                type="button"
+                onClick={handleToggleMenuPinned}
+                aria-pressed={menuPinned}
+                aria-label={menuPinned ? 'Desafixar menu' : 'Fixar menu'}
+                title={menuPinned ? 'Desafixar menu' : 'Fixar menu'}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl hover:bg-muted"
+              >
+                {menuPinned ? <Pin className="h-5 w-5 text-primary" aria-hidden="true" /> : <PinOff className="h-5 w-5" aria-hidden="true" />}
+              </button>
               <button type="button" onClick={() => setMenuOpen(false)} aria-label="Fechar menu" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl hover:bg-muted"><X className="h-5 w-5" /></button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
