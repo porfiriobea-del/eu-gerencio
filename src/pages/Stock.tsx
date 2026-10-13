@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteField } from 'firebase/firestore';
 import { subscribeProducts, updateProduct, addProduct, addMultipleProducts, deleteProduct, deleteMultipleProducts, subscribeTodaySales, recordMovement } from '../lib/api';
@@ -9,6 +9,7 @@ import { format, startOfMonth, subMonths } from 'date-fns';
 import { usePreferences } from '../lib/preferencesContext';
 import { PocketTip } from '../components/PocketTip';
 import { PreAddProductsModal } from '../components/PreAddProductsModal';
+import { recognizeProductFromImage } from '../lib/geminiProductScanner';
 import { CameraCaptureModal } from '../components/CameraCaptureModal';
 import { analyzeDuplicates, normalizeProductName } from '../lib/duplicateDetector';
 import { PRELOADED_PRODUCTS } from '../lib/preloadedProducts';
@@ -98,40 +99,59 @@ export default function Stock() {
     promoNotes: ''
   });
 
-  const handleProductImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [isReadingLabel, setIsReadingLabel] = useState(false);
+  const [labelReadError, setLabelReadError] = useState<string | null>(null);
+  const labelRequestRef = useRef(0);
+
+  useEffect(() => {
+    labelRequestRef.current++;
+    setIsReadingLabel(false);
+    setLabelReadError(null);
+    return () => { labelRequestRef.current++; };
+  }, [isModalOpen, editingId]);
+
+  const handleProductImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxDim = 320;
-        let width = img.width;
-        let height = img.height;
-        if (width > height) {
-          if (width > maxDim) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          }
-        } else {
-          if (height > maxDim) {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-          setFormData((prev: any) => ({ ...prev, imageUrl: dataUrl }));
-        }
-      };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
+
+    const requestId = ++labelRequestRef.current;
+    setIsReadingLabel(true);
+    setLabelReadError(null);
+    try {
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Não foi possível abrir a foto.'));
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error('Imagem inválida. Escolha outra foto.'));
+          img.src = String(reader.result);
+        };
+        reader.readAsDataURL(file);
+      });
+      if (requestId !== labelRequestRef.current) return;
+
+      // Preserve label detail instead of shrinking the image to 320px.
+      const scale = Math.min(1, 1280 / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Não foi possível processar a imagem.');
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const imageBase64 = canvas.toDataURL('image/jpeg', 0.9);
+      setFormData((prev: any) => ({ ...prev, imageUrl: imageBase64 }));
+
+      const { name, category } = await recognizeProductFromImage(imageBase64, categories);
+      if (requestId !== labelRequestRef.current) return;
+      setFormData((prev: any) => ({ ...prev, name, category }));
+    } catch (error) {
+      if (requestId !== labelRequestRef.current) return;
+      setLabelReadError(error instanceof Error ? error.message : 'Não foi possível ler o rótulo.');
+    } finally {
+      if (requestId === labelRequestRef.current) setIsReadingLabel(false);
+    }
   };
 
   useEffect(() => {
@@ -1772,7 +1792,8 @@ export default function Stock() {
                           type="file" 
                           accept="image/*" 
                           className="hidden" 
-                          onChange={handleProductImageFile} 
+                          onChange={handleProductImageFile}
+                          disabled={isReadingLabel}
                         />
                       </label>
                       <span className="text-[11px] text-muted-foreground">ou informe o link direto:</span>
@@ -1780,12 +1801,20 @@ export default function Stock() {
                         type="button"
                         onClick={() => setIsCameraModalOpen(true)}
                         className="px-3 py-1.5 bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs font-bold rounded-lg hover:bg-amber-500/25 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
-                        title="Tirar foto para ler o produto com IA e preencher tudo automaticamente"
+                        title="Tirar foto para ler o produto com IA e preencher apenas nome e categoria"
                       >
                         <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                         <span>Preencher com Câmera (IA)</span>
                       </button>
                     </div>
+                    {isReadingLabel && (
+                      <p role="status" className="flex items-center gap-2 text-xs text-primary">
+                        <Loader2 className="w-4 h-4 animate-spin" /> Lendo rótulo...
+                      </p>
+                    )}
+                    {labelReadError && (
+                      <p role="alert" className="text-xs text-red-600">{labelReadError} Você pode preencher manualmente.</p>
+                    )}
                     <input 
                       type="url"
                       placeholder="https://exemplo.com/foto-do-produto.jpg"
@@ -1909,7 +1938,7 @@ export default function Stock() {
                     }} 
                     className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground cursor-pointer"
                   >
-                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                    {Array.from(new Set([...categories, formData.category])).map(c => <option key={c} value={c}>{c}</option>)}
                     <option value="__new__">➕ + Cadastrar Nova Categoria...</option>
                   </select>
                 </div>
