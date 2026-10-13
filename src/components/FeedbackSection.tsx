@@ -192,7 +192,7 @@ export function FeedbackSection({ storeName, defaultContact = '', className = ''
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold text-foreground mb-1">
-              Seu Nome ou WhatsApp (Opcional)
+              Seu nome ou telefone (Opcional)
             </label>
             <input
               type="text"

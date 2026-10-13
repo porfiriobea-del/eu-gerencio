@@ -11,7 +11,7 @@ import { Customer, Sale, Payment } from '../types';
 import { 
   Plus, DollarSign, Clock, Search, FileText, ShoppingCart, 
   CheckCircle2, ArrowDownLeft, ArrowUpRight, Printer, X, 
-  MessageSquare, Phone, User, Calendar, History, ArrowRight,
+  Phone, User, Calendar, History, ArrowRight,
   Trash2, AlertTriangle
 } from 'lucide-react';
 import { useEmployee } from '../lib/employeeContext';
@@ -243,30 +243,6 @@ export default function Debt() {
     window.print();
   };
 
-  const handleSendWhatsAppStatement = () => {
-    if (!selectedCustomer) return;
-    const cleanPhone = (selectedCustomer.phone || '').replace(/\D/g, '');
-    const storeOwnerId = selectedCustomer.ownerId;
-
-    let text = `*EXTRATO DO FIADO - CADERNETA*\n`;
-    text += `Cliente: *${selectedCustomer.name}*\n`;
-    text += `Dívida Atual a Pagar: *R$ ${selectedCustomer.totalDebt.toFixed(2)}*\n\n`;
-    text += `*Histórico Recente:*\n`;
-
-    ledgerTimeline.slice(0, 8).forEach(item => {
-      const typeLabel = item.type === 'sale' ? '🛒 Compra' : item.type === 'payment' ? '💰 Pagamento' : '📋 Saldo Anterior';
-      text += `• ${formatDateTime(item.timestamp)}: ${typeLabel} - R$ ${item.amount.toFixed(2)}\n`;
-      if (item.itemsSummary) {
-        text += `  Itens: ${item.itemsSummary}\n`;
-      }
-    });
-
-    text += `\nAgradecemos a sua preferência!`;
-
-    const encoded = encodeURIComponent(text);
-    const phoneParam = cleanPhone ? `phone=55${cleanPhone}&` : '';
-    window.open(`https://api.whatsapp.com/send?${phoneParam}text=${encoded}`, '_blank');
-  };
 
   return (
     <div className="space-y-6">
@@ -557,17 +533,6 @@ export default function Debt() {
               </div>
 
               <div className="flex items-center gap-2">
-                {selectedCustomer.phone && (
-                  <button
-                    type="button"
-                    onClick={handleSendWhatsAppStatement}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 text-xs font-semibold transition-colors cursor-pointer"
-                    title="Enviar extrato por WhatsApp para o cliente"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>WhatsApp</span>
-                  </button>
-                )}
 
                 <button
                   type="button"
@@ -762,7 +727,7 @@ export default function Debt() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1.5">Telefone / WhatsApp (opcional)</label>
+                <label className="block text-xs font-semibold text-foreground mb-1.5">Telefone (opcional)</label>
                 <input 
                   value={formData.phone} 
                   onChange={e => setFormData({...formData, phone: e.target.value})} 

@@ -72,7 +72,7 @@ export function PreAddProductsModal({ isOpen, onClose, onSuccess, existingProduc
       type: 'comum',
       unitCost: 0,
       basePrice: 0,
-      stock: 10,
+      stock: 0,
       unitsPerPackage: 1,
       purchaseForm: 'unidade'
     }
@@ -181,15 +181,15 @@ export function PreAddProductsModal({ isOpen, onClose, onSuccess, existingProduc
           id: `d-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           name: recognized.name,
           category: recognized.category || 'Diversos',
-          type: recognized.type,
-          unitCost: recognized.estimatedCost || 0,
-          basePrice: recognized.suggestedSalePrice || 0,
-          stock: recognized.stock || 10,
-          unitsPerPackage: recognized.unitsPerPackage || 1,
-          purchaseForm: recognized.purchaseForm,
+          type: 'comum' as const,
+          unitCost: 0,
+          basePrice: 0,
+          stock: 0,
+          unitsPerPackage: 1,
+          purchaseForm: 'unidade' as const,
           imageUrl: dataUrl,
           aiDetected: true,
-          barcode: recognized.barcode || ''
+          barcode: ''
         };
         return hasOnlyBlank ? [newDraft] : [...prev, newDraft];
       });
@@ -208,14 +208,14 @@ export function PreAddProductsModal({ isOpen, onClose, onSuccess, existingProduc
           type: 'comum' as const,
           unitCost: 0,
           basePrice: 0,
-          stock: 10,
+          stock: 0,
           unitsPerPackage: 1,
           purchaseForm: 'unidade' as const,
           imageUrl: dataUrl
         };
         return hasOnlyBlank ? [newDraft] : [...prev, newDraft];
       });
-      setScanningStatus('Imagem adicionada. Você pode conferir os valores e preencher na tabela.');
+      setScanningStatus((err instanceof Error ? err.message : 'Não foi possível ler a imagem.') + ' Preencha os dados na tabela.');
       setTimeout(() => setScanningStatus(null), 5000);
     } finally {
       setIsScanningAI(false);
@@ -263,7 +263,7 @@ export function PreAddProductsModal({ isOpen, onClose, onSuccess, existingProduc
         type: 'comum',
         unitCost: 0,
         basePrice: 0,
-        stock: 10,
+        stock: 0,
         unitsPerPackage: 1,
         purchaseForm: 'unidade'
       }

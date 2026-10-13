@@ -4,7 +4,7 @@ import { exportPurchasesToCSV } from '../lib/exportUtils';
 import { Product, Purchase } from '../types';
 import { 
   ShoppingBag, Plus, Check, Clock, Calendar, AlertTriangle, 
-  Search, Trash2, Printer, Share2, CheckCircle2,
+  Search, Trash2, Printer, CheckCircle2,
   Sparkles, DollarSign, Store, Tag, X,
   ArrowRight, PackageCheck, ListChecks, History, Info, FileSpreadsheet,
   Flame, Percent, ChevronDown, ChevronUp
@@ -373,32 +373,6 @@ export default function Purchases() {
     }
   };
 
-  // Share formatted checklist for WhatsApp
-  const handleShareWhatsApp = () => {
-    if (replenishList.length === 0) return;
-
-    let text = `🛒 *LISTA DE COMPRAS - ${format(new Date(), 'dd/MM/yyyy')}*\n`;
-    text += `*Eu Gerencio* | ${replenishList.length} itens a repor\n\n`;
-
-    replenishList.forEach((item, idx) => {
-      const p = item.product;
-      const unitsPerPkg = p.unitsPerPackage || 1;
-      const isPkg = unitsPerPkg > 1;
-
-      text += `${idx + 1}. *${p.name}*\n`;
-      if (isPkg) {
-        text += `   📦 Comprar: *${item.suggestedPackages} ${p.purchaseForm || 'fardo(s)'}* (= ${item.suggestedBuyUnits} un.)\n`;
-      } else {
-        text += `   📦 Comprar: *${item.suggestedBuyUnits} un.*\n`;
-      }
-      text += `   (Estoque atual: ${p.stock} un. | Custo est.: R$ ${item.estimatedCost.toFixed(2)})\n\n`;
-    });
-
-    text += `💰 *Total Estimado de Compras:* R$ ${totalSuggestedCost.toFixed(2)}`;
-
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
-  };
 
   // Print checklist
   const handlePrint = () => {
@@ -441,16 +415,6 @@ export default function Purchases() {
           >
             <Plus className="w-4 h-4 text-primary" />
             <span>Repor Outro {entityName()}</span>
-          </button>
-
-          <button
-            onClick={handleShareWhatsApp}
-            disabled={replenishList.length === 0}
-            className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shadow-xs"
-            title="Enviar lista formatada para o WhatsApp"
-          >
-            <Share2 className="w-4 h-4" />
-            <span className="hidden md:inline">WhatsApp</span>
           </button>
 
           <button
@@ -771,12 +735,6 @@ export default function Purchases() {
                 className="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer"
               >
                 Limpar marcações
-              </button>
-              <button
-                onClick={handleShareWhatsApp}
-                className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-medium flex items-center gap-1 cursor-pointer"
-              >
-                <Share2 className="w-3.5 h-3.5" /> WhatsApp
               </button>
             </div>
           </div>

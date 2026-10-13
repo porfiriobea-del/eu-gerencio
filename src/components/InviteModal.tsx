@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, Mail, CheckCircle2, UserPlus, Phone, Shield, 
-  MessageSquare, Copy, Check, Info, Sparkles, Link as LinkIcon,
+  Copy, Check, Info, Sparkles, Link as LinkIcon,
   Lock, Eye, EyeOff
 } from 'lucide-react';
 import { addEmployee, recordMovement, createTeamInvitation } from '../lib/api';
@@ -40,7 +40,7 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
     return `Olá ${name || 'colaborador'}!\n\nVocê foi convidado para a equipe do estabelecimento no aplicativo Eu Gerencio na função de *${role}*.\n\n⚠️ *COMO ACESSAR:*\nVocê *vai entrar pelo e-mail que foi convidado, enviado o convite*:\n👉 ${email}${pin.trim() ? `\n🔑 *Sua Senha de Acesso no Caixa:* ${pin.trim()}` : ''}\n\nClique no link oficial abaixo para entrar diretamente como funcionário com a sua sub-conta do estabelecimento:\n🔗 ${url}\n\nAo entrar pelo link e fazer login com sua conta Google deste e-mail, você já terá acesso às vendas, estoque e fiados do nosso comércio. Bom trabalho!`;
   };
 
-  const handleRegisterAndSend = async (method: 'email' | 'whatsapp' | 'copy' | 'linkOnly') => {
+  const handleRegisterAndSend = async (method: 'email' | 'copy' | 'linkOnly') => {
     if (!name.trim()) {
       setErrorMessage('Por favor, informe o nome do funcionário.');
       return;
@@ -99,11 +99,6 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
         const subject = encodeURIComponent(`Convite para a Equipe - Eu Gerencio (${role})`);
         const body = encodeURIComponent(text);
         window.location.href = `mailto:${cleanEmail}?subject=${subject}&body=${body}`;
-      } else if (method === 'whatsapp') {
-        const cleanPhone = phone.replace(/\D/g, '');
-        const phoneParam = cleanPhone ? `phone=55${cleanPhone}&` : '';
-        const encodedText = encodeURIComponent(text);
-        window.open(`https://api.whatsapp.com/send?${phoneParam}text=${encodedText}`, '_blank');
       } else if (method === 'copy') {
         await navigator.clipboard.writeText(text);
         setCopied(true);
@@ -282,10 +277,10 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
                     </p>
                   </div>
 
-                  {/* Telefone / WhatsApp */}
+                  {/* Telefone */}
                   <div>
                     <label className="block text-xs font-bold text-foreground mb-1.5">
-                      Telefone / WhatsApp (Opcional)
+                      Telefone (Opcional)
                     </label>
                     <input
                       type="tel"
@@ -302,15 +297,6 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
                       Escolha como enviar o convite:
                     </span>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        disabled={isSubmitting || !name.trim() || !email.trim()}
-                        onClick={() => handleRegisterAndSend('whatsapp')}
-                        className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shadow-xs"
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                        <span>Convidar no WhatsApp</span>
-                      </button>
 
                       <button
                         type="button"

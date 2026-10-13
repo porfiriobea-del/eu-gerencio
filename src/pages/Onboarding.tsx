@@ -359,7 +359,7 @@ export default function Onboarding({ user, onComplete }: { user: User, onComplet
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Celular / WhatsApp (Opcional)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Celular (Opcional)</label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <input 

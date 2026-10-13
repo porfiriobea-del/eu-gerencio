@@ -11,7 +11,6 @@ import { PocketTip } from '../components/PocketTip';
 import { PreAddProductsModal } from '../components/PreAddProductsModal';
 import { CameraCaptureModal } from '../components/CameraCaptureModal';
 import { analyzeDuplicates, normalizeProductName } from '../lib/duplicateDetector';
-import { RecognizedProduct } from '../lib/geminiProductScanner';
 import { PRELOADED_PRODUCTS } from '../lib/preloadedProducts';
 import { 
   calculateExpirationStatus, 
@@ -695,7 +694,7 @@ export default function Stock() {
           <button
             onClick={() => setIsCameraModalOpen(true)}
             className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 font-bold cursor-pointer transition-all text-sm shadow-sm"
-            title="Tirar foto do produto com a câmera do celular ou computador para ler o nome, categoria e preços automaticamente"
+            title="Tirar foto do produto com a câmera do celular ou computador para preencher apenas nome e categoria automaticamente"
           >
             <Camera className="w-4 h-4" />
             <span>📸 Cadastrar por Foto (IA)</span>
@@ -3529,9 +3528,9 @@ export default function Stock() {
             name: draft.name,
             category: draft.category,
             type: draft.type,
-            basePrice: draft.suggestedSalePrice || 0,
-            unitCost: draft.estimatedCost || 0,
-            stock: draft.stock || 10,
+            basePrice: draft.basePrice,
+            unitCost: draft.unitCost,
+            stock: draft.stock,
             unitsPerPackage: draft.unitsPerPackage || 1,
             purchaseForm: draft.purchaseForm || 'unidade',
             barcode: draft.barcode || '',

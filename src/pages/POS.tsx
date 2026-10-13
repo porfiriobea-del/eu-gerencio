@@ -998,7 +998,7 @@ export default function POS() {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-[11px] font-semibold text-foreground mb-1">
-                            Telefone / WhatsApp (Opcional)
+                            Telefone (Opcional)
                           </label>
                           <input
                             type="text"

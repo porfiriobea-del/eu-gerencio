@@ -1233,7 +1233,7 @@ function doPost(e) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Celular / WhatsApp</label>
+              <label className="block text-sm font-medium text-foreground mb-1">Celular</label>
               <input 
                 maxLength={20} 
                 value={phone} 

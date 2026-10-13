@@ -637,7 +637,7 @@ export const EmployeeSwitchModal: React.FC = () => {
             {/* Telefone (Opcional) */}
             <div>
               <label className="block text-xs font-semibold text-foreground mb-1">
-                Telefone / WhatsApp (Opcional)
+                Telefone (Opcional)
               </label>
               <input
                 type="text"

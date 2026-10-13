@@ -1,19 +1,30 @@
 import { useState, useRef, useEffect } from 'react';
 import { 
   Camera, Upload, X, Sparkles, RefreshCw, Check, CheckCircle2, 
-  AlertCircle, Plus, Minus, Tag, DollarSign, Package, Layers, 
+  AlertCircle, Plus, Minus, Tag,
   Barcode, Loader2, ArrowRight, Image as ImageIcon
 } from 'lucide-react';
 import { recognizeProductFromImage, RecognizedProduct } from '../lib/geminiProductScanner';
 import { addMultipleProducts } from '../lib/api';
 import { Product } from '../types';
 
+export interface CameraProductDraft extends RecognizedProduct {
+  type: 'comum' | 'cigarro';
+  basePrice: number | '';
+  unitCost: number | '';
+  stock: number | '';
+  unitsPerPackage: number;
+  purchaseForm: 'unidade' | 'fardo' | 'pacote';
+  barcode: string;
+  imageUrl?: string;
+}
+
 interface CameraCaptureModalProps {
   isOpen: boolean;
   onClose: () => void;
   availableCategories: string[];
   onProductSaved?: (productName: string) => void;
-  onSelectForEdit?: (draft: RecognizedProduct) => void;
+  onSelectForEdit?: (draft: CameraProductDraft) => void;
 }
 
 export function CameraCaptureModal({
@@ -23,7 +34,7 @@ export function CameraCaptureModal({
   onProductSaved,
   onSelectForEdit
 }: CameraCaptureModalProps) {
-  const [mode, setMode] = useState<'camera' | 'upload' | 'preview'>('camera');
+  const [mode, setMode] = useState<'camera' | 'preview'>('camera');
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -36,14 +47,16 @@ export function CameraCaptureModal({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const analysisIdRef = useRef(0);
+  const cameraIdRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Editable fields for confirmed product
   const [editName, setEditName] = useState('');
   const [editCategory, setEditCategory] = useState('Bebidas');
-  const [editSalePrice, setEditSalePrice] = useState<number>(0);
-  const [editCost, setEditCost] = useState<number>(0);
-  const [editStock, setEditStock] = useState<number>(10);
+  const [editSalePrice, setEditSalePrice] = useState<number | ''>('');
+  const [editCost, setEditCost] = useState<number | ''>('');
+  const [editStock, setEditStock] = useState<number | ''>('');
   const [editPurchaseForm, setEditPurchaseForm] = useState<'unidade' | 'fardo' | 'pacote'>('unidade');
   const [editUnitsPerPackage, setEditUnitsPerPackage] = useState<number>(1);
   const [editBarcode, setEditBarcode] = useState('');
@@ -51,6 +64,7 @@ export function CameraCaptureModal({
 
   // Start Camera
   const startCamera = async () => {
+    const cameraId = ++cameraIdRef.current;
     setCameraError(null);
     try {
       if (streamRef.current) {
@@ -68,25 +82,32 @@ export function CameraCaptureModal({
           }
         });
       } catch {
+        if (cameraId !== cameraIdRef.current) return;
         // Fallback to any available video stream
         stream = await navigator.mediaDevices.getUserMedia({ video: true });
       }
 
+      if (cameraId !== cameraIdRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
-        setIsCameraActive(true);
+        if (cameraId === cameraIdRef.current) setIsCameraActive(true);
       }
     } catch (err: any) {
+      if (cameraId !== cameraIdRef.current) return;
       console.warn('Camera access denied or unavailable:', err);
+      stopCamera();
       setCameraError('Câmera indisponível ou permissão negada. Você também pode escolher uma foto do seu dispositivo!');
       setIsCameraActive(false);
-      setMode('upload');
     }
   };
 
   const stopCamera = () => {
+    cameraIdRef.current++;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
@@ -100,19 +121,28 @@ export function CameraCaptureModal({
       setRecognizedProduct(null);
       setAnalysisError(null);
       setCameraError(null);
+      resetDraft();
       setMode('camera');
-      startCamera();
     } else {
       stopCamera();
     }
     return () => {
+      analysisIdRef.current++;
       stopCamera();
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (isOpen && mode === 'camera') startCamera();
+    return () => stopCamera();
+  }, [isOpen, mode]);
+
   // Capture photo from live camera
   const capturePhoto = () => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || !videoRef.current.videoWidth || !videoRef.current.videoHeight) {
+      setCameraError('Aguarde a câmera ficar pronta antes de tirar a foto.');
+      return;
+    }
     const video = videoRef.current;
     const canvas = canvasRef.current || document.createElement('canvas');
     canvas.width = video.videoWidth || 640;
@@ -133,9 +163,16 @@ export function CameraCaptureModal({
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = '';
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 15 * 1024 * 1024) {
+      setCameraError('Escolha uma imagem JPEG, PNG ou WebP de até 15 MB.');
+      return;
+    }
 
     const reader = new FileReader();
+    const analysisId = ++analysisIdRef.current;
     reader.onload = (event) => {
+      if (analysisId !== analysisIdRef.current) return;
       const dataUrl = event.target?.result as string;
       if (dataUrl) {
         stopCamera();
@@ -144,47 +181,52 @@ export function CameraCaptureModal({
         analyzeImage(dataUrl);
       }
     };
+    reader.onerror = () => {
+      if (analysisId === analysisIdRef.current) setCameraError('Não foi possível abrir a foto. Escolha outra imagem.');
+    };
     reader.readAsDataURL(file);
   };
 
-  // Run AI analysis
+  const resetDraft = () => {
+    setEditName('');
+    setEditCategory(availableCategories[0] || 'Diversos');
+    setEditSalePrice('');
+    setEditCost('');
+    setEditStock('');
+    setEditPurchaseForm('unidade');
+    setEditUnitsPerPackage(1);
+    setEditBarcode('');
+    setEditType('comum');
+    setRecognizedProduct(null);
+    setIsAnalyzing(false);
+  };
+
   const analyzeImage = async (dataUrl: string) => {
+    const analysisId = ++analysisIdRef.current;
+    resetDraft();
     setIsAnalyzing(true);
     setAnalysisError(null);
     try {
       const result = await recognizeProductFromImage(dataUrl, availableCategories);
+      if (analysisId !== analysisIdRef.current) return;
       setRecognizedProduct(result);
-      
-      // Pre-fill editable state
       setEditName(result.name);
       setEditCategory(result.category);
-      setEditSalePrice(result.suggestedSalePrice || 0);
-      setEditCost(result.estimatedCost || 0);
-      setEditStock(result.stock || 10);
-      setEditPurchaseForm(result.purchaseForm || 'unidade');
-      setEditUnitsPerPackage(result.unitsPerPackage || 1);
-      setEditBarcode(result.barcode || '');
-      setEditType(result.type || 'comum');
-    } catch (err: any) {
-      console.error('Analysis failed:', err);
-      setAnalysisError(err.message || 'Não foi possível ler o produto na imagem. Você pode preencher os dados manualmente.');
-      // Default fallback draft
-      setEditName('');
-      setEditCategory(availableCategories[0] || 'Bebidas');
-      setEditSalePrice(0);
-      setEditCost(0);
-      setEditStock(10);
+    } catch (err: unknown) {
+      if (analysisId !== analysisIdRef.current) return;
+      setAnalysisError(err instanceof Error ? err.message : 'Não foi possível ler o rótulo. Preencha manualmente.');
     } finally {
-      setIsAnalyzing(false);
+      if (analysisId === analysisIdRef.current) setIsAnalyzing(false);
     }
   };
 
   const handleRetake = () => {
+    analysisIdRef.current++;
+    resetDraft();
     setCapturedImage(null);
     setRecognizedProduct(null);
     setAnalysisError(null);
     setMode('camera');
-    startCamera();
   };
 
   const handleSaveToStock = async () => {
@@ -192,8 +234,14 @@ export function CameraCaptureModal({
       alert('Informe o nome do produto.');
       return;
     }
-    if (editSalePrice <= 0) {
+    if (!Number.isFinite(Number(editSalePrice)) || Number(editSalePrice) <= 0) {
       alert('Informe um preço de venda válido.');
+      return;
+    }
+
+    if (!Number.isFinite(Number(editCost)) || Number(editCost) < 0 ||
+        !Number.isInteger(Number(editStock)) || Number(editStock) < 0) {
+      alert('Informe um custo válido e uma quantidade inteira de estoque, ambos não negativos.');
       return;
     }
 
@@ -231,7 +279,7 @@ export function CameraCaptureModal({
       };
 
       await addMultipleProducts([productPayload]);
-      setSavedCount(prev => prev + 1);
+      setSavedCount(prev => Number(prev) + 1);
       if (onProductSaved) {
         onProductSaved(editName.trim());
       }
@@ -252,8 +300,8 @@ export function CameraCaptureModal({
         name: editName,
         category: editCategory,
         type: editType,
-        suggestedSalePrice: editSalePrice,
-        estimatedCost: editCost,
+        basePrice: editSalePrice,
+        unitCost: editCost,
         stock: editStock,
         unitsPerPackage: editUnitsPerPackage,
         purchaseForm: editPurchaseForm,
@@ -280,11 +328,11 @@ export function CameraCaptureModal({
               <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
                 Tirar Foto & Leitor Inteligente (IA)
                 <span className="text-[11px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full font-semibold">
-                  Sem Digitação
+                  Nome e Categoria
                 </span>
               </h2>
               <p className="text-xs text-muted-foreground">
-                Aponte para uma bebida, cigarro ou produto: a IA lê o nome, categoria e preços automaticamente.
+                Aponte para uma bebida, cigarro ou produto: a IA preenche apenas nome e categoria. Você informa os preços e o estoque.
               </p>
             </div>
           </div>
@@ -300,6 +348,9 @@ export function CameraCaptureModal({
         {/* Content Body */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
           
+          {cameraError && isCameraActive && (
+            <p role="alert" className="text-sm text-rose-500">{cameraError}</p>
+          )}
         {/* CAMERA / CAPTURE VIEW */}
           {mode === 'camera' && (
             <div className="space-y-4">
@@ -357,7 +408,7 @@ export function CameraCaptureModal({
                   <input
                     type="file"
                     ref={fileInputRef}
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp"
                     capture="environment"
                     onChange={handleFileUpload}
                     className="hidden"
@@ -413,7 +464,7 @@ export function CameraCaptureModal({
                         Produto Reconhecido com Sucesso!
                       </div>
                       <p className="text-xs text-muted-foreground font-medium">
-                        Confira os dados abaixo e clique em Salvar no Estoque. Você pode ajustar tudo o que desejar.
+                        Confira nome e categoria. Preencha custo, preço de venda e estoque manualmente.
                       </p>
                     </div>
                   ) : null}
@@ -433,7 +484,7 @@ export function CameraCaptureModal({
               <div className="space-y-4 bg-surface p-4 sm:p-5 rounded-2xl border border-border">
                 <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
                   <Tag className="w-4 h-4 text-primary" />
-                  Dados Identificados do Produto
+                  Dados do Produto
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -469,15 +520,9 @@ export function CameraCaptureModal({
                       }}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-primary"
                     >
-                      {availableCategories.map(cat => (
+                      {Array.from(new Set([...availableCategories, editCategory, 'Bebidas', 'Cigarros', 'Doces & Balas', 'Salgadinhos & Snacks', 'Mercearia', 'Diversos'])).map(cat => (
                         <option key={cat} value={cat}>{cat}</option>
                       ))}
-                      {!availableCategories.includes('Bebidas') && <option value="Bebidas">Bebidas</option>}
-                      {!availableCategories.includes('Cigarros') && <option value="Cigarros">Cigarros</option>}
-                      {!availableCategories.includes('Doces & Balas') && <option value="Doces & Balas">Doces & Balas</option>}
-                      {!availableCategories.includes('Salgadinhos & Snacks') && <option value="Salgadinhos & Snacks">Salgadinhos & Snacks</option>}
-                      {!availableCategories.includes('Mercearia') && <option value="Mercearia">Mercearia</option>}
-                      {!availableCategories.includes('Diversos') && <option value="Diversos">Diversos</option>}
                     </select>
                   </div>
 
@@ -507,7 +552,7 @@ export function CameraCaptureModal({
                   {/* Preço de Venda */}
                   <div>
                     <label className="block text-xs font-bold text-foreground mb-1">
-                      Preço de Venda Sugerido (R$) *
+                      Preço de Venda (R$) *
                     </label>
                     <div className="relative">
                       <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">R$</span>
@@ -515,8 +560,8 @@ export function CameraCaptureModal({
                         type="number"
                         step="0.01"
                         min="0"
-                        value={editSalePrice || ''}
-                        onChange={(e) => setEditSalePrice(parseFloat(e.target.value) || 0)}
+                        value={editSalePrice}
+                        onChange={(e) => setEditSalePrice(e.target.value === '' ? '' : Number(e.target.value))}
                         placeholder="0,00"
                         className="w-full pl-9 pr-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm font-bold text-emerald-600 dark:text-emerald-400 focus:outline-hidden focus:ring-2 focus:ring-primary"
                       />
@@ -534,8 +579,8 @@ export function CameraCaptureModal({
                         type="number"
                         step="0.01"
                         min="0"
-                        value={editCost || ''}
-                        onChange={(e) => setEditCost(parseFloat(e.target.value) || 0)}
+                        value={editCost}
+                        onChange={(e) => setEditCost(e.target.value === '' ? '' : Number(e.target.value))}
                         placeholder="0,00"
                         className="w-full pl-9 pr-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary"
                       />
@@ -550,7 +595,7 @@ export function CameraCaptureModal({
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setEditStock(prev => Math.max(0, prev - 1))}
+                        onClick={() => setEditStock(prev => Math.max(0, Number(prev) - 1))}
                         className="w-9 h-9 rounded-xl border border-border bg-muted flex items-center justify-center text-foreground hover:bg-muted/80 cursor-pointer"
                       >
                         <Minus className="w-4 h-4" />
@@ -558,13 +603,15 @@ export function CameraCaptureModal({
                       <input
                         type="number"
                         min="0"
+                        step="1"
+                        placeholder="Quantidade"
                         value={editStock}
-                        onChange={(e) => setEditStock(parseInt(e.target.value) || 0)}
+                        onChange={(e) => setEditStock(e.target.value === '' ? '' : Number(e.target.value))}
                         className="flex-1 text-center py-1.5 rounded-xl border border-border bg-background text-foreground text-sm font-bold"
                       />
                       <button
                         type="button"
-                        onClick={() => setEditStock(prev => prev + 1)}
+                        onClick={() => setEditStock(prev => Number(prev) + 1)}
                         className="w-9 h-9 rounded-xl border border-border bg-muted flex items-center justify-center text-foreground hover:bg-muted/80 cursor-pointer"
                       >
                         <Plus className="w-4 h-4" />
@@ -615,6 +662,7 @@ export function CameraCaptureModal({
                     <button
                       type="button"
                       onClick={handleOpenInFullForm}
+                      disabled={isAnalyzing || isSaving}
                       className="w-full sm:w-auto py-2.5 px-4 rounded-xl border border-border hover:bg-muted text-foreground text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       Editar Detalhado

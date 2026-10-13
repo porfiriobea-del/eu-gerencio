@@ -235,7 +235,7 @@ export interface Feedback {
   rating?: number; // 1 a 5 estrelas
   category: 'sugestao' | 'elogio' | 'dificuldade' | 'duvida' | string;
   message: string;
-  contact?: string; // Telefone ou WhatsApp para retorno
+  contact?: string; // Telefone para retorno
   storeName?: string;
   createdAt: number;
 }
