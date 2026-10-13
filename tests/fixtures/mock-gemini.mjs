@@ -6,9 +6,12 @@ globalThis.fetch = async (url, options) => {
   const prompt = body.contents[0].parts.find(part => part.text)?.text;
   for (const evidence of ['MARCA', 'RÓTULO', 'INGREDIENTES', 'EAN']) assert.ok(prompt.includes(evidence));
   const image = body.contents[0].parts.find(part => part.inlineData)?.inlineData;
+  assert.ok(!image.data.startsWith('data:'));
   assert.equal(image.mimeType, 'image/jpeg');
   assert.equal(body.generationConfig.responseMimeType, 'application/json');
   const marker = Buffer.from(image.data, 'base64').toString();
+  if (marker === 'quota') return Response.json({ error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'Simulated quota limit' } }, { status: 429 });
+  if (marker === 'denied') return Response.json({ error: { code: 403, status: 'PERMISSION_DENIED', message: 'Simulated permission failure' } }, { status: 403 });
   if (marker === 'failure') throw new Error('Simulated upstream outage');
   const text = marker === 'invalid-json' ? '{broken' : marker === 'unreadable'
     ? JSON.stringify({ name: '', category: '' })

@@ -2,7 +2,7 @@ import { isValidStockQuantity } from '../lib/productUnits';
 import { useState, useRef, useEffect } from 'react';
 import { 
   Camera, Upload, X, Sparkles, RefreshCw, Check, CheckCircle2, 
-  AlertCircle, Plus, Minus, Tag,
+  AlertCircle, Info, Plus, Minus, Tag,
   Barcode, Loader2, ArrowRight, Image as ImageIcon
 } from 'lucide-react';
 import { recognizeProductFromImage, prepareProductImage, RecognizedProduct } from '../lib/geminiProductScanner';
@@ -47,10 +47,12 @@ export function CameraCaptureModal({
   const [isSaving, setIsSaving] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
 
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const analysisIdRef = useRef(0);
+  const analysisControllerRef = useRef<AbortController | null>(null);
   const cameraIdRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -131,6 +133,7 @@ export function CameraCaptureModal({
     }
     return () => {
       analysisIdRef.current++;
+      analysisControllerRef.current?.abort();
       stopCamera();
     };
   }, [isOpen]);
@@ -168,6 +171,7 @@ export function CameraCaptureModal({
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
+    analysisControllerRef.current?.abort();
     const analysisId = ++analysisIdRef.current;
     stopCamera();
     setMode('preview');
@@ -202,12 +206,15 @@ export function CameraCaptureModal({
   };
 
   const analyzeImage = async (dataUrl: string) => {
+    analysisControllerRef.current?.abort();
+    const controller = new AbortController();
+    analysisControllerRef.current = controller;
     const analysisId = ++analysisIdRef.current;
     resetDraft();
     setIsAnalyzing(true);
     setAnalysisError(null);
     try {
-      const result = await recognizeProductFromImage(dataUrl, availableCategories);
+      const result = await recognizeProductFromImage(dataUrl, availableCategories, controller.signal);
       if (analysisId !== analysisIdRef.current) return;
       setRecognizedProduct(result);
       setEditName(result.name);
@@ -217,11 +224,24 @@ export function CameraCaptureModal({
       if (analysisId !== analysisIdRef.current) return;
       setAnalysisError(err instanceof Error ? err.message : 'Não foi possível ler o rótulo. Preencha manualmente.');
     } finally {
-      if (analysisId === analysisIdRef.current) setIsAnalyzing(false);
+      if (analysisId === analysisIdRef.current) {
+        setIsAnalyzing(false);
+        analysisControllerRef.current = null;
+      }
     }
   };
 
+  const handleContinueManually = () => {
+    analysisIdRef.current++;
+    analysisControllerRef.current?.abort();
+    analysisControllerRef.current = null;
+    setIsAnalyzing(false);
+    setAnalysisError('Preencha nome e categoria abaixo. A foto e os valores digitados serão mantidos.');
+    nameInputRef.current?.focus();
+  };
+
   const handleRetake = () => {
+    analysisControllerRef.current?.abort();
     analysisIdRef.current++;
     resetDraft();
     setCapturedImage(null);
@@ -421,7 +441,7 @@ export function CameraCaptureModal({
               <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
                 <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-bold">Dica prática:</span> Você pode tirar foto direta de garrafas, latas, maços de cigarro, embalagens de doces ou notas fiscais. O leitor lê o nome certinho e já sugere a categoria (ex: "Bebidas" ou "Cigarros").
+                  <span className="font-bold">Dica prática:</span> Você pode tirar foto direta de garrafas, latas, maços de cigarro, embalagens de doces ou notas fiscais. A IA usa os textos visíveis como pistas para identificar nome e categoria (ex: "Bebidas" ou "Cigarros").
                 </div>
               </div>
             </div>
@@ -442,7 +462,7 @@ export function CameraCaptureModal({
 
                 <div className="flex-1 min-w-0 text-center sm:text-left">
                   {isAnalyzing ? (
-                    <div className="space-y-2">
+                    <div role="status" aria-live="polite" className="space-y-2">
                       <div className="inline-flex items-center gap-2 text-primary font-bold text-sm">
                         <Loader2 className="w-4 h-4 animate-spin" />
                         Processando imagem com IA...
@@ -452,10 +472,10 @@ export function CameraCaptureModal({
                       </p>
                     </div>
                   ) : analysisError ? (
-                    <div className="space-y-1">
-                      <div className="inline-flex items-center gap-1.5 text-rose-500 font-bold text-sm">
-                        <AlertCircle className="w-4 h-4" />
-                        Atenção na leitura automática
+                    <div role="status" className="space-y-1">
+                      <div className="inline-flex items-center gap-1.5 text-primary font-bold text-sm">
+                        <Info className="w-4 h-4" />
+                        Preenchimento manual disponível
                       </div>
                       <p className="text-xs text-muted-foreground">{analysisError}</p>
                     </div>
@@ -478,6 +498,11 @@ export function CameraCaptureModal({
                     >
                       <RefreshCw className="w-3 h-3" /> Tirar outra foto
                     </button>
+                    {isAnalyzing && (
+                      <button type="button" onClick={handleContinueManually} className="text-xs font-semibold text-primary hover:underline">
+                        Continuar manualmente
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -497,6 +522,7 @@ export function CameraCaptureModal({
                     </label>
                     <input
                       type="text"
+                      ref={nameInputRef}
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
                       placeholder="Ex: Coca-Cola 2L ou Cerveja Heineken 330ml"

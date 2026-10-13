@@ -47,6 +47,12 @@ test('API validates image input, forwards Base64 and handles Gemini responses', 
   const failure = await post({ imageBase64: encode('failure') });
   assert.equal(failure.status, 502);
   assert.equal(failure.body.success, undefined);
+  const quota = await post({ imageBase64: encode('quota') });
+  assert.equal(quota.status, 429);
+  assert.equal(quota.body.code, 'QUOTA_EXCEEDED');
+  const denied = await post({ imageBase64: encode('denied') });
+  assert.equal(denied.status, 503);
+  assert.match(denied.body.error, /manualmente/);
 });
 
 test('missing Gemini key permits startup but returns an explicit service error', async t => {

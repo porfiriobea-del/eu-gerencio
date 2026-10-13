@@ -29,11 +29,11 @@ test('rejects malformed image data before making a request', async t => {
 
 test('surfaces server failures and rejects incomplete or non-JSON responses', async t => {
   t.mock.method(globalThis, 'fetch', async () => Response.json({ error: 'IA indisponível' }, { status: 503 }));
-  await assert.rejects(recognizeProductFromImage(image), /IA indisponível/);
+  await assert.rejects(recognizeProductFromImage(image), /manualmente/);
   globalThis.fetch = async () => Response.json({ success: true, product: { name: '', category: 'Bebidas' } });
   await assert.rejects(recognizeProductFromImage(image), /dados incompletos/);
   globalThis.fetch = async () => new Response('<html>proxy error</html>', { status: 502 });
-  await assert.rejects(recognizeProductFromImage(image), /status 502/);
+  await assert.rejects(recognizeProductFromImage(image), /manualmente/);
 });
 
 
@@ -42,4 +42,26 @@ test('network errors and static deployment HTML produce friendly errors', async 
   await assert.rejects(recognizeProductFromImage(image), /Verifique sua conexão/);
   globalThis.fetch = async () => new Response('<html>SPA</html>', { status: 200 });
   await assert.rejects(recognizeProductFromImage(image), /serviço.*não está disponível/);
+});
+
+
+test('quota and HTML platform 500 failures offer manual entry without technical status text', async t => {
+  t.mock.method(globalThis, 'fetch', async () => new Response('<html>FUNCTION_INVOCATION_FAILED</html>', { status: 500 }));
+  await assert.rejects(recognizeProductFromImage(image), error => {
+    assert.match(error.message, /manualmente/);
+    assert.ok(!error.message.includes('500'));
+    return true;
+  });
+  globalThis.fetch = async () => Response.json({ error: 'Quota limit' }, { status: 429 });
+  await assert.rejects(recognizeProductFromImage(image), /limite.*manualmente/);
+});
+
+test('manual continuation can abort a pending analysis', async t => {
+  t.mock.method(globalThis, 'fetch', async (_url, options) => new Promise((_resolve, reject) => {
+    options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+  }));
+  const controller = new AbortController();
+  const pending = recognizeProductFromImage(image, [], controller.signal);
+  controller.abort();
+  await assert.rejects(pending, /interrompida.*manualmente/);
 });
