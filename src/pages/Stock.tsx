@@ -168,31 +168,55 @@ export default function Stock() {
     setShowNewCategoryInput(false);
   };
 
+  const normalizeCategory = (category: string) => category
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+
+  const isBeverageCategory = (category: string) =>
+    /\b(bebidas?|refrigerantes?|cervejas?|sucos?|aguas?|energeticos?|destilados?)\b/.test(normalizeCategory(category));
+
   const handleCategoryChange = (cat: string) => {
-    if (cat === 'Cigarros' || cat.toLowerCase().includes('cigarro')) {
-      const baseUnit = formData.basePrice > 0 ? formData.basePrice : 0.75;
-      setFormData((prev: any) => ({
+    setFormData((prev: any) => {
+      const isCigarette = /\bcigarros?\b/.test(normalizeCategory(cat));
+      const wasCigarette = prev.type === 'cigarro';
+      const sameBeverageGroup = isBeverageCategory(prev.category);
+
+      if (isCigarette) {
+        const baseUnit = Number(prev.basePrice) > 0 ? Number(prev.basePrice) : 0.75;
+        return {
+          ...prev,
+          category: cat,
+          type: 'cigarro',
+          purchaseForm: 'pacote',
+          unitsPerPackage: 200, // 10 carteiras de 20 cigarros.
+          unitCost: Number(prev.unitCost) > 0 ? prev.unitCost : 0.45,
+          basePrice: baseUnit,
+          priceUnit: baseUnit,
+          pricePack: wasCigarette && prev.pricePack ? prev.pricePack : Number((baseUnit * 200).toFixed(2)),
+          priceCart: wasCigarette && prev.priceCart ? prev.priceCart : Number((baseUnit * 20).toFixed(2)),
+          priceHalfCart: wasCigarette && prev.priceHalfCart ? prev.priceHalfCart : Number((baseUnit * 10).toFixed(2)),
+          pricePackage: undefined,
+          purchaseTotalCost: wasCigarette ? prev.purchaseTotalCost : '',
+          safetyStock: Number(prev.safetyStock) > 10 ? prev.safetyStock : 40,
+          maxStock: Number(prev.maxStock) > 50 ? prev.maxStock : 400
+        };
+      }
+
+      const isBeverage = isBeverageCategory(cat);
+      const keepPackage = isBeverage && sameBeverageGroup && !wasCigarette;
+      return {
         ...prev,
         category: cat,
-        type: 'cigarro',
-        purchaseForm: 'pacote', // Fornecedor vende no pacote/maço
-        unitsPerPackage: 200, // 200 cigarros avulsos (10 carteiras x 20 cigarros)
-        unitCost: prev.unitCost > 0 ? prev.unitCost : 0.45,
-        basePrice: baseUnit,
-        priceUnit: baseUnit,
-        pricePack: prev.pricePack || Number((baseUnit * 200).toFixed(2)),
-        priceCart: prev.priceCart || Number((baseUnit * 20).toFixed(2)),
-        priceHalfCart: prev.priceHalfCart || Number((baseUnit * 10).toFixed(2)),
-        safetyStock: prev.safetyStock && prev.safetyStock > 10 ? prev.safetyStock : 40,
-        maxStock: prev.maxStock && prev.maxStock > 50 ? prev.maxStock : 400
-      }));
-    } else {
-      setFormData((prev: any) => ({
-        ...prev,
-        category: cat,
-        type: prev.type === 'cigarro' && cat !== 'Cigarros' ? 'comum' : prev.type
-      }));
-    }
+        type: 'comum',
+        purchaseForm: isBeverage ? 'fardo' : 'unidade',
+        unitsPerPackage: isBeverage ? (keepPackage && Number(prev.unitsPerPackage) > 1 ? Number(prev.unitsPerPackage) : 12) : 1,
+        pricePackage: keepPackage ? prev.pricePackage : undefined,
+        purchaseTotalCost: keepPackage ? prev.purchaseTotalCost : '',
+        priceUnit: undefined,
+        pricePack: undefined,
+        priceCart: undefined,
+        priceHalfCart: undefined
+      };
+    });
   };
 
   const openModal = (product?: Product) => {
@@ -2081,7 +2105,7 @@ export default function Stock() {
                             purchaseForm: newForm,
                             unitsPerPackage: defaultUnits,
                             unitCost: newUnitCost,
-                            pricePackage: newForm !== 'unidade' && prev.basePrice ? Number(((Number(prev.basePrice) || 0) * defaultUnits).toFixed(2)) : prev.pricePackage
+                            pricePackage: newForm !== 'unidade' && prev.basePrice ? (prev.pricePackage ?? Number(((Number(prev.basePrice) || 0) * defaultUnits).toFixed(2))) : prev.pricePackage
                           }));
                         }} 
                         className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground font-semibold text-sm cursor-pointer"
@@ -2127,6 +2151,33 @@ export default function Stock() {
                       </span>
                     </div>
                   </div>
+
+                  {isBeverageCategory(formData.category) && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="text-muted-foreground">Bebidas: escolha o tamanho do fardo.</span>
+                      {[6, 12].map(units => (
+                        <button
+                          key={units}
+                          type="button"
+                          aria-pressed={Number(formData.unitsPerPackage) === units}
+                          className="rounded-lg border border-border px-3 py-1.5 font-semibold hover:bg-muted"
+                          onClick={() => setFormData((prev: any) => ({
+                            ...prev,
+                            purchaseForm: 'fardo',
+                            unitsPerPackage: units,
+                            unitCost: Number(prev.purchaseTotalCost) > 0
+                              ? Number((Number(prev.purchaseTotalCost) / units).toFixed(2))
+                              : prev.unitCost
+                          }))}
+                        >
+                          {units} unidades
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {formData.type === 'cigarro' && (
+                    <p className="text-xs text-muted-foreground">Pacote com 200 cigarros: 10 carteiras de 20 unidades.</p>
+                  )}
 
                   {/* Campos de Valor de Compra e Custo por Unidade Automático + Editável */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
@@ -2388,7 +2439,7 @@ export default function Stock() {
                             type="number" 
                             step="0.01" 
                             min={0}
-                            value={formData.pricePackage !== undefined ? formData.pricePackage : Number(((Number(formData.basePrice) || 0) * Number(formData.unitsPerPackage)).toFixed(2))} 
+                            value={formData.pricePackage ?? ''}
                             onChange={e => setFormData({...formData, pricePackage: e.target.value})} 
                             className="w-full border border-border pl-8 pr-3 py-2 rounded-lg bg-surface text-foreground font-bold text-base" 
                           />
