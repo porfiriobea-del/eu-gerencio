@@ -148,7 +148,7 @@ export const saveStoreProfile = async (profile: {storeName: string, cnpj: string
   try {
     const initial: Settings = {
       ...profile,
-      theme: 'blue',
+      theme: 'standard',
       darkMode: false,
       defaultMargin: 30,
       dailyGoal: 500,
@@ -180,7 +180,7 @@ export const updateSettings = async (data: Partial<Settings>) => {
         cnpj: cleanData.cnpj || '',
         phone: cleanData.phone || '',
         email: cleanData.email || auth.currentUser?.email || '',
-        theme: cleanData.theme || 'classic-blue',
+        theme: cleanData.theme || 'standard',
         darkMode: cleanData.darkMode ?? false,
         defaultMargin: typeof cleanData.defaultMargin === 'number' ? cleanData.defaultMargin : 30,
         dailyGoal: typeof cleanData.dailyGoal === 'number' ? cleanData.dailyGoal : 500,

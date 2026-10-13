@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --color-primary: var(--color-primary);
@@ -26,46 +27,47 @@
 @layer base {
   :root {
     /* Main Brand Token */
-    --color-primary: #2563EB;
+    --color-primary: #374151;
     --color-primary-foreground: #FFFFFF;
 
     /* Palette Requested Tokens */
     --color-palette-1: #F8FAFC;
     --color-palette-2: #FFFFFF;
-    --color-palette-3: #DBEAFE;
-    --color-palette-4: #2563EB;
-    --color-palette-5: #0F172A;
+    --color-palette-3: #E4E4E7;
+    --color-palette-4: #374151;
+    --color-palette-5: #18181B;
 
     /* Layout & Neutrals */
     --color-background: #F8FAFC;
     --color-surface: #FFFFFF;
     --color-card: #FFFFFF;
-    --color-foreground: #0F172A;
+    --color-foreground: #18181B;
     --color-muted: #F1F5F9;
     --color-muted-foreground: #475569;
-    --color-border: #DBEAFE;
+    --color-border: #E4E4E7;
 
     /* Typography */
     --font-heading: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     --font-body: 'Inter', system-ui, -apple-system, sans-serif;
   }
 
-  /* Dark mode overrides */
+  /* Neutral dark foundation; selected themes only change accent colors. */
   .dark {
-    --color-primary: #3B82F6;
-    --color-primary-foreground: #FFFFFF;
-    --color-background: #090D16;
-    --color-surface: #0F172A;
-    --color-card: #0F172A;
-    --color-foreground: #F8FAFC;
-    --color-muted: #1E293B;
-    --color-muted-foreground: #94A3B8;
-    --color-border: #1E3A8A;
-    --color-palette-1: #0F172A;
-    --color-palette-2: #090D16;
-    --color-palette-3: #1D4ED8;
-    --color-palette-4: #3B82F6;
-    --color-palette-5: #DBEAFE;
+    color-scheme: dark;
+    --color-primary: #E5E5E5;
+    --color-primary-foreground: #121212;
+    --color-background: #121212;
+    --color-surface: #1E1E1E;
+    --color-card: #1E1E1E;
+    --color-foreground: #FAFAFA;
+    --color-muted: #262626;
+    --color-muted-foreground: #BDBDBD;
+    --color-border: #404040;
+    --color-palette-1: #202020;
+    --color-palette-2: #121212;
+    --color-palette-3: #333333;
+    --color-palette-4: #E5E5E5;
+    --color-palette-5: #FAFAFA;
   }
 
   /* Font Accessibility - Grandes */
@@ -164,4 +166,22 @@
 
 .font-sans {
   font-family: var(--font-body);
+}
+
+
+/* Theme shape preferences apply across the interface. */
+html[data-theme="fun"] :is(button, input, select, textarea, .rounded-xl) {
+  border-radius: 1.25rem;
+}
+html[data-theme="fun"] :is(.rounded-2xl, .rounded-3xl) {
+  border-radius: 2rem;
+}
+html[data-theme="professional"] :is(.rounded-xl, .rounded-2xl, .rounded-3xl) {
+  border-radius: 0.75rem;
+}
+
+/* Existing primary buttons also follow the selected readable foreground token. */
+.bg-primary.text-white,
+.bg-primary .text-white {
+  color: var(--color-primary-foreground);
 }

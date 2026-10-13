@@ -175,7 +175,7 @@ export default function Tutorial() {
                 <h3>Ajustes & Taxas da Maquininha</h3>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Configure as taxas de cartão de crédito e débito, altere o tema visual (Visme) e exporte planilhas completas com vendas diárias.
+                Configure as taxas de cartão de crédito e débito, altere o tema visual e exporte planilhas completas com vendas diárias.
               </p>
             </div>
           </div>

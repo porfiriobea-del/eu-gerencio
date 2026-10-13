@@ -32,7 +32,7 @@ export default function SettingsView() {
   const { employees, currentEmployee, openSwitchModal } = useEmployee();
   const [isVocabularyExpanded, setIsVocabularyExpanded] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [theme, setTheme] = useState('blue');
+  const [theme, setTheme] = useState('standard');
   const [defaultMargin, setDefaultMargin] = useState(30);
   const [dailyGoal, setDailyGoal] = useState(500);
 
@@ -179,7 +179,7 @@ function doPost(e) {
     const unsubSet = subscribeSettings(s => {
       if(s) {
         setSettings(s);
-        const resolvedTheme = s.theme || 'blue';
+        const resolvedTheme = s.theme || 'standard';
         setTheme(resolvedTheme);
         setThemePreset(normalizeThemePreset(resolvedTheme));
         if (s.darkMode !== undefined) {
@@ -769,7 +769,7 @@ function doPost(e) {
             {/* Badges de resumo rápido */}
             <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
               <span className="px-2.5 py-1 bg-muted rounded-lg font-medium border border-border/60 text-foreground text-xs">
-                {THEME_STYLES.find(t => t.id === themePreset)?.name || 'Esmeralda Pro'}
+                {THEME_STYLES.find(t => t.id === themePreset)?.name || 'Padrão / Comum'}
               </span>
               <span className="px-2.5 py-1 bg-muted rounded-lg font-medium border border-border/60 text-foreground text-xs">
                 {darkMode ? '🌙 Escuro' : '☀️ Claro'}
@@ -958,7 +958,7 @@ function doPost(e) {
             )}
           </div>
 
-          {/* 2. Temas & Estilos Profissionais (Menu Suspenso - Referência Visme) */}
+          {/* 2. Temas de Interface e Modo Escuro */}
           <div className="pt-2 border-t border-border">
             <ThemeSelectorDropdown 
               onSaveTheme={(themeId) => {
@@ -2116,7 +2116,7 @@ function doPost(e) {
       </div>
 
       {/* Integração com Google Sheets via Webhook (Google Apps Script) */}
-      <div className="bg-white dark:bg-[#12131c] p-6 rounded-2xl shadow-sm border border-emerald-100 dark:border-emerald-900/40">
+      <div className="bg-white dark:bg-[#1e1e1e] p-6 rounded-2xl shadow-sm border border-emerald-100 dark:border-emerald-900/40">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-border">
           <div>
             <div className="flex items-center gap-2.5 text-foreground font-bold text-lg mb-1">

@@ -2,114 +2,11 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 export type Language = 'pt' | 'en' | 'es';
 export type FontSize = 'normal' | 'large' | 'xlarge';
-export type ThemePreset = 
-  | 'emerald' 
-  | 'modern-dark' 
-  | 'classic-blue' 
-  | 'warm-amber' 
-  | 'deep-ocean' 
-  | 'royal-wine' 
-  | 'earth-forest' 
-  | 'slate-titanium';
 export type LanguageMode = 'technical' | 'neutral' | 'basic';
-
-export interface ThemeStyle {
-  id: ThemePreset;
-  name: string;
-  category: 'Moderno' | 'Elegante' | 'Corporativo' | 'Contraste' | 'Natureza' | 'Equilíbrio';
-  vismeConcept: string; // Conceito baseado no guia de esquemas de cores Visme
-  primary: string;
-  palette: [string, string, string, string, string];
-  description: string;
-}
-
-export const THEME_STYLES: ThemeStyle[] = [
-  {
-    id: 'classic-blue',
-    name: 'Azul Corporativo Pro',
-    category: 'Corporativo',
-    vismeConcept: 'Monocromático de Alto Contraste & Confiança',
-    primary: '#2563EB',
-    palette: ['#F8FAFC', '#FFFFFF', '#DBEAFE', '#2563EB', '#0F172A'],
-    description: 'Paleta solicitada com Azul Principal #2563EB, fundo #F8FAFC, cartões #FFFFFF, realce #DBEAFE e texto #0F172A.',
-  },
-  {
-    id: 'emerald',
-    name: 'Esmeralda Orgânico',
-    category: 'Natureza',
-    vismeConcept: 'Harmonia Análoga & Orgânica',
-    primary: '#059669',
-    palette: ['#F0FDF4', '#FFFFFF', '#BBF7D0', '#059669', '#064E3B'],
-    description: 'Verde esmeralda com menta suave. Transmite equilíbrio, frescor, tranquilidade e estabilidade operacional.',
-  },
-  {
-    id: 'warm-amber',
-    name: 'Âmbar & Terracota',
-    category: 'Elegante',
-    vismeConcept: 'Tons Terrosos Acolhedores',
-    primary: '#D97706',
-    palette: ['#FFFBEB', '#FFFFFF', '#FDE68A', '#D97706', '#78350F'],
-    description: 'Amarelo dourado e âmbar aconchegante. Estimula o apetite e a proximidade humana em empórios e comércios de bairro.',
-  },
-  {
-    id: 'modern-dark',
-    name: 'Midnight Luxury',
-    category: 'Contraste',
-    vismeConcept: 'Contraste Neomórfico Noturno',
-    primary: '#10B981',
-    palette: ['#064E3B', '#0F172A', '#10B981', '#34D399', '#ECFDF5'],
-    description: 'Fundo escuro profundo com acentos de verde esmeralda luminoso. Foco máximo e descanso visual para pouca luz.',
-  },
-  {
-    id: 'deep-ocean',
-    name: 'Oceano Pacífico',
-    category: 'Moderno',
-    vismeConcept: 'Esquema Análogo Frio & Dinâmico',
-    primary: '#0284C7',
-    palette: ['#F0F9FF', '#FFFFFF', '#BAE6FD', '#0284C7', '#0C4A6E'],
-    description: 'Azul cerúleo e ciano límpido. Proporciona sensação de clareza mental, fluidez e organização diária.',
-  },
-  {
-    id: 'royal-wine',
-    name: 'Bordô & Púrpura Imperial',
-    category: 'Elegante',
-    vismeConcept: 'Esquema Complementar Dividido Sofisticado',
-    primary: '#9333EA',
-    palette: ['#FAF5FF', '#FFFFFF', '#E9D5FF', '#9333EA', '#581C87'],
-    description: 'Vinho nobre e violeta refinado. Transmite exclusividade, qualidade premium e identidade marcante.',
-  },
-  {
-    id: 'earth-forest',
-    name: 'Floresta & Cedro',
-    category: 'Equilíbrio',
-    vismeConcept: 'Paleta Triádica Equilibrada (Regra 60-30-10)',
-    primary: '#15803D',
-    palette: ['#F7FEE7', '#FFFFFF', '#BBF7D0', '#15803D', '#365314'],
-    description: 'Verde oliva e toques terrosos. Esquema orgânico relaxante ideal para hortifrútis, floriculturas e feiras.',
-  },
-  {
-    id: 'slate-titanium',
-    name: 'Titânio & Grafite Neutro',
-    category: 'Corporativo',
-    vismeConcept: 'Monocromático Minimalista de Alta Precisão',
-    primary: '#475569',
-    palette: ['#F8FAFC', '#FFFFFF', '#CBD5E1', '#475569', '#0F172A'],
-    description: 'Grafite fosco e ardósia neutra. Neutralidade total para manter o foco 100% nos números, preços e estoque.',
-  },
-];
-
-export const normalizeThemePreset = (val?: string): ThemePreset => {
-  if (!val) return 'classic-blue';
-  if (val === 'blue' || val === 'classic-blue') return 'classic-blue';
-  if (val === 'green' || val === 'emerald') return 'emerald';
-  if (val === 'orange' || val === 'warm-amber') return 'warm-amber';
-  if (val === 'modern-dark' || val === 'dark') return 'modern-dark';
-  if (val === 'deep-ocean' || val === 'ocean') return 'deep-ocean';
-  if (val === 'royal-wine' || val === 'wine' || val === 'purple') return 'royal-wine';
-  if (val === 'earth-forest' || val === 'forest') return 'earth-forest';
-  if (val === 'slate-titanium' || val === 'slate') return 'slate-titanium';
-  return 'classic-blue';
-};
+export { THEME_STYLES, normalizeThemePreset } from './interfaceThemes';
+export type { ThemePreset, ThemeStyle } from './interfaceThemes';
+import { normalizeThemePreset, getThemeTokens } from './interfaceThemes';
+import type { ThemePreset } from './interfaceThemes';
 
 // ---------------------------------------------------------------------------
 // LANGUAGE MODES (SISTEMA PERSONALIZADO DE LINGUAGEM)
@@ -575,7 +472,7 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
   });
 
   const [themePreset, setThemePresetState] = useState<ThemePreset>(() => {
-    return (localStorage.getItem('app_theme_preset') as ThemePreset) || 'classic-blue';
+    return normalizeThemePreset(localStorage.getItem('app_theme_preset'));
   });
 
   const [darkMode, setDarkModeState] = useState<boolean>(() => {
@@ -615,27 +512,11 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
 
   // Apply Theme CSS variables
   useEffect(() => {
-    const selected = THEME_STYLES.find(t => t.id === themePreset) || THEME_STYLES[0];
     const root = document.documentElement;
-    root.style.setProperty('--color-primary', selected.primary);
-    root.style.setProperty('--color-palette-1', selected.palette[0]);
-    root.style.setProperty('--color-palette-2', selected.palette[1]);
-    root.style.setProperty('--color-palette-3', selected.palette[2]);
-    root.style.setProperty('--color-palette-4', selected.palette[3]);
-    root.style.setProperty('--color-palette-5', selected.palette[4]);
-
-    if (!darkMode) {
-      root.style.setProperty('--color-background', selected.palette[0]);
-      root.style.setProperty('--color-surface', selected.palette[1]);
-      root.style.setProperty('--color-card', selected.palette[1]);
-      root.style.setProperty('--color-border', selected.palette[2]);
-      root.style.setProperty('--color-foreground', selected.palette[4]);
-    } else {
-      root.style.setProperty('--color-background', '#090D16');
-      root.style.setProperty('--color-surface', '#0F172A');
-      root.style.setProperty('--color-card', '#0F172A');
-      root.style.setProperty('--color-border', '#1E3A8A');
-      root.style.setProperty('--color-foreground', '#F8FAFC');
+    root.dataset.theme = themePreset;
+    root.style.colorScheme = darkMode ? 'dark' : 'light';
+    for (const [property, value] of Object.entries(getThemeTokens(themePreset, darkMode))) {
+      root.style.setProperty(property, value);
     }
   }, [themePreset, darkMode]);
 
