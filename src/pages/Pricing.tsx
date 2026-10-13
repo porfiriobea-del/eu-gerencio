@@ -1,14 +1,16 @@
+import { ProductPricingCard } from '../components/ProductPricingCard';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { subscribeProducts, updateProduct, getMonthlyFinancials } from '../lib/api';
 import { Product, MonthlyFinancials } from '../types';
-import { TrendingUp, DollarSign, Wallet, Percent, ArrowUpRight, RefreshCw, ShoppingCart, Calendar, CheckCircle, Info, Tag, PieChart, ShoppingBag, ChevronDown, ChevronUp, Sparkles, LayoutGrid, List } from 'lucide-react';
+import { DollarSign, RefreshCw, ShoppingCart, Info, Tag, PieChart, ShoppingBag, ChevronDown, Sparkles } from 'lucide-react';
 import { usePreferences } from '../lib/preferencesContext';
 
 export default function Pricing() {
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
   const [products, setProducts] = useState<Product[]>([]);
+  const [savingPriceIds, setSavingPriceIds] = useState<Set<string>>(new Set());
   const [financials, setFinancials] = useState<MonthlyFinancials | null>(null);
   const [loadingFinancials, setLoadingFinancials] = useState(true);
   const [selectedMonthOffset, setSelectedMonthOffset] = useState<number>(0); // 0 = atual, -1 = anterior
@@ -33,12 +35,20 @@ export default function Pricing() {
     };
   }, [selectedMonthOffset]);
 
-  const handleUpdatePrice = async (id: string, newPrice: number) => {
+  const handleUpdatePrice = async (id: string, field: 'basePrice' | 'pricePack' | 'priceCart' | 'priceHalfCart' | 'priceUnit', newPrice: number) => {
+    if (savingPriceIds.has(id)) return;
+    setSavingPriceIds(previous => new Set(previous).add(id));
     try {
-      await updateProduct(id, { basePrice: newPrice });
+      await updateProduct(id, { [field]: newPrice });
       showToast('✓ Preço atualizado com sucesso!');
     } catch (error) {
       showActionError(error, 'Não foi possível confirmar a alteração do preço. Confira antes de repetir.');
+    } finally {
+      setSavingPriceIds(previous => {
+        const next = new Set(previous);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -351,141 +361,19 @@ export default function Pricing() {
   </div>
 </div>
 
-      {/* Tabela de Precificação Inteligente dos Produtos */}
-      <div className="bg-surface rounded-2xl shadow-sm border border-border overflow-hidden">
-        <div className="p-4 border-b border-border flex items-center justify-between flex-wrap gap-2">
+      <section aria-label="Precificação por produto">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="text-lg font-bold text-foreground">
-              {languageMode === 'basic' 
-                ? `Definir Preço de Venda do ${entityName()}` 
-                : `Precificação por ${entityName()} & ${v('pricing.margin', 'Margem')}`}
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              {languageMode === 'basic'
-                ? 'Ajuste o valor que você cobra dos clientes com apenas 1 clique para garantir que sobre lucro!'
-                : 'Ajuste preços com 1 clique para manter margens saudáveis de 20%, 30% ou 40%.'}
-            </p>
+            <h2 className="text-lg font-bold text-foreground">Precificação por {entityName()} & Margem</h2>
+            <p className="text-xs text-muted-foreground">Margem sobre o preço de venda: (preço − custo) ÷ preço. Clique numa sugestão para aplicar.</p>
           </div>
-          <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-muted text-muted-foreground">
-            {products.length} {entityName(true).toLowerCase()} cadastrados
-          </span>
+          <span className="rounded-lg bg-muted px-2.5 py-1 text-xs text-muted-foreground">{products.length} {entityName(true).toLowerCase()} cadastrados</span>
         </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="bg-muted/70 border-b border-border">
-                <th className="p-3.5 font-semibold text-muted-foreground">{entityName()} / Categoria</th>
-                <th className="p-3.5 font-semibold text-muted-foreground">{v('pricing.cost', 'Custo Unitário')}</th>
-                <th className="p-3.5 font-semibold text-muted-foreground">{v('pricing.selling', 'Preço Base (Unid.)')}</th>
-                <th className="p-3.5 font-semibold text-muted-foreground">{languageMode === 'basic' ? 'Jeitos de Vender' : 'Formatos de Venda'}</th>
-                <th className="p-3.5 font-semibold text-muted-foreground">{v('pricing.margin', 'Margem Atual')}</th>
-                <th className="p-3.5 font-semibold text-muted-foreground text-center">{languageMode === 'basic' ? 'Preço Sugerido (1 Clique)' : `Ajuste Rápido de ${v('pricing.margin', 'Margem')}`}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60">
-              {products.map(p => {
-                const uCost = p.unitCost || 0;
-                const bPrice = p.basePrice || 0;
-                const currentMargin = uCost > 0 ? ((bPrice - uCost) / uCost) * 100 : 0;
-                
-                const p20 = uCost * 1.20;
-                const p30 = uCost * 1.30;
-                const p40 = uCost * 1.40;
-
-                return (
-                  <tr key={p.id} className="hover:bg-muted/40 transition-colors">
-                    <td className="p-3.5">
-                      <div className="font-semibold text-foreground">{p.name}</div>
-                      <div className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                        <span>{p.category}</span>
-                        {p.hasPromoSuggestion && p.promoPrice && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500 text-white">
-                            🏷️ Promoção
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="p-3.5 text-foreground font-medium">R$ {uCost.toFixed(2)}</td>
-                    <td className="p-3.5 font-bold text-foreground">
-                      <div>R$ {bPrice.toFixed(2)}</div>
-                      {p.hasPromoSuggestion && p.promoPrice && (
-                        <div className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">
-                          Promo: R$ {p.promoPrice.toFixed(2)}
-                        </div>
-                      )}
-                    </td>
-                    <td className="p-3.5 text-xs">
-                      {p.type === 'cigarro' ? (
-                        <div className="space-y-0.5">
-                          <div className="text-foreground"><span className="text-muted-foreground">📦 Maço (200 un.):</span> <span className="font-bold text-primary">R$ {(p.pricePack || (bPrice * 200)).toFixed(2)}</span></div>
-                          <div className="text-foreground"><span className="text-muted-foreground">🏷️ Cart. (20 un.):</span> <span className="font-bold text-primary">R$ {(p.priceCart || (bPrice * 20)).toFixed(2)}</span></div>
-                          <div className="text-foreground"><span className="text-muted-foreground">✂️ Meia (10 un.):</span> <span className="font-bold text-primary">R$ {(p.priceHalfCart || (bPrice * 10)).toFixed(2)}</span></div>
-                          <div className="text-foreground"><span className="text-muted-foreground">🚬 Unid.:</span> <span className="font-bold text-primary">R$ {(p.priceUnit || bPrice).toFixed(2)}</span></div>
-                        </div>
-                      ) : p.unitsPerPackage > 1 ? (
-                        <div className="space-y-0.5">
-                          <div className="text-foreground">
-                            <span className="text-muted-foreground">📦 {p.purchaseForm === 'fardo' ? 'Fardo' : 'Pacote'} ({p.unitsPerPackage} un.):</span>{' '}
-                            <span className="font-bold text-primary">R$ {(p.pricePackage || (bPrice * p.unitsPerPackage)).toFixed(2)}</span>
-                          </div>
-                          <div className="text-foreground">
-                            <span className="text-muted-foreground">🔹 Unid. Avulsa:</span>{' '}
-                            <span className="font-bold text-foreground">R$ {bPrice.toFixed(2)}</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground font-medium">Unidade padrão (R$ {bPrice.toFixed(2)})</span>
-                      )}
-                    </td>
-                    <td className="p-3.5">
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                        currentMargin < 20 
-                          ? 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400' 
-                          : 'bg-palette-1 text-primary'
-                      }`}>
-                        {currentMargin.toFixed(1)}%
-                      </span>
-                    </td>
-                    <td className="p-3.5">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button 
-                          onClick={() => handleUpdatePrice(p.id!, p20)} 
-                          className="px-2.5 py-1 text-xs font-semibold border border-border rounded-lg hover:bg-muted text-foreground transition-colors cursor-pointer"
-                          title="Definir 20% de margem de lucro"
-                        >
-                          20% (R$ {p20.toFixed(2)})
-                        </button>
-                        <button 
-                          onClick={() => handleUpdatePrice(p.id!, p30)} 
-                          className="px-2.5 py-1 text-xs font-bold border border-primary/30 bg-palette-1 text-primary rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
-                          title="Definir 30% de margem de lucro"
-                        >
-                          30% (R$ {p30.toFixed(2)})
-                        </button>
-                        <button 
-                          onClick={() => handleUpdatePrice(p.id!, p40)} 
-                          className="px-2.5 py-1 text-xs font-semibold border border-border rounded-lg hover:bg-muted text-foreground transition-colors cursor-pointer"
-                          title="Definir 40% de margem de lucro"
-                        >
-                          40% (R$ {p40.toFixed(2)})
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {products.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                    Nenhum produto cadastrado para precificar.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        {products.map(product => (
+          <ProductPricingCard key={product.id} product={product} isSaving={savingPriceIds.has(product.id!)} onUpdatePrice={handleUpdatePrice} />
+        ))}
+        {products.length === 0 && <p className="rounded-2xl border border-border p-8 text-center text-muted-foreground">Nenhum produto cadastrado para precificar.</p>}
+      </section>
     </div>
   );
 }
