@@ -293,9 +293,9 @@ export function CameraCaptureModal({
         basePrice: basePrice,
         barcode: editBarcode.trim() || undefined,
         imageUrl: capturedImage || undefined,
-        pricePack: isCigarro ? Number((basePrice * 200).toFixed(2)) : undefined,
-        priceCart: isCigarro ? Number((basePrice * 20).toFixed(2)) : undefined,
-        priceHalfCart: isCigarro ? Number((basePrice * 10).toFixed(2)) : undefined,
+        pricePack: isCigarro ? 0 : undefined,
+        priceCart: isCigarro ? 0 : undefined,
+        priceHalfCart: isCigarro ? 0 : undefined,
         priceUnit: isCigarro ? basePrice : undefined,
         pricePackage: !isCigarro && unitsPerPkg > 1 ? Number((basePrice * unitsPerPkg * 0.95).toFixed(2)) : undefined
       };
@@ -580,7 +580,7 @@ export function CameraCaptureModal({
                   {/* Preço de Venda */}
                   <div>
                     <label className="block text-xs font-bold text-foreground mb-1">
-                      Preço de Venda (R$) *
+                      Preço de Venda {editCategory.toLowerCase().includes('cigar') ? 'do Avulso' : ''} (R$) *
                     </label>
                     <div className="relative">
                       <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">R$</span>

@@ -1,4 +1,4 @@
-import { getPackageUnits, CIGARETTE_UNITS, isValidStockQuantity } from '../lib/productUnits';
+import { getPackageUnits, getCigaretteFormats, CIGARETTE_UNITS, isValidStockQuantity } from '../lib/productUnits';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteField } from 'firebase/firestore';
@@ -130,6 +130,7 @@ export default function Stock() {
       const { name, category } = await recognizeProductFromImage(imageBase64, categories);
       if (requestId !== labelRequestRef.current) return;
       setFormData((prev: any) => ({ ...prev, name, category }));
+      handleCategoryChange(category);
     } catch (error) {
       if (requestId !== labelRequestRef.current) return;
       setLabelReadError(error instanceof Error ? error.message : 'Não foi possível ler o rótulo.');
@@ -165,7 +166,6 @@ export default function Stock() {
       const sameBeverageGroup = isBeverageCategory(prev.category);
 
       if (isCigarette) {
-        const baseUnit = Number(prev.basePrice) > 0 ? Number(prev.basePrice) : 0.75;
         return {
           ...prev,
           category: cat,
@@ -173,12 +173,12 @@ export default function Stock() {
           purchaseForm: 'pacote',
           unitsPerPackage: CIGARETTE_UNITS.pack,
           stockUnit: 'carteira', // 1 maço = 10 carteiras; 1 carteira = 20 avulsos.
-          unitCost: Number(prev.unitCost) > 0 ? prev.unitCost : 9,
-          basePrice: baseUnit,
-          priceUnit: baseUnit,
-          pricePack: wasCigarette && prev.pricePack ? prev.pricePack : Number((baseUnit * 200).toFixed(2)),
-          priceCart: wasCigarette && prev.priceCart ? prev.priceCart : Number((baseUnit * 20).toFixed(2)),
-          priceHalfCart: wasCigarette && prev.priceHalfCart ? prev.priceHalfCart : Number((baseUnit * 10).toFixed(2)),
+          unitCost: prev.unitCost,
+          basePrice: wasCigarette ? Number(prev.priceUnit) || 0 : 0,
+          priceUnit: wasCigarette ? prev.priceUnit ?? '' : '',
+          pricePack: wasCigarette ? prev.pricePack ?? '' : '',
+          priceCart: wasCigarette ? prev.priceCart ?? '' : '',
+          priceHalfCart: wasCigarette ? prev.priceHalfCart ?? '' : '',
           pricePackage: undefined,
           purchaseTotalCost: wasCigarette ? prev.purchaseTotalCost : '',
           safetyStock: Number(prev.safetyStock) > 2 ? prev.safetyStock : 2,
@@ -221,10 +221,10 @@ export default function Stock() {
         initialStockDate: product.initialStockDate || (product.createdAt ? format(new Date(product.createdAt), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')),
         maxStock: product.maxStock || Math.max(product.stock, product.safetyStock * 2 || 20),
         pricePackage: product.pricePackage !== undefined ? product.pricePackage : (unitsPkg > 1 ? Number((product.basePrice * unitsPkg).toFixed(2)) : undefined),
-        pricePack: product.pricePack !== undefined ? product.pricePack : (product.type === 'cigarro' ? Number((product.basePrice * 200).toFixed(2)) : undefined),
-        priceCart: product.priceCart !== undefined ? product.priceCart : (product.type === 'cigarro' ? Number((product.basePrice * 20).toFixed(2)) : undefined),
-        priceHalfCart: product.priceHalfCart !== undefined ? product.priceHalfCart : (product.type === 'cigarro' ? Number((product.basePrice * 10).toFixed(2)) : undefined),
-        priceUnit: product.priceUnit !== undefined ? product.priceUnit : product.basePrice,
+        pricePack: product.pricePack ?? '',
+        priceCart: product.priceCart ?? '',
+        priceHalfCart: product.priceHalfCart ?? '',
+        priceUnit: product.type === 'cigarro' ? product.priceUnit ?? '' : product.basePrice,
         expirationDate: product.expirationDate || '',
         hasPromoSuggestion: !!product.hasPromoSuggestion,
         promoPrice: product.promoPrice !== undefined ? product.promoPrice : '',
@@ -331,35 +331,11 @@ export default function Stock() {
     }
 
     if (formData.type === 'cigarro') {
-      if (formData.pricePack !== undefined && formData.pricePack !== '') {
-        payload.pricePack = Number(formData.pricePack);
-      } else if (editingId) {
-        payload.pricePack = deleteField();
-      } else {
-        delete payload.pricePack;
+      for (const field of ['pricePack', 'priceCart', 'priceHalfCart', 'priceUnit']) {
+        // Persist zero explicitly so clearing a price cannot revive a legacy fallback.
+        payload[field] = Number(formData[field]) || 0;
       }
-      if (formData.priceCart !== undefined && formData.priceCart !== '') {
-        payload.priceCart = Number(formData.priceCart);
-      } else if (editingId) {
-        payload.priceCart = deleteField();
-      } else {
-        delete payload.priceCart;
-      }
-      if (formData.priceHalfCart !== undefined && formData.priceHalfCart !== '') {
-        payload.priceHalfCart = Number(formData.priceHalfCart);
-      } else if (editingId) {
-        payload.priceHalfCart = deleteField();
-      } else {
-        delete payload.priceHalfCart;
-      }
-      if (formData.priceUnit !== undefined && formData.priceUnit !== '') {
-        payload.priceUnit = Number(formData.priceUnit);
-        payload.basePrice = Number(formData.priceUnit);
-      } else if (editingId) {
-        payload.priceUnit = deleteField();
-      } else {
-        delete payload.priceUnit;
-      }
+      payload.basePrice = payload.priceUnit;
       if (editingId) {
         payload.pricePackage = deleteField();
       } else {
@@ -1570,7 +1546,7 @@ export default function Stock() {
 
                           {p.type === 'cigarro' ? (
                             <div className="text-[11px] text-primary font-medium mt-1">
-                              🚬 Maço: R$ {(p.pricePack || (p.basePrice * 200)).toFixed(2)} | Cart: R$ {(p.priceCart || (p.basePrice * 20)).toFixed(2)} | Avulso: R$ {(p.priceUnit || p.basePrice).toFixed(2)}
+                              {getCigaretteFormats(p).map(option => `${option.label}: R$ ${option.price.toFixed(2)}`).join(' | ') || 'Nenhum formato de venda configurado'}
                             </div>
                           ) : getPackageUnits(p) > 1 ? (
                             <div className="text-[11px] text-primary font-medium mt-1">
@@ -1971,107 +1947,40 @@ export default function Stock() {
                 </div>
 
                 {formData.type === 'cigarro' && (
-                  <div className="col-span-1 sm:col-span-2 p-4 rounded-xl bg-palette-1/70 border border-primary/20 text-xs space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 font-bold text-primary text-sm">
-                        <span>🚬 Preços de Venda Editáveis por Formato de Cigarro:</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const unit = Number(formData.priceUnit || formData.basePrice) || 0.75;
-                          setFormData({
-                            ...formData,
-                            basePrice: unit,
-                            priceUnit: unit,
-                            pricePack: Number((unit * 200).toFixed(2)),
-                            priceCart: Number((unit * 20).toFixed(2)),
-                            priceHalfCart: Number((unit * 10).toFixed(2))
-                          });
-                        }}
-                        className="text-[11px] font-bold text-primary hover:underline cursor-pointer bg-surface px-2.5 py-1 rounded-md border border-primary/30"
-                      >
-                        ⚡ Calcular proporcional à unidade
-                      </button>
-                    </div>
-                    <p className="text-muted-foreground text-[11px]">
-                      Defina livremente o valor de venda de cada formato. O sistema descontará no estoque a quantidade exata de cigarros vendidos.
+                  <div className="col-span-1 sm:col-span-2 space-y-3 rounded-xl border border-primary/20 bg-palette-1/70 p-4">
+                    <h3 className="text-sm font-bold text-primary">Preços de Venda por Formato de Cigarro</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Preencha somente os formatos que você vende. Campo vazio ou zero desativa a opção no Caixa.
+                      O estoque é contado em carteiras.
                     </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
-                      <div className="bg-surface p-2.5 rounded-lg border border-border shadow-xs">
-                        <label className="block text-[11px] font-bold text-foreground mb-1">
-                          📦 Pacote/Maço (200 un.)
-                        </label>
-                        <span className="text-[10px] text-muted-foreground block mb-1">10 carteiras</span>
-                        <div className="flex items-center gap-1">
-                          <span className="text-xs font-bold text-muted-foreground">R$</span>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {[
+                        { field: 'pricePack', label: 'Preço do Maço / Pacote', detail: '10 carteiras' },
+                        { field: 'priceCart', label: 'Preço da Carteira', detail: '1 carteira fechada' },
+                        { field: 'priceHalfCart', label: 'Preço da Meia Carteira', detail: '10 cigarros — 0,5 carteira' },
+                        { field: 'priceUnit', label: 'Preço da Unidade Avulsa', detail: '1 cigarro — 0,05 carteira' }
+                      ].map(option => (
+                        <div key={option.field} className="rounded-lg border border-border bg-surface p-3">
+                          <label htmlFor={`cigarette-${option.field}`} className="block text-xs font-bold text-foreground">
+                            {option.label} (R$)
+                          </label>
+                          <p className="mb-2 text-xs text-muted-foreground">{option.detail}</p>
                           <input
+                            id={`cigarette-${option.field}`}
                             type="number"
                             step="0.01"
-                            min={0}
-                            value={formData.pricePack !== undefined ? formData.pricePack : Number(((Number(formData.basePrice) || 0.75) * 200).toFixed(2))}
-                            onChange={e => setFormData({...formData, pricePack: e.target.value})}
-                            className="w-full border border-border p-1.5 rounded bg-surface text-foreground font-bold text-xs"
+                            min="0"
+                            placeholder="Não vendido"
+                            value={formData[option.field] ?? ''}
+                            onChange={event => setFormData((prev: any) => ({
+                              ...prev,
+                              [option.field]: event.target.value,
+                              ...(option.field === 'priceUnit' ? { basePrice: Number(event.target.value) || 0 } : {})
+                            }))}
+                            className="w-full rounded-lg border border-border bg-background p-2 text-sm text-foreground"
                           />
                         </div>
-                      </div>
-
-                      <div className="bg-surface p-2.5 rounded-lg border border-border shadow-xs">
-                        <label className="block text-[11px] font-bold text-foreground mb-1">
-                          🏷️ Carteira (20 un.)
-                        </label>
-                        <span className="text-[10px] text-muted-foreground block mb-1">1 carteira fechada</span>
-                        <div className="flex items-center gap-1">
-                          <span className="text-xs font-bold text-muted-foreground">R$</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min={0}
-                            value={formData.priceCart !== undefined ? formData.priceCart : Number(((Number(formData.basePrice) || 0.75) * 20).toFixed(2))}
-                            onChange={e => setFormData({...formData, priceCart: e.target.value})}
-                            className="w-full border border-border p-1.5 rounded bg-surface text-foreground font-bold text-xs"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="bg-surface p-2.5 rounded-lg border border-border shadow-xs">
-                        <label className="block text-[11px] font-bold text-foreground mb-1">
-                          ✂️ Meia Carteira (10 un.)
-                        </label>
-                        <span className="text-[10px] text-muted-foreground block mb-1">10 cigarros soltos</span>
-                        <div className="flex items-center gap-1">
-                          <span className="text-xs font-bold text-muted-foreground">R$</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min={0}
-                            value={formData.priceHalfCart !== undefined ? formData.priceHalfCart : Number(((Number(formData.basePrice) || 0.75) * 10).toFixed(2))}
-                            onChange={e => setFormData({...formData, priceHalfCart: e.target.value})}
-                            className="w-full border border-border p-1.5 rounded bg-surface text-foreground font-bold text-xs"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="bg-surface p-2.5 rounded-lg border border-border shadow-xs">
-                        <label className="block text-[11px] font-bold text-foreground mb-1">
-                          🚬 Unidade Avulsa (1 un.)
-                        </label>
-                        <span className="text-[10px] text-muted-foreground block mb-1">1 cigarro avulso</span>
-                        <div className="flex items-center gap-1">
-                          <span className="text-xs font-bold text-muted-foreground">R$</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min={0}
-                            value={formData.priceUnit !== undefined ? formData.priceUnit : (formData.basePrice || 0.75)}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setFormData({...formData, priceUnit: val, basePrice: val});
-                            }}
-                            className="w-full border border-border p-1.5 rounded bg-surface text-foreground font-bold text-xs text-primary"
-                          />
-                        </div>
-                      </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -2287,6 +2196,7 @@ export default function Stock() {
                 </div>
 
                 {/* Área de Preço de Venda da Unidade, Margem de Lucro e Sugestões Inteligentes */}
+                {formData.type !== 'cigarro' && (
                 <div className="col-span-1 sm:col-span-2 p-4 rounded-xl border border-border bg-surface space-y-3">
                   <div className="flex items-center justify-between border-b border-border pb-2">
                     <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
@@ -2387,6 +2297,8 @@ export default function Stock() {
                     )}
                   </div>
                 </div>
+
+                )}
 
                 {/* Preço de Venda e Sugestão do Fardo/Pacote Fechado */}
                 {formData.type !== 'cigarro' && formUnitsPerPackage > 1 && (
@@ -3609,6 +3521,7 @@ export default function Stock() {
         onRecognized={(product, imageUrl) => {
           if (isModalOpen) {
             setFormData((prev: any) => ({ ...prev, name: product.name, category: product.category, imageUrl }));
+            handleCategoryChange(product.category);
           }
         }}
         onProductSaved={(name) => {
@@ -3616,17 +3529,20 @@ export default function Stock() {
           setTimeout(() => setToastMessage(null), 5000);
         }}
         onSelectForEdit={(draft) => {
+          const isCigarette = draft.type === 'cigarro' || /\bcigarros?\b/.test(normalizeCategory(draft.category));
           openModal();
           setFormData((prev: any) => ({
             ...prev,
             name: draft.name,
             category: draft.category,
-            type: draft.type,
+            type: isCigarette ? 'cigarro' : draft.type,
+            stockUnit: isCigarette ? 'carteira' : 'unidade',
+            priceUnit: isCigarette ? Number(draft.basePrice) || '' : undefined,
             basePrice: draft.basePrice,
             unitCost: draft.unitCost,
             stock: draft.stock,
-            unitsPerPackage: draft.unitsPerPackage || 1,
-            purchaseForm: draft.purchaseForm || 'unidade',
+            unitsPerPackage: isCigarette ? 10 : draft.unitsPerPackage || 1,
+            purchaseForm: isCigarette ? 'pacote' : draft.purchaseForm || 'unidade',
             barcode: draft.barcode || '',
             imageUrl: draft.imageUrl || ''
           }));

@@ -58,3 +58,24 @@ test('legacy stock and cost conversion is idempotent and preserves independent s
   assert.equal(converted.basePrice, 0.75);
   assert.deepEqual(normalizeCigaretteStock(converted), converted);
 });
+
+test('only explicitly priced cigarette formats are available; basePrice never enables avulso', () => {
+  const formats = getCigaretteFormats({ basePrice: 99, priceCart: 13 });
+  assert.equal(formats.length, 1);
+  assert.equal(formats[0].units, 1);
+  assert.equal(formats[0].price, 13);
+  assert.deepEqual(calculateStockUpdates([{ product: { id: 'c' }, quantity: 1, stockDeduction: formats[0].units }], [{ id: 'c', stock: 10 }]), [{ id: 'c', newStock: 9 }]);
+});
+
+test('empty, missing, zero, negative and non-finite prices disable their formats', () => {
+  assert.deepEqual(getCigaretteFormats({ basePrice: 1 }), []);
+  assert.deepEqual(getCigaretteFormats({ basePrice: 1, pricePack: '', priceCart: 0, priceHalfCart: undefined, priceUnit: null }), []);
+  assert.deepEqual(getCigaretteFormats({ basePrice: 1, pricePack: -1, priceCart: NaN, priceHalfCart: Infinity, priceUnit: 0 }), []);
+});
+
+test('clearing an avulso price does not change other prices or stock conversion factors', () => {
+  const product = { basePrice: 0.75, pricePack: 100, priceCart: 11, priceHalfCart: 6, priceUnit: 0.75 };
+  const disabled = { ...product, priceUnit: 0 };
+  assert.deepEqual(getCigaretteFormats(disabled).map(format => [format.units, format.price]), [[10, 100], [1, 11], [0.5, 6]]);
+  assert.equal(getCigaretteFormats({ ...disabled, priceCart: 0 }).length, 2);
+});

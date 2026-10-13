@@ -7,13 +7,13 @@ export function getPackageUnits(product: Pick<Product, 'type' | 'unitsPerPackage
 }
 
 export function getCigaretteFormats(product: Pick<Product, 'basePrice' | 'priceUnit' | 'priceHalfCart' | 'priceCart' | 'pricePack'>) {
-  const unitPrice = product.priceUnit ?? product.basePrice;
+  // Missing/zero prices disable a format; never infer prices from basePrice.
   return [
-    { label: 'Maço (10 carteiras)', units: CIGARETTE_UNITS.pack, price: product.pricePack ?? Number((unitPrice * 200).toFixed(2)) },
-    { label: 'Carteira (20 un.)', units: CIGARETTE_UNITS.cart, price: product.priceCart ?? Number((unitPrice * 20).toFixed(2)) },
-    { label: 'Meia Carteira (10 un.)', units: CIGARETTE_UNITS.halfCart, price: product.priceHalfCart ?? Number((unitPrice * 10).toFixed(2)) },
-    { label: 'Unidade Avulsa', units: CIGARETTE_UNITS.unit, price: unitPrice }
-  ];
+    { label: 'Maço/Pacote (10 carteiras)', units: CIGARETTE_UNITS.pack, price: Number(product.pricePack) },
+    { label: 'Carteira (1 carteira fechada)', units: CIGARETTE_UNITS.cart, price: Number(product.priceCart) },
+    { label: 'Meia Carteira (10 unidades)', units: CIGARETTE_UNITS.halfCart, price: Number(product.priceHalfCart) },
+    { label: 'Unidade Avulsa (1 cigarro)', units: CIGARETTE_UNITS.unit, price: Number(product.priceUnit) }
+  ].filter(format => Number.isFinite(format.price) && format.price > 0);
 }
 
 interface StockLine {

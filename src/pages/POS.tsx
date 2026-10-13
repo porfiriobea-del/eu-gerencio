@@ -186,6 +186,12 @@ export default function POS() {
 
     let productsToUpdate: { id: string; newStock: number }[];
     try {
+      for (const item of cart) {
+        const latest = products.find(product => product.id === item.product.id);
+        if (latest?.type === 'cigarro' && !getCigaretteFormats(latest).some(format => format.units === item.stockDeduction && format.price === item.price)) {
+          throw new Error(`O formato ou preço de ${latest.name} foi alterado. Remova o item e selecione novamente.`);
+        }
+      }
       // Use the latest product balances and sum all formats of the same product.
       productsToUpdate = calculateStockUpdates(cart, products);
     } catch (error) {
@@ -545,6 +551,9 @@ export default function POS() {
               <div className="mt-3">
                 {p.type === 'cigarro' ? (
                   <div className="flex flex-col gap-1.5">
+                    {getCigaretteFormats(p).length === 0 && (
+                      <p className="text-xs text-muted-foreground">Nenhum formato habilitado. Configure os preços no Estoque.</p>
+                    )}
                     {getCigaretteFormats(p).map(option => {
                       const reserved = cart.filter(item => item.product.id === p.id)
                         .reduce((total, item) => total + item.quantity * item.stockDeduction, 0);

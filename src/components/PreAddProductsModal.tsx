@@ -323,9 +323,9 @@ export function PreAddProductsModal({ isOpen, onClose, onSuccess, existingProduc
           basePrice: basePrice,
           imageUrl: d.imageUrl,
           barcode: d.barcode,
-          pricePack: isCigarro ? Number((basePrice * 200).toFixed(2)) : undefined,
-          priceCart: isCigarro ? Number((basePrice * 20).toFixed(2)) : undefined,
-          priceHalfCart: isCigarro ? Number((basePrice * 10).toFixed(2)) : undefined,
+          pricePack: isCigarro ? 0 : undefined,
+          priceCart: isCigarro ? 0 : undefined,
+          priceHalfCart: isCigarro ? 0 : undefined,
           priceUnit: isCigarro ? basePrice : undefined,
           pricePackage: !isCigarro && unitsPerPkg > 1 ? Number((basePrice * unitsPerPkg * 0.95).toFixed(2)) : undefined
         };
