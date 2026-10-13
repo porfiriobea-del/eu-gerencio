@@ -3,7 +3,7 @@ import { getPackageUnits, getCigaretteFormats, CIGARETTE_UNITS, isValidStockQuan
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteField } from 'firebase/firestore';
-import { subscribeProducts, updateProduct, adjustProductStock, addProduct, addMultipleProducts, deleteProduct, deleteMultipleProducts, subscribeTodaySales, recordMovement } from '../lib/api';
+import { importStandardCatalog, subscribeProducts, updateProduct, adjustProductStock, addProduct, addMultipleProducts, deleteProduct, deleteMultipleProducts, subscribeTodaySales, recordMovement } from '../lib/api';
 import { Product, Sale } from '../types';
 import { getAllCategories, saveCustomCategory } from '../lib/categories';
 import { Plus, Edit2, Trash2, Package, AlertTriangle, CheckCircle2, ShoppingBag, Calendar, ArrowUpRight, TrendingUp, Info, Tag, Check, X, RotateCcw, Sparkles, Camera, Image as ImageIcon, Clock, Flame, Percent, LayoutGrid, List, ChevronDown, ChevronUp, Minus, Eye, EyeOff, Loader2 } from 'lucide-react';
@@ -82,6 +82,8 @@ export default function Stock() {
 
   // State for Pre-Add Products & Image Import Modal
   const [isPreAddModalOpen, setIsPreAddModalOpen] = useState<boolean>(false);
+  const [isImportingCatalog, setIsImportingCatalog] = useState(false);
+  const catalogImportInProgress = useRef(false);
   const [showPreAddBanner, setShowPreAddBanner] = useState(() => {
     try {
       return localStorage.getItem('eu_gerencio_hide_preadd_banner') !== 'true';
@@ -634,6 +636,22 @@ export default function Stock() {
 
   const [isInsertingPhotoProducts, setIsInsertingPhotoProducts] = useState<boolean>(false);
 
+  const handleImportStandardCatalog = async () => {
+    if (catalogImportInProgress.current) return;
+    catalogImportInProgress.current = true;
+    setIsImportingCatalog(true);
+    try {
+      const count = await importStandardCatalog();
+      if (count > 0) showToast(`✓ ${count} produtos adicionados ao estoque com sucesso!`);
+      else showToast('O catálogo padrão já está no seu estoque. Nenhum produto foi duplicado.');
+    } catch (error) {
+      showActionError(error, 'Não foi possível confirmar a importação. Confira o estoque e a conexão antes de repetir.');
+    } finally {
+      catalogImportInProgress.current = false;
+      setIsImportingCatalog(false);
+    }
+  };
+
   const handleInsertPhotoProductsDirectly = async () => {
     setIsInsertingPhotoProducts(true);
     try {
@@ -712,6 +730,16 @@ export default function Stock() {
             <ShoppingBag className="w-4 h-4 text-primary" />
             <span>{v('purchases.title', 'Compras de Reposição')}</span>
           </Link>
+
+          <button
+            type="button"
+            onClick={handleImportStandardCatalog}
+            disabled={isImportingCatalog}
+            title="Importa o catálogo com estoque zerado e preços de referência editáveis. Produtos existentes são preservados."
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-500/10 px-4 py-2.5 text-sm font-bold text-amber-700 hover:bg-amber-500/20 disabled:cursor-wait disabled:opacity-50 dark:border-amber-800 dark:text-amber-400"
+          >
+            {isImportingCatalog ? <><Loader2 className="h-4 w-4 animate-spin" /><span role="status">Importando catálogo...</span></> : '📦 Importar Catálogo Padrão (100+ Produtos)'}
+          </button>
 
           <button
             onClick={() => setIsPreAddModalOpen(true)}

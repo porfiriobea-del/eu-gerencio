@@ -40,7 +40,8 @@ service cloud.firestore {
         data.createdAt is number &&
         data.updatedAt is number;
 
-      let validOptionalFields = (!('maxStock' in data) || data.maxStock is number) &&
+      let validOptionalFields = (!('stockUnit' in data) || (data.stockUnit is string && ((data.type == 'cigarro' && data.stockUnit == 'carteira') || (data.type == 'comum' && data.stockUnit == 'unidade')))) &&
+        (!('maxStock' in data) || data.maxStock is number) &&
         (!('initialStock' in data) || data.initialStock is number) &&
         (!('initialStockDate' in data) || (data.initialStockDate is string && data.initialStockDate.size() <= 50)) &&
         (!('pricePackage' in data) || data.pricePackage is number) &&
@@ -55,7 +56,7 @@ service cloud.firestore {
         (!('promoNotes' in data) || (data.promoNotes is string && data.promoNotes.size() <= 200)) &&
         (!('barcode' in data) || (data.barcode is string && data.barcode.size() <= 60));
 
-      let allowedKeys = ["name", "type", "category", "imageUrl", "barcode", "purchaseForm", "unitsPerPackage", "unitCost", "stock", "safetyStock", "maxStock", "initialStock", "initialStockDate", "pricePackage", "pricePack", "priceCart", "priceHalfCart", "priceUnit", "dailyAverageSales", "replacementDays", "basePrice", "ownerId", "createdAt", "updatedAt", "expirationDate", "hasPromoSuggestion", "promoPrice", "promoDiscountPercent", "promoNotes"];
+      let allowedKeys = ["name", "type", "stockUnit", "category", "imageUrl", "barcode", "purchaseForm", "unitsPerPackage", "unitCost", "stock", "safetyStock", "maxStock", "initialStock", "initialStockDate", "pricePackage", "pricePack", "priceCart", "priceHalfCart", "priceUnit", "dailyAverageSales", "replacementDays", "basePrice", "ownerId", "createdAt", "updatedAt", "expirationDate", "hasPromoSuggestion", "promoPrice", "promoDiscountPercent", "promoNotes"];
 
       return hasBaseFields && validOptionalFields && data.keys().hasOnly(allowedKeys);
     }
@@ -275,9 +276,11 @@ service cloud.firestore {
     }
 
     match /products/{productId} {
-      allow get, list: if isSignedIn() && isAuthorizedStore(existing().ownerId);
+      // Transactions may read an absent product before creating it; existing products remain owner-scoped.
+      allow get: if isSignedIn() && (resource == null || isAuthorizedStore(existing().ownerId));
+      allow list: if isSignedIn() && isAuthorizedStore(existing().ownerId);
       allow create: if isSignedIn() && isValidId(productId) && isValidProduct(incoming()) && isAuthorizedStore(incoming().ownerId);
-      allow update: if isSignedIn() && isValidId(productId) && isValidProduct(incoming()) && isAuthorizedStore(existing().ownerId) && incoming().ownerId == existing().ownerId && incoming().createdAt == existing().createdAt && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'type', 'category', 'imageUrl', 'purchaseForm', 'unitsPerPackage', 'unitCost', 'stock', 'safetyStock', 'maxStock', 'initialStock', 'initialStockDate', 'pricePackage', 'pricePack', 'priceCart', 'priceHalfCart', 'priceUnit', 'dailyAverageSales', 'replacementDays', 'basePrice', 'updatedAt', 'expirationDate', 'hasPromoSuggestion', 'promoPrice', 'promoDiscountPercent', 'promoNotes']);
+      allow update: if isSignedIn() && isValidId(productId) && isValidProduct(incoming()) && isAuthorizedStore(existing().ownerId) && incoming().ownerId == existing().ownerId && incoming().createdAt == existing().createdAt && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'type', 'stockUnit', 'category', 'imageUrl', 'purchaseForm', 'unitsPerPackage', 'unitCost', 'stock', 'safetyStock', 'maxStock', 'initialStock', 'initialStockDate', 'pricePackage', 'pricePack', 'priceCart', 'priceHalfCart', 'priceUnit', 'dailyAverageSales', 'replacementDays', 'basePrice', 'updatedAt', 'expirationDate', 'hasPromoSuggestion', 'promoPrice', 'promoDiscountPercent', 'promoNotes']);
       allow delete: if isSignedIn() && isValidId(productId) && isAuthorizedStore(existing().ownerId);
     }
 

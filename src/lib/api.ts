@@ -1,3 +1,6 @@
+import { catalogKey } from './standardCatalog';
+import { executeCatalogImport } from './catalogImport';
+import { supabase } from './supabase';
 import { withActionDeadline, ConfirmationTimeoutError } from './actionFeedback';
 import { normalizeCigaretteStock, cigaretteStockFields, isValidStockQuantity } from './productUnits';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, writeBatch, runTransaction } from 'firebase/firestore';
@@ -398,6 +401,40 @@ export const deleteProduct = withActionDeadline(async (id: string, productName?:
     throw err;
   }
 });
+
+/** Confirm the Supabase bulk insert before creating products used by the existing Stock/POS. */
+export const importStandardCatalog = withActionDeadline(async (): Promise<number> => {
+  const ownerId = getEffectiveOwnerId();
+  if (!ownerId) throw new Error('Entre na sua conta para importar o catálogo.');
+  const count = await executeCatalogImport(ownerId, {
+    readExisting: async () => {
+      const snapshot = await getDocs(query(collection(db, 'products'), where('ownerId', '==', ownerId)));
+      return snapshot.docs.map(record => ({ name: String(record.data().name || '') }));
+    },
+    insertSupabase: async rows => {
+      // One request, full metadata, scoped idempotency key; preserve existing stock/prices.
+      const { error } = await supabase.from('PRODUTOS').upsert(rows, {
+        onConflict: 'catalog_owner_id,catalog_key', ignoreDuplicates: true
+      });
+      if (error) throw new Error('Não foi possível confirmar a importação no Supabase. Confira a conexão e a configuração do catálogo.');
+    },
+    insertStock: missing => runTransaction(db, async transaction => {
+      // Deterministic IDs make retries safe after a partial confirmation.
+      const refs = missing.map(product => doc(db, 'products', `${ownerId}_${catalogKey(product.name)}`));
+      const current = await Promise.all(refs.map(ref => transaction.get(ref)));
+      const now = Date.now();
+      let added = 0;
+      for (let index = 0; index < missing.length; index++) {
+        if (current[index].exists()) continue;
+        transaction.set(refs[index], { ...missing[index], ownerId, createdAt: now, updatedAt: now });
+        added++;
+      }
+      return added;
+    })
+  });
+  recordMovement({ type: 'product_create', description: `Importação do catálogo padrão: ${count} produtos.`, quantity: count }).catch(() => {});
+  return count;
+}, 60000);
 
 // ---------------------------------------------------------------------------
 // CUSTOMERS

@@ -27,10 +27,10 @@ export {
 export type { GoogleSheetsMovementPayload, GoogleSheetsWebhookLog };
 
 // Credenciais oficiais do Supabase fornecidas
-export const SUPABASE_REST_URL = 'https://zixwpheatwyptkqpzgdg.supabase.co/rest/v1/';
 // O SDK Supabase requer a URL base sem o caminho '/rest/v1/' para evitar o erro PGRST125
-export const SUPABASE_URL = 'https://zixwpheatwyptkqpzgdg.supabase.co';
-export const SUPABASE_ANON_KEY =
+export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || 'https://zixwpheatwyptkqpzgdg.supabase.co').replace(/\/$/, '');
+export const SUPABASE_REST_URL = `${SUPABASE_URL}/rest/v1/`;
+export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppeHdwaGVhdHd5cHRrcXB6Z2RnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4MTkxNDUsImV4cCI6MjEwNjM5NTE0NX0.ioEXPQlmL-5bRyZuChmoxkg2veYNMi8lSD6_BehyuAU';
 
 // Comando SQL para o usuário rodar no SQL Editor do Supabase para liberar o acesso
