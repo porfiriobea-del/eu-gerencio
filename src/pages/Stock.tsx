@@ -82,6 +82,23 @@ export default function Stock() {
 
   // State for Pre-Add Products & Image Import Modal
   const [isPreAddModalOpen, setIsPreAddModalOpen] = useState<boolean>(false);
+  const [showPreAddBanner, setShowPreAddBanner] = useState(() => {
+    try {
+      return localStorage.getItem('eu_gerencio_hide_preadd_banner') !== 'true';
+    } catch {
+      return true;
+    }
+  });
+
+  const dismissPreAddBanner = () => {
+    setShowPreAddBanner(false);
+    try {
+      localStorage.setItem('eu_gerencio_hide_preadd_banner', 'true');
+    } catch {
+      // Keep the banner dismissed for this session if storage is unavailable.
+    }
+  };
+
 
   const categories = useMemo(() => {
     return getAllCategories(products.map(p => p.category));
@@ -723,50 +740,61 @@ export default function Stock() {
         </div>
       </div>
 
-      {/* Banner de Destaque: Inserir Produtos das Fotos Anexadas */}
-      <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-surface border border-amber-300 dark:border-amber-800/60 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
-        <div className="flex items-start gap-3.5">
-          <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-sm sm:text-base font-bold text-foreground">
-                Colocar Todos os Produtos Pré-Cadastrados no Estoque
-              </h3>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                Catálogo Completo & Valores Certinhos
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl">
-              Cigarros com valores nos 4 formatos (Maço, Carteira, Meia e Avulso), Bebidas, Doces, Sedas, Isqueiros e Mercearia já configurados com seus valores de venda. Clique no botão ao lado para cadastrar todos os produtos de uma só vez!
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0">
+      {/* Catálogo pré-cadastrado: a dispensa fica salva neste navegador. */}
+      {showPreAddBanner && (
+        <div className="relative pr-12 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-surface border border-amber-300 dark:border-amber-800/60 rounded-2xl py-4 pl-4 sm:py-5 sm:pl-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
           <button
-            onClick={() => setIsPreAddModalOpen(true)}
-            className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl border border-border bg-surface hover:bg-muted text-foreground text-xs font-semibold cursor-pointer transition-colors shadow-2xs"
+            type="button"
+            aria-label="Ocultar banner de produtos pré-cadastrados"
+            onClick={dismissPreAddBanner}
+            className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-amber-500/10 hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
           >
-            Ver Detalhes / Filtros
+            <X className="h-4 w-4" />
           </button>
-          <button
-            onClick={handleInsertPhotoProductsDirectly}
-            disabled={isInsertingPhotoProducts}
-            className="flex-1 sm:flex-none px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            {isInsertingPhotoProducts ? (
-              <span>Cadastrando...</span>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                <span>Colocar Todos os Produtos Agora</span>
-              </>
-            )}
+          <div className="flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm sm:text-base font-bold text-foreground">
+                  Colocar Todos os Produtos Pré-Cadastrados no Estoque
+                </h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                  Catálogo Completo & Valores Certinhos
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl">
+                Cigarros com valores nos 4 formatos (Maço, Carteira, Meia e Avulso), Bebidas, Doces, Sedas, Isqueiros e Mercearia já configurados com seus valores de venda. Clique no botão ao lado para cadastrar todos os produtos de uma só vez!
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0">
+            <button
+              onClick={() => setIsPreAddModalOpen(true)}
+              className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl border border-border bg-surface hover:bg-muted text-foreground text-xs font-semibold cursor-pointer transition-colors shadow-2xs"
+            >
+              Ver Detalhes / Filtros
+            </button>
+            <button
+              onClick={handleInsertPhotoProductsDirectly}
+              disabled={isInsertingPhotoProducts}
+              className="flex-1 sm:flex-none px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isInsertingPhotoProducts ? (
+                <span>Cadastrando...</span>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>Colocar Todos os Produtos Agora</span>
+                </>
+      )}
           </button>
         </div>
       </div>
+
+      )}
 
       {/* Dica de Bolso para Estoque */}
       <PocketTip

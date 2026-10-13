@@ -150,21 +150,28 @@ export function CameraCaptureModal({
       setCameraError('Aguarde a câmera ficar pronta antes de tirar a foto.');
       return;
     }
-    const video = videoRef.current;
-    const canvas = canvasRef.current || document.createElement('canvas');
-    const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
-    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    try {
+      const video = videoRef.current;
+      const canvas = canvasRef.current || document.createElement('canvas');
+      const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
+      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas indisponível');
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-
-    stopCamera();
-    setCapturedImage(dataUrl);
-    setMode('preview');
-    analyzeImage(dataUrl);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      stopCamera();
+      setCapturedImage(dataUrl);
+      setMode('preview');
+      // The scanner validates this data URL and sends only raw Base64 to Gemini.
+      void analyzeImage(dataUrl);
+    } catch {
+      stopCamera();
+      resetDraft();
+      setMode('preview');
+      setAnalysisError('Não foi possível capturar a foto. Preencha nome e categoria manualmente ou tire outra foto.');
+    }
   };
 
   // Upload photo from file input
@@ -231,6 +238,12 @@ export function CameraCaptureModal({
       }
     }
   };
+
+  useEffect(() => {
+    if (isOpen && mode === 'preview' && analysisError && !isAnalyzing) {
+      nameInputRef.current?.focus();
+    }
+  }, [isOpen, mode, analysisError, isAnalyzing]);
 
   const handleContinueManually = () => {
     analysisIdRef.current++;
@@ -472,7 +485,7 @@ export function CameraCaptureModal({
                       </p>
                     </div>
                   ) : analysisError ? (
-                    <div role="status" className="space-y-1">
+                    <div role="status" aria-live="polite" className="space-y-1">
                       <div className="inline-flex items-center gap-1.5 text-primary font-bold text-sm">
                         <Info className="w-4 h-4" />
                         Preenchimento manual disponível
