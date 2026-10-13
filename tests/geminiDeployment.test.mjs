@@ -26,7 +26,7 @@ test('serverless handler rejects unsupported methods with JSON', async () => {
 });
 
 // Match Vercel's ESM runtime without tsx's helpful extension resolution.
-test('compiled API entry loads in native Node without a TypeScript loader', async () => {
+test('compiled API entries load in native Node without a TypeScript loader', async () => {
   const { transform } = await import('esbuild');
   const { mkdtemp, writeFile, rm, mkdir } = await import('node:fs/promises');
   const { spawnSync } = await import('node:child_process');
@@ -34,14 +34,16 @@ test('compiled API entry loads in native Node without a TypeScript loader', asyn
   await mkdir(cache, { recursive: true });
   const dir = await mkdtemp(new URL('gemini-runtime-', cache));
   try {
-    const source = readFileSync(new URL('../api/gemini/recognize-product.ts', import.meta.url), 'utf8');
-    const compiled = await transform(source, { loader: 'ts', format: 'esm', target: 'node24' });
-    const entry = `${dir}/entry.mjs`;
-    await writeFile(entry, compiled.code);
-    const result = spawnSync(process.execPath, ['--input-type=module', '-e', `const module = await import(${JSON.stringify(entry)}); if (typeof module.default !== 'function') process.exit(2);`], {
-      env: { ...process.env, NODE_OPTIONS: '' }, encoding: 'utf8'
-    });
-    assert.equal(result.status, 0, result.stderr);
+    for (const name of ['recognize-product', 'recognize-catalog']) {
+      const source = readFileSync(new URL(`../api/gemini/${name}.ts`, import.meta.url), 'utf8');
+      const compiled = await transform(source, { loader: 'ts', format: 'esm', target: 'node24' });
+      const entry = `${dir}/${name}.mjs`;
+      await writeFile(entry, compiled.code);
+      const result = spawnSync(process.execPath, ['--input-type=module', '-e', `const module = await import(${JSON.stringify(entry)}); if (typeof module.default !== 'function') process.exit(2);`], {
+        env: { ...process.env, NODE_OPTIONS: '' }, encoding: 'utf8'
+      });
+      assert.equal(result.status, 0, result.stderr);
+    }
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

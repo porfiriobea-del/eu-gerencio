@@ -3,18 +3,17 @@ import { getPackageUnits, getCigaretteFormats, CIGARETTE_UNITS, isValidStockQuan
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteField } from 'firebase/firestore';
-import { importStandardCatalog, subscribeProducts, updateProduct, adjustProductStock, addProduct, addMultipleProducts, deleteProduct, deleteMultipleProducts, subscribeTodaySales, recordMovement } from '../lib/api';
+import { subscribeProducts, updateProduct, adjustProductStock, addProduct, addMultipleProducts, deleteProduct, deleteMultipleProducts, subscribeTodaySales, recordMovement } from '../lib/api';
 import { Product, Sale } from '../types';
 import { getAllCategories, saveCustomCategory } from '../lib/categories';
 import { Plus, Edit2, Trash2, Package, AlertTriangle, CheckCircle2, ShoppingBag, Calendar, ArrowUpRight, TrendingUp, Info, Tag, Check, X, RotateCcw, Sparkles, Camera, Image as ImageIcon, Clock, Flame, Percent, LayoutGrid, List, ChevronDown, ChevronUp, Minus, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { format, startOfMonth, subMonths } from 'date-fns';
 import { usePreferences } from '../lib/preferencesContext';
 import { PocketTip } from '../components/PocketTip';
-import { PreAddProductsModal } from '../components/PreAddProductsModal';
+import { CatalogImportModal } from '../components/CatalogImportModal';
 import { recognizeProductFromImage, prepareProductImage } from '../lib/geminiProductScanner';
 import { CameraCaptureModal } from '../components/CameraCaptureModal';
 import { analyzeDuplicates, normalizeProductName } from '../lib/duplicateDetector';
-import { PRELOADED_PRODUCTS } from '../lib/preloadedProducts';
 import { 
   calculateExpirationStatus, 
   getQuickExpirationDates, 
@@ -80,27 +79,7 @@ export default function Stock() {
   const [turnoverMode, setTurnoverMode] = useState<'copy_current' | 'keep_qty'>('copy_current');
   const [isSavingTurnover, setIsSavingTurnover] = useState<boolean>(false);
 
-  // State for Pre-Add Products & Image Import Modal
-  const [isPreAddModalOpen, setIsPreAddModalOpen] = useState<boolean>(false);
-  const [isImportingCatalog, setIsImportingCatalog] = useState(false);
-  const catalogImportInProgress = useRef(false);
-  const [showPreAddBanner, setShowPreAddBanner] = useState(() => {
-    try {
-      return localStorage.getItem('eu_gerencio_hide_preadd_banner') !== 'true';
-    } catch {
-      return true;
-    }
-  });
-
-  const dismissPreAddBanner = () => {
-    setShowPreAddBanner(false);
-    try {
-      localStorage.setItem('eu_gerencio_hide_preadd_banner', 'true');
-    } catch {
-      // Keep the banner dismissed for this session if storage is unavailable.
-    }
-  };
-
+  const [isCatalogImportOpen, setIsCatalogImportOpen] = useState(false);
 
   const categories = useMemo(() => {
     return getAllCategories(products.map(p => p.category));
@@ -634,195 +613,28 @@ export default function Stock() {
     }
   };
 
-  const [isInsertingPhotoProducts, setIsInsertingPhotoProducts] = useState<boolean>(false);
-
-  const handleImportStandardCatalog = async () => {
-    if (catalogImportInProgress.current) return;
-    catalogImportInProgress.current = true;
-    setIsImportingCatalog(true);
-    try {
-      const count = await importStandardCatalog();
-      if (count > 0) showToast(`✓ ${count} produtos adicionados ao estoque com sucesso!`);
-      else showToast('O catálogo padrão já está no seu estoque. Nenhum produto foi duplicado.');
-    } catch (error) {
-      showActionError(error, 'Não foi possível confirmar a importação. Confira o estoque e a conexão antes de repetir.');
-    } finally {
-      catalogImportInProgress.current = false;
-      setIsImportingCatalog(false);
-    }
-  };
-
-  const handleInsertPhotoProductsDirectly = async () => {
-    setIsInsertingPhotoProducts(true);
-    try {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const existingLower = new Set(products.map(p => p.name.toLowerCase().trim()));
-      const toInsert = PRELOADED_PRODUCTS.filter(p => !existingLower.has(p.name.toLowerCase().trim()));
-
-      if (toInsert.length === 0) {
-        alert('Todos os produtos das fotos já foram cadastrados no seu estoque anteriormente!');
-        setIsInsertingPhotoProducts(false);
-        return;
-      }
-
-      const payload: Omit<Product, 'id' | 'ownerId' | 'createdAt' | 'updatedAt'>[] = toInsert.map(p => ({
-        name: p.name,
-        type: p.type,
-        category: p.category,
-        purchaseForm: p.purchaseForm,
-        unitsPerPackage: getPackageUnits(p),
-        unitCost: p.unitCost,
-        stock: 0, // Aguardando contagem de estoque
-        safetyStock: p.safetyStock,
-        maxStock: p.maxStock,
-        initialStock: 0,
-        initialStockDate: todayStr,
-        dailyAverageSales: p.dailyAverageSales,
-        replacementDays: p.replacementDays,
-        basePrice: p.basePrice,
-        pricePackage: p.pricePackage,
-        pricePack: p.pricePack,
-        priceCart: p.priceCart,
-        priceHalfCart: p.priceHalfCart,
-        priceUnit: p.priceUnit
-      }));
-
-      const count = await addMultipleProducts(payload);
-      recordMovement({
-        type: 'product_create',
-        description: `Carga de produtos: +${count} produtos do catálogo cadastrados no estoque com valores de venda completos.`,
-        quantity: count
-      }).catch(() => {});
-      showToast(`✓ ${count} produtos do catálogo cadastrados com sucesso com os valores de venda certinhos! Você já pode fazer a contagem.`);
-    } catch (err: any) {
-      showActionError(err, 'Não foi possível confirmar o cadastro dos produtos. Confira o estoque antes de repetir.');
-    } finally {
-      setIsInsertingPhotoProducts(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
 
 
       {/* Header & Metrics */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">{v('stock.title', 'Controle de Estoque & Reposição')}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Gestão com base na {v('stock.initialDate', 'data do estoque inicial').toLowerCase()} e limites de {v('stock.max', 'estoque máximo').toLowerCase()} para compras precisas.
           </p>
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
-          <button
-            onClick={() => setIsMonthlyTurnoverOpen(true)}
-            className="flex-1 sm:flex-none bg-surface border border-border hover:bg-muted text-foreground px-3.5 py-2.5 rounded-xl flex items-center justify-center gap-2 font-medium cursor-pointer transition-colors text-sm shadow-xs"
-            title={`Atualizar a ${v('stock.initialDate', 'data do estoque inicial').toLowerCase()} para a ${v('stock.turnoverAction', 'virada de mês').toLowerCase()}`}
-          >
-            <Calendar className="w-4 h-4 text-primary" />
-            <span>{v('stock.turnoverAction', 'Virada de Mês')}</span>
-          </button>
-
-          <Link
-            to="/compras"
-            className="flex-1 sm:flex-none bg-surface border border-border hover:bg-muted text-foreground px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 font-medium cursor-pointer transition-colors text-sm shadow-xs"
-          >
-            <ShoppingBag className="w-4 h-4 text-primary" />
-            <span>{v('purchases.title', 'Compras de Reposição')}</span>
-          </Link>
-
-          <button
-            type="button"
-            onClick={handleImportStandardCatalog}
-            disabled={isImportingCatalog}
-            title="Importa o catálogo com estoque zerado e preços de referência editáveis. Produtos existentes são preservados."
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-500/10 px-4 py-2.5 text-sm font-bold text-amber-700 hover:bg-amber-500/20 disabled:cursor-wait disabled:opacity-50 dark:border-amber-800 dark:text-amber-400"
-          >
-            {isImportingCatalog ? <><Loader2 className="h-4 w-4 animate-spin" /><span role="status">Importando catálogo...</span></> : '📦 Importar Catálogo Padrão (100+ Produtos)'}
-          </button>
-
-          <button
-            onClick={() => setIsPreAddModalOpen(true)}
-            className="flex-1 sm:flex-none bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800/60 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 font-bold cursor-pointer transition-colors text-sm shadow-xs"
-            title="Pré-adicionar produtos de alta rotação ou importar fotos de tabelas e notas"
-          >
-            <Sparkles className="w-4 h-4 text-amber-500" />
-            <span>Pré-Adicionar / Fotos</span>
-          </button>
-
-          <button
-            onClick={() => setIsCameraModalOpen(true)}
-            className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 font-bold cursor-pointer transition-all text-sm shadow-sm"
-            title="Tirar foto do produto com a câmera do celular ou computador para preencher apenas nome e categoria automaticamente"
-          >
-            <Camera className="w-4 h-4" />
-            <span>📸 Cadastrar por Foto (IA)</span>
-          </button>
-
-          <button 
-            onClick={() => openModal()} 
-            className="flex-1 sm:flex-none bg-primary text-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 hover:opacity-90 font-medium cursor-pointer shadow-sm text-sm"
-          >
-            <Plus className="w-4 h-4"/> {v('entity.new', `Novo ${entityName()}`)}
-          </button>
+        <div className="grid w-full gap-2 sm:grid-cols-3">
+          <button type="button" onClick={() => setIsCameraModalOpen(true)}
+            className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-emerald-700">📸 Cadastrar por Foto (IA)</button>
+          <button type="button" onClick={() => openModal()}
+            className="flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-sm font-semibold hover:bg-muted"><Plus className="h-4 w-4" />Novo Produto</button>
+          <button type="button" onClick={() => setIsCatalogImportOpen(true)}
+            className="rounded-xl border border-border bg-surface px-4 py-3 text-sm font-semibold hover:bg-muted">📁 Importar Catálogo (PDF ou Foto da Galeria)</button>
         </div>
       </div>
-
-      {/* Catálogo pré-cadastrado: a dispensa fica salva neste navegador. */}
-      {showPreAddBanner && (
-        <div className="relative pr-12 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-surface border border-amber-300 dark:border-amber-800/60 rounded-2xl py-4 pl-4 sm:py-5 sm:pl-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
-          <button
-            type="button"
-            aria-label="Ocultar banner de produtos pré-cadastrados"
-            onClick={dismissPreAddBanner}
-            className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-amber-500/10 hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
-          >
-            <X className="h-4 w-4" />
-          </button>
-          <div className="flex items-start gap-3.5">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-sm sm:text-base font-bold text-foreground">
-                  Colocar Todos os Produtos Pré-Cadastrados no Estoque
-                </h3>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                  Catálogo Completo & Valores Certinhos
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl">
-                Cigarros com valores nos 4 formatos (Maço, Carteira, Meia e Avulso), Bebidas, Doces, Sedas, Isqueiros e Mercearia já configurados com seus valores de venda. Clique no botão ao lado para cadastrar todos os produtos de uma só vez!
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0">
-            <button
-              onClick={() => setIsPreAddModalOpen(true)}
-              className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl border border-border bg-surface hover:bg-muted text-foreground text-xs font-semibold cursor-pointer transition-colors shadow-2xs"
-            >
-              Ver Detalhes / Filtros
-            </button>
-            <button
-              onClick={handleInsertPhotoProductsDirectly}
-              disabled={isInsertingPhotoProducts}
-              className="flex-1 sm:flex-none px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              {isInsertingPhotoProducts ? (
-                <span>Cadastrando...</span>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  <span>Colocar Todos os Produtos Agora</span>
-                </>
-      )}
-          </button>
-        </div>
-      </div>
-
-      )}
 
       {/* Dica de Bolso para Estoque */}
       <PocketTip
@@ -987,6 +799,14 @@ export default function Stock() {
           </div>
         </div>
       )}
+
+      <details className="rounded-xl border border-border bg-surface p-3">
+        <summary className="cursor-pointer text-sm font-medium">Outras ações do estoque</summary>
+        <div className="mt-3 flex flex-wrap gap-3">
+          <button type="button" onClick={() => setIsMonthlyTurnoverOpen(true)} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"><Calendar className="h-4 w-4" />Virada de Mês</button>
+          <Link to="/compras" className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"><ShoppingBag className="h-4 w-4" />Compras de Reposição</Link>
+        </div>
+      </details>
 
       {/* Filters Bar */}
       <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between flex-wrap">
@@ -3549,15 +3369,8 @@ export default function Stock() {
         </div>
       )}
 
-      {/* Pre-Add Products & Image Import Modal */}
-      <PreAddProductsModal
-        isOpen={isPreAddModalOpen}
-        onClose={() => setIsPreAddModalOpen(false)}
-        onSuccess={(count) => {
-          showToast(`${count} produtos pré-adicionados com sucesso ao estoque!`);
-        }}
-        existingProductNames={products.map(p => p.name)}
-      />
+      <CatalogImportModal isOpen={isCatalogImportOpen} onClose={() => setIsCatalogImportOpen(false)}
+        availableCategories={categories} existingProductNames={products.map(product => product.name)} />
 
       {/* Camera AI Recognition Modal */}
       <CameraCaptureModal

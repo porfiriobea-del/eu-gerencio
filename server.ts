@@ -1,5 +1,6 @@
 import express from 'express';
 import { recognizeProduct } from './server/geminiRecognition';
+import { recognizeCatalog } from './api/gemini/recognize-catalog';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -13,6 +14,7 @@ const port = 3000;
 app.use(express.json({ limit: '25mb' }));
 
 app.post('/api/gemini/recognize-product', recognizeProduct);
+app.post('/api/gemini/recognize-catalog', recognizeCatalog);
 
 // Vite middleware in dev or static files in production
 const isProduction = process.env.NODE_ENV === 'production';

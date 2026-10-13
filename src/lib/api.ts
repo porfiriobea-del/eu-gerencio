@@ -1,5 +1,5 @@
-import { catalogKey } from './standardCatalog';
-import { executeCatalogImport } from './catalogImport';
+import { type CatalogProduct } from './standardCatalog';
+import { executeCatalogImport, catalogDocumentId } from './catalogImport';
 import { supabase } from './supabase';
 import { withActionDeadline, ConfirmationTimeoutError } from './actionFeedback';
 import { normalizeCigaretteStock, cigaretteStockFields, isValidStockQuantity } from './productUnits';
@@ -402,36 +402,60 @@ export const deleteProduct = withActionDeadline(async (id: string, productName?:
   }
 });
 
-/** Confirm the Supabase bulk insert before creating products used by the existing Stock/POS. */
-export const importStandardCatalog = withActionDeadline(async (): Promise<number> => {
-  const ownerId = getEffectiveOwnerId();
-  if (!ownerId) throw new Error('Entre na sua conta para importar o catálogo.');
-  const count = await executeCatalogImport(ownerId, {
+function catalogStore(ownerId: string) {
+  return {
     readExisting: async () => {
       const snapshot = await getDocs(query(collection(db, 'products'), where('ownerId', '==', ownerId)));
       return snapshot.docs.map(record => ({ name: String(record.data().name || '') }));
     },
-    insertSupabase: async rows => {
+    insertSupabase: async (rows: ReturnType<typeof import('./standardCatalog').toSupabaseCatalogRows>) => {
       // One request, full metadata, scoped idempotency key; preserve existing stock/prices.
       const { error } = await supabase.from('PRODUTOS').upsert(rows, {
         onConflict: 'catalog_owner_id,catalog_key', ignoreDuplicates: true
       });
       if (error) throw new Error('Não foi possível confirmar a importação no Supabase. Confira a conexão e a configuração do catálogo.');
     },
-    insertStock: missing => runTransaction(db, async transaction => {
+    insertStock: async (missing: CatalogProduct[]) => {
+      const refs = await Promise.all(missing.map(async product => doc(db, 'products', await catalogDocumentId(ownerId, product.name))));
       // Deterministic IDs make retries safe after a partial confirmation.
-      const refs = missing.map(product => doc(db, 'products', `${ownerId}_${catalogKey(product.name)}`));
-      const current = await Promise.all(refs.map(ref => transaction.get(ref)));
-      const now = Date.now();
-      let added = 0;
-      for (let index = 0; index < missing.length; index++) {
-        if (current[index].exists()) continue;
-        transaction.set(refs[index], { ...missing[index], ownerId, createdAt: now, updatedAt: now });
-        added++;
-      }
-      return added;
-    })
-  });
+      return runTransaction(db, async transaction => {
+        const current = await Promise.all(refs.map(ref => transaction.get(ref)));
+        const now = Date.now();
+        let added = 0;
+        for (let index = 0; index < missing.length; index++) {
+          if (current[index].exists()) continue;
+          transaction.set(refs[index], { ...missing[index], ownerId, createdAt: now, updatedAt: now });
+          added++;
+        }
+        return added;
+      });
+    }
+  };
+}
+
+/** Supplier drafts are reviewed by the merchant; never seed generic products or fictitious stock. */
+export const importSupplierCatalog = withActionDeadline(async (products: CatalogProduct[]): Promise<number> => {
+  const ownerId = getEffectiveOwnerId();
+  if (!ownerId) throw new Error('Entre na sua conta para importar o catálogo.');
+  if (!products.length || products.length > 200) throw new Error('Importe entre 1 e 200 produtos por vez.');
+  for (const product of products) {
+    if (!product.name.trim() || product.name.length > 100 || !product.category.trim() || product.category.length > 50 ||
+        !Number.isFinite(product.unitCost) || product.unitCost < 0 || !Number.isFinite(product.basePrice) || product.basePrice <= 0 ||
+        product.stock !== 0 || !['comum', 'cigarro'].includes(product.type) ||
+        (product.type === 'cigarro' && (product.stockUnit !== 'carteira' || product.unitsPerPackage !== 10))) {
+      throw new Error('Confira os nomes, custos, medidas e preços dos produtos antes de importar.');
+    }
+  }
+  const count = await executeCatalogImport(ownerId, catalogStore(ownerId), products);
+  recordMovement({ type: 'product_create', description: `Catálogo do fornecedor: ${count} produtos cadastrados.`, quantity: count }).catch(() => {});
+  return count;
+}, 60000);
+
+/** Confirm the Supabase bulk insert before creating products used by the existing Stock/POS. */
+export const importStandardCatalog = withActionDeadline(async (): Promise<number> => {
+  const ownerId = getEffectiveOwnerId();
+  if (!ownerId) throw new Error('Entre na sua conta para importar o catálogo.');
+  const count = await executeCatalogImport(ownerId, catalogStore(ownerId));
   recordMovement({ type: 'product_create', description: `Importação do catálogo padrão: ${count} produtos.`, quantity: count }).catch(() => {});
   return count;
 }, 60000);

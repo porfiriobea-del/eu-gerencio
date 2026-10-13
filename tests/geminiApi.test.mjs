@@ -60,3 +60,30 @@ test('missing Gemini key permits startup but returns an explicit service error',
   t.after(stop);
   assert.equal((await post({ imageBase64: encode('image') })).status, 503);
 });
+
+
+test('catalogue API reads PDF and image lists, keeps unknown prices null and handles quota/invalid output', async t => {
+  const stop = await startServer(true);
+  t.after(stop);
+  const postCatalog = async body => {
+    const response = await fetch('http://127.0.0.1:3000/api/gemini/recognize-catalog', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    return { status: response.status, body: await response.json() };
+  };
+  for (const mimeType of ['image/jpeg', 'application/pdf']) {
+    const result = await postCatalog({ fileBase64: encode(mimeType === 'application/pdf' ? '%PDF-catalog' : 'catalog'), mimeType, availableCategories: ['Bebidas'] });
+    assert.equal(result.status, 200);
+    assert.equal(result.body.products.length, 2);
+    assert.equal(result.body.products[0].purchaseCost, 60);
+    assert.equal(result.body.products[0].category, 'Bebidas');
+    assert.equal(result.body.products[0].basePrice, null);
+  }
+  assert.equal((await postCatalog({ fileBase64: encode('fake-pdf'), mimeType: 'application/pdf' })).status, 400);
+  assert.equal((await postCatalog({ fileBase64: 'data:image/jpeg;base64,aW1hZ2U=', mimeType: 'image/jpeg' })).status, 400);
+  for (const [marker, expected] of [['catalog-empty', 422], ['catalog-invalid-json', 502], ['catalog-negative', 502], ['catalog-quota', 429]]) {
+    const result = await postCatalog({ fileBase64: encode(marker), mimeType: 'image/jpeg' });
+    assert.equal(result.status, expected);
+    assert.equal(result.body.success, undefined);
+  }
+});
