@@ -3,11 +3,13 @@ import type { Request, Response } from 'express';
 
 // Analyze only the product label. Never fabricate a successful recognition.
 export async function recognizeProduct(req: Request, res: Response) {
+  let model = process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash';
+  const fallbackModel = 'gemini-3.1-flash-lite';
   const requestId = crypto.randomUUID();
   const startedAt = Date.now();
   res.setHeader('X-Request-ID', requestId);
   const diagnose = (code: string, details: Record<string, unknown> = {}) => {
-    console.error('[Gemini product recognition]', { requestId, code, model: 'gemini-2.5-flash', elapsedMs: Date.now() - startedAt, ...details });
+    console.error('[Gemini product recognition]', { requestId, code, model, elapsedMs: Date.now() - startedAt, ...details });
   };
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -37,9 +39,8 @@ export async function recognizeProduct(req: Request, res: Response) {
 
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{ role: 'user', parts: [
+    const parameters = {
+      contents: [{ role: 'user' as const, parts: [
         { text: `Identifique o produto de varejo brasileiro usando a evidência visual desta foto.
 1. Leia QUALQUER TEXTO visível: MARCA, RÓTULO, denominação, descrição comercial, sabor, volume e detalhes da EMBALAGEM. Aceite fotos da frente, verso ou lateral e combine as pistas legíveis para identificar nome e categoria.
 2. Use a LISTA DE INGREDIENTES como pista para classificar o produto quando a frente não estiver visível. Não invente uma marca ou versão ausente.
@@ -59,7 +60,17 @@ Retorne APENAS {"name": string, "category": string}. Nunca estime preço, custo,
         },
         httpOptions: { timeout: 30000, retryOptions: { attempts: 1 } }
       }
-    });
+    };
+    let response;
+    try {
+      response = await ai.models.generateContent({ ...parameters, model });
+    } catch (error: unknown) {
+      const status = Number((error as { status?: number; code?: number })?.status || (error as { code?: number })?.code);
+      if (status !== 404 || model === fallbackModel) throw error;
+      console.warn('[Gemini product recognition]', { code: 'MODEL_FALLBACK', model, fallbackModel, providerStatus: status });
+      model = fallbackModel;
+      response = await ai.models.generateContent({ ...parameters, model });
+    };
 
     let product;
     try {
