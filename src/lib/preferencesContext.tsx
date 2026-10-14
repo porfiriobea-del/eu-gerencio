@@ -486,6 +486,21 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
     return currentMode === 'basic';
   });
 
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const data = (event as CustomEvent).detail;
+      if (data.theme) setThemePresetState(normalizeThemePreset(data.theme));
+      if (typeof data.darkMode === 'boolean') setDarkModeState(data.darkMode);
+      if (['technical','neutral','basic'].includes(data.languageMode)) setLanguageModeState(data.languageMode);
+      if (['pt','en','es'].includes(data.language)) setLanguageState(data.language);
+      if (['normal','large','xlarge'].includes(data.fontSize)) setFontSizeState(data.fontSize);
+      if (typeof data.simpleViewMode === 'boolean') setSimpleViewModeState(data.simpleViewMode);
+    };
+    window.addEventListener('cloud-preferences', receive);
+    return () => window.removeEventListener('cloud-preferences', receive);
+  }, []);
+  const persistPreference = (detail: Record<string, unknown>) => window.dispatchEvent(new CustomEvent('cloud-preference-change', { detail }));
+
   const isBasicMode = languageMode === 'basic';
 
   // Apply Dark Mode class to <html> root
@@ -523,11 +538,13 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
     localStorage.setItem('app_lang', lang);
+    persistPreference({ language: lang });
   };
 
   const setLanguageMode = (mode: LanguageMode) => {
     setLanguageModeState(mode);
     localStorage.setItem('app_lang_mode', mode);
+    persistPreference({ languageMode: mode, ...(mode === 'basic' ? { simpleViewMode: true } : {}) });
     if (mode === 'basic') {
       setSimpleViewModeState(true);
       localStorage.setItem('app_simple_view_mode', 'true');
@@ -537,29 +554,27 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
   const setSimpleViewMode = (simple: boolean) => {
     setSimpleViewModeState(simple);
     localStorage.setItem('app_simple_view_mode', String(simple));
+    persistPreference({ simpleViewMode: simple });
   };
 
-  const toggleSimpleViewMode = () => {
-    setSimpleViewModeState(prev => {
-      const next = !prev;
-      localStorage.setItem('app_simple_view_mode', String(next));
-      return next;
-    });
-  };
+  const toggleSimpleViewMode = () => setSimpleViewMode(!simpleViewMode);
 
   const setFontSize = (size: FontSize) => {
     setFontSizeState(size);
     localStorage.setItem('app_fontsize', size);
+    persistPreference({ fontSize: size });
   };
 
   const setThemePreset = (preset: ThemePreset) => {
     setThemePresetState(preset);
     localStorage.setItem('app_theme_preset', preset);
+    persistPreference({ theme: preset });
   };
 
   const setDarkMode = (enabled: boolean) => {
     setDarkModeState(enabled);
     localStorage.setItem('app_dark_mode', String(enabled));
+    persistPreference({ darkMode: enabled });
   };
 
   const t = (key: string): string => {

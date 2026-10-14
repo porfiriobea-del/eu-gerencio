@@ -49,29 +49,26 @@ test('Supabase payload retains all four prices and separates catalog keys by own
   assert.throws(() => toSupabaseCatalogRows([product], ''));
 });
 
-test('bulk import waits for both databases and returns only confirmed Stock additions', async () => {
+test('bulk import returns only confirmed cloud additions', async () => {
   const calls = [];
   const count = await executeCatalogImport('owner', {
     readExisting: async () => { calls.push('read'); return catalog.slice(0, 2); },
-    insertSupabase: async rows => { calls.push('supabase'); assert.equal(rows.length, catalog.length - 2); },
-    insertStock: async rows => { calls.push('stock'); assert.equal(rows.length, catalog.length - 2); return rows.length - 1; }
+    insertProducts: async rows => { calls.push('cloud'); assert.equal(rows.length, catalog.length - 2); return rows.length - 1; }
   });
-  assert.deepEqual(calls, ['read', 'supabase', 'stock']);
+  assert.deepEqual(calls, ['read', 'cloud']);
   assert.equal(count, catalog.length - 3);
 });
 
-test('failed Supabase confirmation prevents Stock writes and reports no success', async () => {
+test('failed Supabase confirmation rejects the import without reporting success', async () => {
   await assert.rejects(executeCatalogImport('owner', {
     readExisting: async () => [],
-    insertSupabase: async () => { throw new Error('Denied'); },
-    insertStock: async () => assert.fail('Stock must not be written')
+    insertProducts: async () => { throw new Error('Denied'); }
   }), /Denied/);
 });
 
 test('reimport of a complete catalogue performs no writes', async () => {
   assert.equal(await executeCatalogImport('owner', {
     readExisting: async () => catalog,
-    insertSupabase: async () => assert.fail('No duplicated Supabase writes'),
-    insertStock: async () => assert.fail('No duplicated Stock writes')
+    insertProducts: async () => assert.fail('No duplicated cloud writes')
   }), 0);
 });

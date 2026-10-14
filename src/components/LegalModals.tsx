@@ -88,12 +88,12 @@ export function PrivacyModal({ isOpen, onClose }: { isOpen: boolean, onClose: ()
       <p>Seus dados são utilizados exclusivamente para:</p>
       <ul className="list-disc pl-5 space-y-1">
         <li>Fornecer, manter e melhorar o aplicativo.</li>
-        <li>Sincronizar seus dados entre seus dispositivos usando infraestrutura de nuvem segura (Firebase).</li>
+        <li>Sincronizar seus dados entre seus dispositivos usando infraestrutura do Supabase.</li>
         <li>Permitir a funcionalidade offline.</li>
       </ul>
 
       <h3 className="font-semibold text-gray-800 text-base mt-4">3. Proteção de Dados</h3>
-      <p>Implementamos medidas de segurança rígidas (regras de Firestore e autenticação do Google) para garantir que apenas você tenha acesso aos dados da sua conta. Nós não vendemos seus dados para terceiros.</p>
+      <p>Implementamos medidas de segurança rígidas (políticas de acesso por loja no Supabase e autenticação do Google) para garantir que apenas você tenha acesso aos dados da sua conta. Nós não vendemos seus dados para terceiros.</p>
 
       <h3 className="font-semibold text-gray-800 text-base mt-4">4. Seus Direitos</h3>
       <p>Você tem o direito de acessar, corrigir ou excluir seus dados pessoais a qualquer momento, diretamente através das configurações do aplicativo ou entrando em contato com o suporte.</p>

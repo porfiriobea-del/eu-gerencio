@@ -1,8 +1,10 @@
-import { auth, db } from './firebase';
-import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
+import { getEffectiveOwnerId } from './api';
+import { auth } from './firebase';
+import { db } from './cloudStore';
+import { collection, getDocs, query, where, doc, getDoc } from './cloudStore';
 import { Product, Customer, Sale, Payment, Settings, Purchase } from '../types';
 
-export interface FirestoreBackupPayload {
+export interface CloudBackupPayload {
   version: string;
   exportedAt: string;
   exportedAtTimestamp: number;
@@ -34,10 +36,10 @@ export interface FirestoreBackupPayload {
 const BACKUP_SCHEDULE_KEY = 'eu_gerencio_last_daily_backup';
 
 /**
- * Collects all user Firestore data into a structured backup object.
+ * Collects the active store Supabase data into a structured backup object.
  */
-export async function generateFullUserDataBackup(): Promise<FirestoreBackupPayload> {
-  const uid = auth.currentUser?.uid;
+export async function generateFullUserDataBackup(): Promise<CloudBackupPayload> {
+  const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Usuário não autenticado para realizar o backup.');
 
   // Fetch Settings
@@ -88,7 +90,7 @@ export async function generateFullUserDataBackup(): Promise<FirestoreBackupPaylo
     version: '1.0.0',
     exportedAt: now.toISOString(),
     exportedAtTimestamp: now.getTime(),
-    environment: 'Firebase Firestore Cloud',
+    environment: 'Supabase Cloud',
     store: {
       ownerId: uid,
       storeName: settingsData?.storeName || 'Meu Comércio',
@@ -117,14 +119,14 @@ export async function generateFullUserDataBackup(): Promise<FirestoreBackupPaylo
 /**
  * Downloads the backup payload directly as a secure JSON snapshot file.
  */
-export function downloadBackupJsonFile(backup: FirestoreBackupPayload) {
+export function downloadBackupJsonFile(backup: CloudBackupPayload) {
   const storeSlug = (backup.store.storeName || 'loja')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]/g, '-');
   const dateStr = new Date(backup.exportedAtTimestamp).toISOString().split('T')[0];
-  const filename = `backup-firestore-${storeSlug}-${dateStr}.json`;
+  const filename = `backup-supabase-${storeSlug}-${dateStr}.json`;
 
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -139,11 +141,11 @@ export function downloadBackupJsonFile(backup: FirestoreBackupPayload) {
 
 /**
  * Checks if a daily automated backup is due (24h after last run).
- * If due, runs the backup in the background, saves the snapshot to local storage
- * and updates the timestamp.
+ * If due, checks the cloud data in the background and records only its last check timestamp.
+ * Complete JSON backups are downloaded explicitly, never used as browser database.
  */
-export async function checkAndRunDailyAutomatedBackup(): Promise<{ executed: boolean; lastBackupAt: number | null; metrics?: FirestoreBackupPayload['metrics'] }> {
-  const uid = auth.currentUser?.uid;
+export async function checkAndRunDailyAutomatedBackup(): Promise<{ executed: boolean; lastBackupAt: number | null; metrics?: CloudBackupPayload['metrics'] }> {
+  const uid = getEffectiveOwnerId();
   if (!uid) return { executed: false, lastBackupAt: null };
 
   const storageKey = `${BACKUP_SCHEDULE_KEY}_${uid}`;
@@ -161,13 +163,6 @@ export async function checkAndRunDailyAutomatedBackup(): Promise<{ executed: boo
   // Backup is due or never ran today
   try {
     const backup = await generateFullUserDataBackup();
-    // Cache the latest snapshot for rapid emergency recovery
-    try {
-      const snapshotKey = `eu_gerencio_latest_snapshot_${uid}`;
-      localStorage.setItem(snapshotKey, JSON.stringify(backup));
-    } catch (quotaErr) {
-      console.warn('Backup snapshot local cache omitted due to storage quota:', quotaErr);
-    }
     localStorage.setItem(storageKey, String(now));
     return { executed: true, lastBackupAt: now, metrics: backup.metrics };
   } catch (err) {
@@ -177,7 +172,7 @@ export async function checkAndRunDailyAutomatedBackup(): Promise<{ executed: boo
 }
 
 export function getLastBackupTimestamp(): number | null {
-  const uid = auth.currentUser?.uid;
+  const uid = getEffectiveOwnerId();
   if (!uid) return null;
   const storageKey = `${BACKUP_SCHEDULE_KEY}_${uid}`;
   const last = localStorage.getItem(storageKey);

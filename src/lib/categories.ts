@@ -1,3 +1,4 @@
+import { showActionError } from './actionFeedback';
 export interface BusinessSector {
   id: string;
   name: string;
@@ -107,94 +108,37 @@ export const DEFAULT_CATEGORIES: string[] = [
   'Bebidas'
 ];
 
-const STORAGE_KEY = 'eu_gerencio_custom_categories';
-const SECTOR_STORAGE_KEY = 'eu_gerencio_business_sector';
-
-export function getSavedBusinessSector(): string {
-  try {
-    return localStorage.getItem(SECTOR_STORAGE_KEY) || 'mercearia';
-  } catch (e) {
-    return 'mercearia';
-  }
+// Hydrated from the logged store. Only transient UI state is kept in memory.
+let cloudOwnerId: string | undefined;
+let customCategories: string[] = [];
+let businessSector = 'mercearia';
+export function hydrateCloudCategories(ownerId: string | undefined, categories: string[], sector: string) {
+  cloudOwnerId = ownerId;
+  customCategories = Array.from(new Set(categories.filter(value => typeof value === 'string' && value.trim()).map(value => value.trim())));
+  businessSector = sector;
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('cloud-categories'));
 }
-
-export function saveBusinessSector(sectorId: string): void {
-  try {
-    localStorage.setItem(SECTOR_STORAGE_KEY, sectorId);
-  } catch (e) {
-    console.warn('Could not save business sector to localStorage', e);
-  }
+function persist(values: Record<string, unknown>, rollback: () => void = () => {}) {
+  if (!cloudOwnerId) return;
+  const ownerId = cloudOwnerId;
+  void import('./cloudStore').then(({ db, doc, updateDoc }) => updateDoc(doc(db, 'settings', ownerId), values))
+    .catch(error => { rollback(); showActionError(error, 'Não foi possível salvar as categorias da loja. Tente novamente.'); if (typeof window !== 'undefined') window.dispatchEvent(new Event('cloud-categories')); });
 }
-
-export function getCustomCategories(): string[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    return [];
-  }
-}
-
+export function getSavedBusinessSector(): string { return businessSector; }
+export function saveBusinessSector(sectorId: string) { const previous = businessSector; businessSector = sectorId; persist({ businessSector: sectorId }, () => { businessSector = previous; }); }
+export function getCustomCategories(): string[] { return [...customCategories]; }
 export function setCustomCategories(categories: string[]): string[] {
-  const clean = Array.from(new Set(categories.map(c => c.trim()).filter(Boolean)));
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(clean));
-  } catch (e) {
-    console.warn('Could not set custom categories to localStorage', e);
-  }
-  return clean;
+  const previous = customCategories;
+  customCategories = Array.from(new Set(categories.map(value => value.trim()).filter(Boolean)));
+  persist({ customCategories }, () => { customCategories = previous; });
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('cloud-categories'));
+  return [...customCategories];
 }
-
-export function saveCustomCategory(categoryName: string): string[] {
-  const trimmed = categoryName.trim();
-  if (!trimmed) return getAllCategories();
-
-  const current = getCustomCategories();
-  if (!current.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
-    const updated = [...current, trimmed];
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    } catch (e) {
-      console.warn('Could not save category to localStorage', e);
-    }
-  }
+export function saveCustomCategory(name: string): string[] {
+  if (name.trim() && !customCategories.some(value => value.toLowerCase() === name.trim().toLowerCase())) setCustomCategories([...customCategories, name.trim()]);
   return getAllCategories();
 }
-
-export function removeCustomCategory(categoryName: string): string[] {
-  const trimmed = categoryName.trim().toLowerCase();
-  const current = getCustomCategories();
-  const updated = current.filter(c => c.toLowerCase() !== trimmed);
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  } catch (e) {
-    console.warn('Could not remove category from localStorage', e);
-  }
-  return updated;
-}
-
+export function removeCustomCategory(name: string): string[] { return setCustomCategories(customCategories.filter(value => value.toLowerCase() !== name.trim().toLowerCase())); }
 export function getAllCategories(productCategories: string[] = []): string[] {
-  const custom = getCustomCategories();
-  const set = new Set<string>();
-
-  // If custom categories are explicitly set, prioritize them
-  if (custom.length > 0) {
-    custom.forEach(c => set.add(c));
-  } else {
-    // Fallback to default
-    DEFAULT_CATEGORIES.forEach(c => set.add(c));
-  }
-
-  // Always keep categories that already exist in products
-  productCategories.forEach(c => {
-    if (c && c.trim()) set.add(c.trim());
-  });
-
-  if (!set.has('Diversos')) {
-    set.add('Diversos');
-  }
-
-  return Array.from(set);
+  return Array.from(new Set([...(customCategories.length ? customCategories : DEFAULT_CATEGORIES), ...productCategories.filter(Boolean), 'Diversos']));
 }

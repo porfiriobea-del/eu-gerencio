@@ -91,14 +91,15 @@ export default function Onboarding({ user, onComplete }: { user: User, onComplet
       saveBusinessSector(selectedSectorId);
       setCustomCategories(sectorCategories);
 
-      // 3. Save store profile in Firestore settings
+      // 3. Save store profile in Supabase settings
       await saveStoreProfile({ 
         storeName: storeName.trim(), 
         cnpj: cnpj.trim(), 
         phone: phone.trim(), 
         email,
         languageMode: selectedMode,
-        businessSector: selectedSectorId
+        businessSector: selectedSectorId,
+        customCategories: sectorCategories
       });
 
       // 4. If merchant chose to pre-load products (e.g. for Mercearia)

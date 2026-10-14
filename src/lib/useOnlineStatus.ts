@@ -50,6 +50,7 @@ export function useOnlineStatus(): OnlineStatusState {
 
   const syncNow = useCallback(() => {
     if (typeof navigator !== 'undefined' && navigator.onLine) {
+      window.dispatchEvent(new Event('cloud-refresh'));
       setIsReconnecting(true);
       setTimeout(() => {
         setIsReconnecting(false);
@@ -65,19 +66,19 @@ export function useOnlineStatus(): OnlineStatusState {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    const handleFirestoreOfflineEvent = () => {
+    const handleCloudOfflineEvent = () => {
       setWasOffline(true);
       setIsOnline(false);
     };
-    const handleFirestoreOnlineEvent = () => {
+    const handleCloudOnlineEvent = () => {
       setIsOnline(true);
       setWasOffline(false);
       setReconnectedJustNow(true);
       setTimeout(() => setReconnectedJustNow(false), 4000);
     };
 
-    window.addEventListener('firestore-offline', handleFirestoreOfflineEvent);
-    window.addEventListener('firestore-online', handleFirestoreOnlineEvent);
+    window.addEventListener('cloud-offline', handleCloudOfflineEvent);
+    window.addEventListener('cloud-online', handleCloudOnlineEvent);
 
     // Initial check
     if (!navigator.onLine) {
@@ -87,8 +88,8 @@ export function useOnlineStatus(): OnlineStatusState {
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      window.removeEventListener('firestore-offline', handleFirestoreOfflineEvent);
-      window.removeEventListener('firestore-online', handleFirestoreOnlineEvent);
+      window.removeEventListener('cloud-offline', handleCloudOfflineEvent);
+      window.removeEventListener('cloud-online', handleCloudOnlineEvent);
     };
   }, [handleOnline, handleOffline]);
 

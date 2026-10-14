@@ -3,7 +3,7 @@
  * URL do Webhook: https://script.google.com/macros/s/AKfycbz_Tn-SPjYQgA2fTORqV64GHV_EfpGveOnbmpB9_uF-4_a432DrvfYJ3VyzzHv9S2DjfA/exec
  */
 
-export const GOOGLE_SHEETS_WEBHOOK_URL =
+export const GOOGLE_SHEETS_WEBHOOK_URL = ''; // Each store configures its own endpoint in Supabase.
   'https://script.google.com/macros/s/AKfycbz_Tn-SPjYQgA2fTORqV64GHV_EfpGveOnbmpB9_uF-4_a432DrvfYJ3VyzzHv9S2DjfA/exec';
 
 const STORAGE_KEY_WEBHOOK_URL = 'google_sheets_webhook_url';
@@ -36,103 +36,28 @@ export interface GoogleSheetsWebhookLog {
   url: string;
 }
 
-/**
- * Retorna a URL configurada do Webhook (ou a padrão fornecida)
- */
-export function getGoogleSheetsWebhookUrl(): string {
-  if (typeof window === 'undefined') return GOOGLE_SHEETS_WEBHOOK_URL;
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY_WEBHOOK_URL);
-    if (saved && saved.trim()) return saved.trim();
-  } catch {
-    // Fallback silencioso
-  }
-  return GOOGLE_SHEETS_WEBHOOK_URL;
+let cloudOwnerId: string | undefined;
+let cloudWebhookUrl = '';
+let cloudWebhookEnabled = false;
+let webhookLogs: GoogleSheetsWebhookLog[] = [];
+export function hydrateCloudSheets(ownerId: string | undefined, url = '', enabled = false) {
+  if (cloudOwnerId !== ownerId) webhookLogs = [];
+  cloudOwnerId = ownerId; cloudWebhookUrl = typeof url === 'string' ? url : ''; cloudWebhookEnabled = enabled;
 }
-
-/**
- * Salva uma nova URL de webhook se o usuário atualizar
- */
-export function setGoogleSheetsWebhookUrl(url: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    if (!url || !url.trim()) {
-      localStorage.removeItem(STORAGE_KEY_WEBHOOK_URL);
-    } else {
-      localStorage.setItem(STORAGE_KEY_WEBHOOK_URL, url.trim());
-    }
-  } catch (e) {
-    console.error('Falha ao salvar URL do webhook:', e);
-  }
+export const getGoogleSheetsWebhookUrl = () => cloudWebhookUrl;
+export const isGoogleSheetsWebhookEnabled = () => cloudWebhookEnabled;
+export function setGoogleSheetsWebhookUrl(url: string) {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cloud-preference-change', { detail: { googleSheetsWebhookUrl: url.trim() } }));
 }
-
-/**
- * Verifica se o webhook do Google Sheets está habilitado
- */
-export function isGoogleSheetsWebhookEnabled(): boolean {
-  if (typeof window === 'undefined') return true;
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY_WEBHOOK_ENABLED);
-    return saved === null ? true : saved === 'true';
-  } catch {
-    return true;
-  }
+export function setGoogleSheetsWebhookEnabled(enabled: boolean) {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cloud-preference-change', { detail: { googleSheetsWebhookEnabled: enabled } }));
 }
-
-/**
- * Ativa ou desativa o envio para o Google Sheets
- */
-export function setGoogleSheetsWebhookEnabled(enabled: boolean): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY_WEBHOOK_ENABLED, enabled ? 'true' : 'false');
-  } catch (e) {
-    console.error('Falha ao salvar estado do webhook:', e);
-  }
-}
-
-/**
- * Obtém o histórico dos últimos envios para a planilha
- */
-export function getGoogleSheetsLogs(): GoogleSheetsWebhookLog[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_WEBHOOK_LOGS);
-    if (raw) return JSON.parse(raw);
-  } catch {
-    // Ignora
-  }
-  return [];
-}
-
-/**
- * Limpa o histórico de logs do webhook
- */
-export function clearGoogleSheetsLogs(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.removeItem(STORAGE_KEY_WEBHOOK_LOGS);
-  } catch {
-    // Ignora
-  }
-}
+export const getGoogleSheetsLogs = () => [...webhookLogs];
+export const clearGoogleSheetsLogs = () => { webhookLogs = []; };
 
 function appendWebhookLog(entry: Omit<GoogleSheetsWebhookLog, 'id'>): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const logs = getGoogleSheetsLogs();
-    const newLog: GoogleSheetsWebhookLog = {
-      id: Math.random().toString(36).substring(2, 9),
-      ...entry
-    };
-    const updated = [newLog, ...logs].slice(0, 40);
-    localStorage.setItem(STORAGE_KEY_WEBHOOK_LOGS, JSON.stringify(updated));
-
-    // Notifica listeners no navegador
-    window.dispatchEvent(new CustomEvent('google-sheets-log-added', { detail: newLog }));
-  } catch {
-    // Ignora
-  }
+  webhookLogs = [{ ...entry, id: crypto.randomUUID() }, ...webhookLogs].slice(0, 100);
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('google-sheets-log-updated'));
 }
 
 /**
@@ -147,7 +72,8 @@ export async function postToGoogleSheets(
   }
 
   const webhookUrl = getGoogleSheetsWebhookUrl();
-  if (!webhookUrl) {
+  const requestOwnerId = cloudOwnerId;
+  if (!webhookUrl || !/^https:\/\//i.test(webhookUrl)) {
     return { success: false, message: 'URL do Webhook do Google Sheets não configurada.' };
   }
 
@@ -229,7 +155,7 @@ export async function postToGoogleSheets(
     });
 
     if (res.ok || res.type === 'opaque' || res.status === 200 || res.status === 302) {
-      appendWebhookLog({
+      if (requestOwnerId === cloudOwnerId) appendWebhookLog({
         timestamp: Date.now(),
         tipo: tipoStr,
         produto: produtoNome,
@@ -258,7 +184,7 @@ export async function postToGoogleSheets(
         mode: 'no-cors'
       });
 
-      appendWebhookLog({
+      if (requestOwnerId === cloudOwnerId) appendWebhookLog({
         timestamp: Date.now(),
         tipo: tipoStr,
         produto: produtoNome,
@@ -274,7 +200,7 @@ export async function postToGoogleSheets(
         message: 'Dados transmitidos com sucesso para a planilha Google Sheets.'
       };
     } catch (fallbackErr: any) {
-      appendWebhookLog({
+      if (requestOwnerId === cloudOwnerId) appendWebhookLog({
         timestamp: Date.now(),
         tipo: tipoStr,
         produto: produtoNome,

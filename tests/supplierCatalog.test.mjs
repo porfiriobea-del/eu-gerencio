@@ -48,8 +48,7 @@ test('custom imports contain only reviewed supplier items, never the standard ca
   const products = buildSupplierProducts([parseSupplierDraft(source)]);
   assert.equal(await executeCatalogImport('owner', {
     readExisting: async () => [],
-    insertSupabase: async rows => { assert.equal(rows.length, 1); assert.equal(rows[0].catalog_data.name, source.name); },
-    insertStock: async rows => { assert.deepEqual(rows, products); return rows.length; }
+    insertProducts: async rows => { assert.deepEqual(rows, products); return rows.length; }
   }, products), 1);
 });
 

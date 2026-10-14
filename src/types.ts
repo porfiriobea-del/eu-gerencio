@@ -157,6 +157,7 @@ export interface CashClosure {
 }
 
 export interface SaleItem {
+  stockDeduction?: number; // Stock units consumed by one item in the selected sale format.
   id?: string;
   productId: string;
   name: string;
@@ -203,6 +204,12 @@ export interface Purchase {
 }
 
 export interface Settings {
+  googleSheetsWebhookUrl?: string;
+  googleSheetsWebhookEnabled?: boolean;
+  customCategories?: string[];
+  language?: string;
+  fontSize?: string;
+  simpleViewMode?: boolean;
   id?: string;
   storeName: string;
   cnpj: string;

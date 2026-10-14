@@ -28,6 +28,7 @@ const mocks = {
   preferencesContext: "export const usePreferences=()=>({t:k=>k,v:(k,f)=>f||k,entityName:()=> 'Produto',languageMode:'neutral',isBasicMode:false,simpleViewMode:false,darkMode:false,setDarkMode:()=>{},toggleSimpleViewMode:()=>{}});",
   employeeContext: 'export const useEmployee=()=>({currentEmployee:null,activeAnnouncement:null,clearAnnouncement:()=>{},openSwitchModal:()=>{}});',
   useOnlineStatus: 'export const useOnlineStatus=()=>({isOnline:true,wasOffline:false,syncNow:()=>{}});',
+  cloudStore: "export const deleteField=()=>({__eu_delete_field:true});",
   categories: "export const getAllCategories=()=>['Bebidas','Diversos']; export const saveCustomCategory=()=>{};",
   geminiCatalogScanner: 'export const prepareCatalogFile=(file)=>globalThis.__prepareFile(file); export const recognizeCatalog=(...args)=>globalThis.__recognizeCatalog(...args);'
 };

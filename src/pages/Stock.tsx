@@ -2,7 +2,7 @@ import { showToast, showActionError, ConfirmationTimeoutError } from '../lib/act
 import { getPackageUnits, getCigaretteFormats, CIGARETTE_UNITS, isValidStockQuantity } from '../lib/productUnits';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { deleteField } from 'firebase/firestore';
+import { deleteField } from '../lib/cloudStore';
 import { subscribeProducts, updateProduct, adjustProductStock, addProduct, addMultipleProducts, deleteProduct, deleteMultipleProducts, subscribeTodaySales, recordMovement } from '../lib/api';
 import { Product, Sale } from '../types';
 import { getAllCategories, saveCustomCategory } from '../lib/categories';
@@ -80,6 +80,12 @@ export default function Stock() {
   const [isSavingTurnover, setIsSavingTurnover] = useState<boolean>(false);
 
   const [isCatalogImportOpen, setIsCatalogImportOpen] = useState(false);
+
+  useEffect(() => {
+    const refresh = () => setCategoryVersion(value => value + 1);
+    window.addEventListener('cloud-categories', refresh);
+    return () => window.removeEventListener('cloud-categories', refresh);
+  }, []);
 
   const categories = useMemo(() => {
     return getAllCategories(products.map(p => p.category));

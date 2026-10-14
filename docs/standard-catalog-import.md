@@ -14,16 +14,9 @@ No custo de um fardo, a quantidade indicada determina o custo por unidade. Nos c
 
 ## Configuração de produção
 
-1. Configure `GEMINI_API_KEY` somente no servidor/Vercel Functions. Não use `VITE_GEMINI_API_KEY`: a chave privada não deve ir para o navegador.
-2. Configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` do projeto Supabase. Use a chave pública/publishable ou anon, nunca `service_role`.
-3. Se ainda não aplicada, execute `supabase/migrations/20261013_standard_catalog.sql` no mesmo projeto. Ela adiciona `catalog_owner_id`, `catalog_key`, `catalog_data` e uma chave única à tabela existente `PRODUTOS`; preserva os dados e políticas RLS.
-4. Verifique que a autenticação e as políticas autorizam os registros do estabelecimento. A migração não configura autenticação nem cria políticas. Não desative RLS para contornar falhas.
-5. Se ainda não publicadas, publique as regras de `firestore.rules` no banco usado pelo aplicativo. Elas validam `stockUnit` e permitem ler IDs inexistentes numa transação. Produtos existentes permanecem restritos ao estabelecimento.
-6. Faça um redeploy depois de configurar as variáveis e teste com um pequeno catálogo do fornecedor.
+Configure `GEMINI_API_KEY` apenas no servidor/Vercel Functions e os dados públicos do Supabase (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`). A persistência do catálogo usa agora exclusivamente `eu_products` com a transação de banco da aplicação. A tabela antiga `PRODUTOS` e sua migração anterior não são mais usadas pelo aplicativo.
 
-O aplicativo atual lê Estoque/Caixa do Firestore. A importação confirma um único lote no Supabase e depois uma transação no Firestore. `catalog_data` preserva todos os campos do produto, incluindo categorias, medidas e preços fracionados. Produtos com nome normalizado já existente são ignorados e saldos/preços já importados não são sobrescritos.
-
-Os bancos não compartilham uma transação. Se o Supabase confirmar e o Firestore falhar, a tela mostra erro, conserva a revisão e não anuncia sucesso. Confira os dados antes de repetir; os IDs determinísticos preservam os registros já confirmados. Se a confirmação exceder 60 segundos, a tela avisa que o resultado é incerto.
+Siga [Supabase como fonte principal](supabase-cloud-persistence.md) para configurar a verificação do login, aplicar `20261014_cloud_source_of_truth.sql` e migrar os dados existentes. Produtos com nome normalizado já cadastrado são ignorados; preços e saldos já ativos são preservados. Uma falha não anuncia sucesso nem grava parcialmente o lote.
 
 ## Navegação
 

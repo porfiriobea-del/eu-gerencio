@@ -104,7 +104,7 @@ export default function SettingsView() {
 
   const handleSaveSheetsWebhookUrl = (newUrl: string) => {
     setSheetsWebhookUrl(newUrl);
-    setGoogleSheetsWebhookUrl(newUrl);
+
   };
 
   const handleToggleSheetsEnabled = (enabled: boolean) => {
@@ -173,22 +173,22 @@ function doPost(e) {
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [saveAllFeedback, setSaveAllFeedback] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const isInitialLoadDoneRef = useRef(false);
+  const lastCloudSettingsRef = useRef<Settings | null>(null);
   const autoSaveDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     setLastBackupTime(getLastBackupTimestamp());
     const unsubSet = subscribeSettings(s => {
       if(s) {
+        lastCloudSettingsRef.current = s;
+        setSheetsWebhookUrl(s.googleSheetsWebhookUrl || '');
+        setSheetsEnabled(s.googleSheetsWebhookEnabled === true);
         setSettings(s);
+        if (s.businessSector) setBusinessSector(s.businessSector);
+        if (s.customCategories) setCategoriesList(s.customCategories);
         const resolvedTheme = s.theme || 'standard';
         setTheme(resolvedTheme);
-        setThemePreset(normalizeThemePreset(resolvedTheme));
-        if (s.darkMode !== undefined) {
-          setDarkMode(s.darkMode);
-        }
-        if (s.languageMode) {
-          setLanguageMode(s.languageMode);
-        }
+
         setDefaultMargin(s.defaultMargin ?? 30);
         setDailyGoal(s.dailyGoal ?? 500);
         setStoreName(s.storeName || '');
@@ -214,6 +214,10 @@ function doPost(e) {
     setAutoSaveStatus('saving');
     try {
       const payload: Partial<Settings> = {
+        businessSector: overrides?.businessSector ?? businessSector,
+        customCategories: overrides?.customCategories ?? categoriesList,
+        language, fontSize, simpleViewMode,
+        googleSheetsWebhookUrl: sheetsWebhookUrl, googleSheetsWebhookEnabled: sheetsEnabled,
         storeName: overrides?.storeName !== undefined ? overrides.storeName : (storeName.trim() || settings?.storeName || 'Meu Comércio'),
         cnpj: overrides?.cnpj !== undefined ? overrides.cnpj : (cnpj.trim() || settings?.cnpj || ''),
         phone: overrides?.phone !== undefined ? overrides.phone : (phone.trim() || settings?.phone || ''),
@@ -235,7 +239,8 @@ function doPost(e) {
         cardFeeCalculationMode: overrides?.cardFeeCalculationMode !== undefined ? overrides.cardFeeCalculationMode : (settings?.cardFeeCalculationMode ?? 'absorb'),
       };
 
-      await updateSettings(payload);
+      const patch = Object.fromEntries(Object.entries(payload).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify((lastCloudSettingsRef.current as any)?.[key])));
+      if (Object.keys(patch).length) await updateSettings(patch);
       const now = new Date();
       setLastAutoSaveTime(now);
       setAutoSaveStatus('saved');
@@ -289,15 +294,7 @@ function doPost(e) {
     return () => {
       if (autoSaveDebounceRef.current) clearTimeout(autoSaveDebounceRef.current);
     };
-  }, [storeName, cnpj, phone, email, logoUrl, theme, darkMode, languageMode, defaultMargin, dailyGoal]);
-
-  // Salvamento automático periódico adicional a cada 4 minutos (240.000 ms)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      triggerImmediateSave(undefined, false);
-    }, 4 * 60 * 1000);
-    return () => clearInterval(timer);
-  }, [storeName, cnpj, phone, email, logoUrl, theme, darkMode, languageMode, defaultMargin, dailyGoal, settings]);
+  }, [storeName, cnpj, phone, email, logoUrl, theme, darkMode, languageMode, defaultMargin, dailyGoal, businessSector, categoriesList, language, fontSize, simpleViewMode]);
 
   const handleSelectLanguageMode = async (mode: LanguageMode) => {
     setLanguageMode(mode);
@@ -667,7 +664,7 @@ function doPost(e) {
       const backup = await generateFullUserDataBackup();
       downloadBackupJsonFile(backup);
       setLastBackupTime(Date.now());
-      setBackupSuccessMessage(`Backup completo do Firestore realizado e baixado com sucesso! (${backup.metrics.totalProducts} produtos, ${backup.metrics.totalCustomers} clientes, ${backup.metrics.totalSales} vendas).`);
+      setBackupSuccessMessage(`Backup completo do Supabase realizado e baixado com sucesso! (${backup.metrics.totalProducts} produtos, ${backup.metrics.totalCustomers} clientes, ${backup.metrics.totalSales} vendas).`);
       setTimeout(() => setBackupSuccessMessage(''), 8000);
     } catch (err: any) {
       alert('Erro ao realizar backup: ' + (err.message || err));
@@ -685,7 +682,7 @@ function doPost(e) {
     try {
       setIsDeletingAccount(true);
       setDeleteError('');
-      // 1. Delete all firestore user data
+      // 1. Delete all Supabase user data
       await withActionDeadline(deleteEntireAccountData, 120000)();
       // 2. Clear browser client cache
       try {
@@ -2086,7 +2083,7 @@ function doPost(e) {
           <div>
             <div className="flex items-center gap-2 text-gray-900 font-bold text-lg mb-1">
               <ShieldCheck className="w-6 h-6 text-emerald-600" />
-              <span>Rotina de Backup Diário (Firestore & Nuvem)</span>
+              <span>Rotina de Backup Diário (Supabase & Nuvem)</span>
             </div>
             <p className="text-sm text-gray-500 max-w-2xl">
               Seus dados do comércio (estoque, fiados, vendas, clientes e configurações) são verificados e salvaguardados diariamente para proteção contra perdas acidentais.
@@ -2129,7 +2126,7 @@ function doPost(e) {
               <Database className="w-4 h-4 text-purple-600" />
               Destinos de Segurança
             </div>
-            <div className="text-sm font-semibold text-purple-950">Firestore + Arquivo JSON</div>
+            <div className="text-sm font-semibold text-purple-950">Supabase + Arquivo JSON</div>
             <p className="text-xs text-purple-700 mt-1">Compatível com restauração</p>
           </div>
         </div>
@@ -2215,13 +2212,14 @@ function doPost(e) {
               type="text"
               value={sheetsWebhookUrl}
               onChange={(e) => handleSaveSheetsWebhookUrl(e.target.value)}
+              onBlur={() => setGoogleSheetsWebhookUrl(sheetsWebhookUrl)}
               placeholder="https://script.google.com/macros/s/.../exec"
               className="flex-1 px-3 py-2 text-xs font-mono bg-surface border border-border rounded-xl focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-foreground"
             />
             {sheetsWebhookUrl !== GOOGLE_SHEETS_WEBHOOK_URL && (
               <button
                 type="button"
-                onClick={() => handleSaveSheetsWebhookUrl(GOOGLE_SHEETS_WEBHOOK_URL)}
+                onClick={() => { handleSaveSheetsWebhookUrl(''); setGoogleSheetsWebhookUrl(''); }}
                 className="px-3 py-2 text-xs bg-muted hover:bg-muted/80 text-foreground rounded-xl border border-border transition-colors font-medium cursor-pointer"
                 title="Restaurar URL padrão"
               >

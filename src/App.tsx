@@ -1,16 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { initAuth, googleSignIn } from './lib/auth';
 import { checkAndRunDailyAutomatedBackup } from './lib/backupService';
 import { Layout } from './components/Layout';
 import { User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from './lib/firebase';
+import { db, doc, getDoc, onSnapshot, verifyCloudIdentity } from './lib/cloudStore';
 import { motion } from 'motion/react';
 import { 
   checkAndAcceptPendingInvitation, 
   getStoreInvitationById, 
-  getEffectiveOwnerId 
+  setActiveStoreSession
 } from './lib/api';
 import { TeamInvitation } from './types';
 
@@ -26,6 +25,10 @@ import Onboarding from './pages/Onboarding';
 import Movements from './pages/Movements';
 import { EmployeeProvider } from './lib/employeeContext';
 import { TermsModal, PrivacyModal } from './components/LegalModals';
+import { hydrateCloudCategories } from './lib/categories';
+import { hydrateCloudSheets } from './lib/googleSheets';
+import { updateSettings } from './lib/api';
+import { showActionError } from './lib/actionFeedback';
 
 export default function App() {
   const [menuPinned, setMenuPinned] = useState(() => {
@@ -44,6 +47,9 @@ export default function App() {
     }
   }, [menuPinned]);
 
+  const storeResolvedRef = useRef(false);
+  const [cloudError, setCloudError] = useState('');
+  const [retryLoad, setRetryLoad] = useState(0);
   const [needsAuth, setNeedsAuth] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,89 +84,72 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    let unsubSettings: (() => void) | null = null;
-
-    const unsubscribeAuth = initAuth(
-      async (currentUser) => {
-        setUser(currentUser);
-        setNeedsAuth(false);
-
-        if (unsubSettings) {
-          unsubSettings();
-          unsubSettings = null;
-        }
-
-        // 1. Verificar e vincular sub-conta caso o usuário tenha sido convidado
-        let session = null;
-        try {
-          const pendingInviteId = 
-            (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('invite') : null) || 
-            sessionStorage.getItem('pending_invite_id');
-
-          session = await checkAndAcceptPendingInvitation(
-            currentUser.uid, 
-            currentUser.email || '', 
-            pendingInviteId
-          );
-
-          if (pendingInviteId) {
-            sessionStorage.removeItem('pending_invite_id');
-            if (typeof window !== 'undefined' && window.location.search.includes('invite')) {
-              window.history.replaceState({}, document.title, window.location.pathname);
-            }
-          }
-        } catch (err) {
-          console.warn('Error syncing store sub-account:', err);
-        }
-
-        const effectiveOwnerId = session?.storeOwnerId || getEffectiveOwnerId() || currentUser.uid;
-        const isEmployeeSubAccount = !!(session && session.isEmployee && session.storeOwnerId !== currentUser.uid);
-
-        const settingsRef = doc(db, 'settings', effectiveOwnerId);
-        unsubSettings = onSnapshot(
-          settingsRef,
-          (snapshot) => {
-            if (isEmployeeSubAccount) {
-              // Colaborador de sub-conta entra direto no sistema da loja já configurada
-              setOnboardingComplete(true);
-            } else if (snapshot.exists() && snapshot.data()?.storeName) {
-              setOnboardingComplete(true);
-              // Run daily backup routine in the background
-              checkAndRunDailyAutomatedBackup().catch(err => {
-                console.warn('Background daily backup warning:', err);
-              });
-            } else {
-              setOnboardingComplete(false);
-            }
-            setLoading(false);
-          },
-          (err) => {
-            console.warn("Settings fetch notice:", err);
-            // In case of transient offline state, prevent trapping the user in a broken state
-            setOnboardingComplete((prev) => (prev !== null ? prev : isEmployeeSubAccount));
-            setLoading(false);
-          }
-        );
-      },
-      () => {
-        if (unsubSettings) {
-          unsubSettings();
-          unsubSettings = null;
-        }
-        setUser(null);
-        setNeedsAuth(true);
-        setLoading(false);
-        setOnboardingComplete(null);
-      }
-    );
-
-    return () => {
-      unsubscribeAuth();
-      if (unsubSettings) {
-        unsubSettings();
-      }
+    let unsubscribeSettings: (() => void) | null = null;
+    let active = true;
+    let generation = 0;
+    const fail = (error: unknown) => {
+      if (!active) return;
+      if (storeResolvedRef.current) { showActionError(error, 'Sem confirmação da nuvem. Verifique sua conexão antes de repetir uma operação.'); return; }
+      setCloudError(error instanceof Error ? error.message : 'Não foi possível acessar os dados da loja.');
+      setLoading(false);
     };
-  }, []);
+    const unsubscribeAuth = initAuth(async currentUser => {
+      const request = ++generation;
+      storeResolvedRef.current = false;
+      setUser(currentUser); setNeedsAuth(false); setLoading(true); setCloudError('');
+      setOnboardingComplete(null); unsubscribeSettings?.(); setActiveStoreSession(null);
+      hydrateCloudCategories(undefined, [], 'mercearia');
+      hydrateCloudSheets(undefined);
+      try {
+        await verifyCloudIdentity(currentUser.uid);
+        const inviteId = new URLSearchParams(window.location.search).get('invite') || sessionStorage.getItem('pending_invite_id');
+        const session = await checkAndAcceptPendingInvitation(currentUser.uid, currentUser.email || '', inviteId);
+        if (!active || request !== generation) return;
+        const ownerId = session?.storeOwnerId || currentUser.uid;
+        const profileRef = doc(db, 'settings', ownerId);
+        const profile = await getDoc(profileRef);
+        if (!profile.exists() && !session?.isEmployee) {
+          // Existing Google accounts keep their UID; copy legacy data once, never delete the source.
+          const { migrateLegacyStore } = await import('./lib/legacyMigration');
+          await migrateLegacyStore(ownerId);
+        } else if (profile.exists() && profile.data().legacyMigrationPending && !session?.isEmployee) {
+          void import('./lib/legacyMigration').then(({ migrateLegacyStore }) => migrateLegacyStore(ownerId))
+            .catch(() => console.warn('A migração do legado será retomada quando a origem estiver disponível.'));
+        }
+        if (!active || request !== generation) return;
+        if (inviteId) sessionStorage.removeItem('pending_invite_id');
+        unsubscribeSettings = onSnapshot(profileRef, snapshot => {
+          if (!active || request !== generation) return;
+          const data = snapshot.exists() ? snapshot.data() : null;
+          if (!data?.storeName && session?.isEmployee) { storeResolvedRef.current = false; fail(new Error('O acesso à loja não está disponível. Entre novamente ou fale com o proprietário.')); return; }
+          storeResolvedRef.current = true;
+          if (data) {
+            hydrateCloudCategories(ownerId, data.customCategories || [], data.businessSector || 'mercearia');
+            hydrateCloudSheets(ownerId, data.googleSheetsWebhookUrl || '', data.googleSheetsWebhookEnabled === true);
+            window.dispatchEvent(new CustomEvent('cloud-preferences', { detail: data }));
+          }
+          setOnboardingComplete(!!data?.storeName);
+          setCloudError(''); setLoading(false);
+          if (data?.storeName) void checkAndRunDailyAutomatedBackup();
+        }, fail);
+      } catch (error) { if (request === generation) fail(error); }
+    }, () => {
+      generation++; storeResolvedRef.current = false; unsubscribeSettings?.(); setActiveStoreSession(null);
+      hydrateCloudCategories(undefined, [], 'mercearia');
+      hydrateCloudSheets(undefined);
+      setUser(null); setNeedsAuth(true); setLoading(false); setOnboardingComplete(null); setCloudError('');
+    });
+    return () => { active = false; generation++; unsubscribeAuth(); unsubscribeSettings?.(); };
+  }, [retryLoad]);
+
+  useEffect(() => {
+    if (!user || !onboardingComplete || cloudError) return;
+    const persist = (event: Event) => {
+      void updateSettings((event as CustomEvent).detail).catch(error => showActionError(error, 'Não foi possível salvar a preferência na nuvem.'));
+    };
+    window.addEventListener('cloud-preference-change', persist);
+    return () => window.removeEventListener('cloud-preference-change', persist);
+  }, [user, onboardingComplete, cloudError]);
 
   const handleLogin = async () => {
     setIsLoggingIn(true);
@@ -174,6 +163,17 @@ export default function App() {
       setIsLoggingIn(false);
     }
   };
+
+  if (cloudError && user) {
+    return <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+      <div className="w-full max-w-lg space-y-4 rounded-2xl border border-border bg-surface p-6">
+        <h1 className="text-xl font-bold">Não foi possível carregar sua loja</h1>
+        <p role="alert" className="text-sm text-muted-foreground">{cloudError}</p>
+        <p className="text-sm">Seus dados não foram apagados. Verifique a conexão e tente novamente.</p>
+        <button type="button" onClick={() => setRetryLoad(value => value + 1)} className="rounded-xl bg-primary px-4 py-3 font-semibold text-white">Tentar novamente</button>
+      </div>
+    </div>;
+  }
 
   if (loading || (!needsAuth && onboardingComplete === null)) {
     return <div className="flex h-screen items-center justify-center bg-gray-50 text-gray-500">Carregando...</div>;

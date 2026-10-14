@@ -80,7 +80,7 @@ export const EmployeeProvider: React.FC<{ children: ReactNode }> = ({ children }
     return `${hours}h ${minutes}m`;
   }, [currentEmployee, nowTs]);
 
-  // Subscribe to real-time employees from Firestore
+  // Subscribe to real-time employees from Supabase
   useEffect(() => {
     const unsub = subscribeEmployees((list) => {
       setEmployees(list);
@@ -129,11 +129,11 @@ export const EmployeeProvider: React.FC<{ children: ReactNode }> = ({ children }
     setCurrentEmployee(updatedEmployee);
     setActiveEmployeeStorage({ id: employee.id!, name: employee.name, role: employee.role });
 
-    // Update in Firestore
+    // Update in Supabase
     if (employee.id) {
       updateEmployee(employee.id, {
         currentShiftStartedAt: now
-      }).catch(e => console.warn('Could not update employee shift start in Firestore:', e));
+      }).catch(e => console.warn('Could not update employee shift start in Supabase:', e));
     }
 
     // Record movement in history
@@ -182,12 +182,12 @@ export const EmployeeProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     const previousEmp = currentEmployee;
 
-    // Update in Firestore
+    // Update in Supabase
     if (previousEmp.id) {
       updateEmployee(previousEmp.id, {
         currentShiftStartedAt: undefined,
         lastShiftEndedAt: now
-      }).catch(e => console.warn('Could not update employee shift end in Firestore:', e));
+      }).catch(e => console.warn('Could not update employee shift end in Supabase:', e));
     }
 
     // Reset current employee

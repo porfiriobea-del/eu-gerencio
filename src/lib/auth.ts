@@ -1,5 +1,15 @@
-import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, User, deleteUser } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, onIdTokenChanged, User, deleteUser } from 'firebase/auth';
 import { auth } from './firebase';
+import { supabase } from './supabase';
+
+// Realtime must use the same verified Firebase JWT as REST queries.
+onIdTokenChanged(auth, user => {
+  void (async () => {
+    const token = user ? await user.getIdToken() : null;
+    if (token) await supabase.realtime.setAuth(token);
+    else await supabase.removeAllChannels();
+  })().catch(error => console.warn('[Supabase realtime authentication]', error instanceof Error ? error.message : 'Authentication error'));
+});
 
 const provider = new GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/drive.file');
@@ -63,6 +73,8 @@ export const getAccessToken = async (): Promise<string | null> => {
 };
 
 export const logout = async () => {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('auth-user-changed'));
+  await supabase.removeAllChannels();
   await auth.signOut();
   cachedAccessToken = null;
   if (typeof window !== 'undefined') {

@@ -1,13 +1,13 @@
+import { supabase } from './supabase';
 import { type CatalogProduct } from './standardCatalog';
 import { executeCatalogImport, catalogDocumentId } from './catalogImport';
-import { supabase } from './supabase';
 import { withActionDeadline, ConfirmationTimeoutError } from './actionFeedback';
-import { normalizeCigaretteStock, cigaretteStockFields, isValidStockQuantity } from './productUnits';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, writeBatch, runTransaction } from 'firebase/firestore';
-import { db, auth } from './firebase';
+import { normalizeCigaretteStock, cigaretteStockFields, isValidStockQuantity, getCigaretteFormats } from './productUnits';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, writeBatch, runTransaction } from './cloudStore';
+import { db } from './cloudStore';
+import { auth } from './firebase';
 import { 
   OperationType, 
-  FirestoreErrorInfo, 
   Product, 
   Customer, 
   Sale, 
@@ -24,13 +24,7 @@ import {
   TeamInvitation,
   UserStore
 } from '../types';
-import { 
-  syncProductToSupabase, 
-  syncMovementToSupabase, 
-  updateProductStockInSupabase,
-  postToGoogleSheets,
-  GOOGLE_SHEETS_WEBHOOK_URL
-} from './supabase';
+import { postToGoogleSheets, GOOGLE_SHEETS_WEBHOOK_URL } from './supabase';
 
 export { postToGoogleSheets, GOOGLE_SHEETS_WEBHOOK_URL };
 
@@ -44,7 +38,7 @@ export function removeUndefinedFields<T extends Record<string, any>>(obj: T): Pa
   return clean;
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+export function handleCloudError(error: unknown, operationType: OperationType, path: string | null) {
   if (error instanceof ConfirmationTimeoutError) throw error;
   const errCode = (error as any)?.code;
   const errMsg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
@@ -60,31 +54,9 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     errMsg.includes('connection failed') ||
     errMsg.includes('the operation could not be completed');
 
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-    },
-    operationType,
-    path
-  };
-
-  if (isOfflineOrUnavailable) {
-    console.warn('Firestore offline/reconectando:', JSON.stringify(errInfo));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('firestore-offline', { detail: errInfo }));
-    }
-    if ([OperationType.CREATE, OperationType.UPDATE, OperationType.DELETE, OperationType.WRITE].includes(operationType)) {
-      throw new Error('Não foi possível confirmar a gravação. Verifique sua conexão e confira os dados antes de repetir.');
-    }
-    return;
-  }
-
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.error('[Supabase]', { operationType, path, code: errCode });
+  if (isOfflineOrUnavailable && typeof window !== 'undefined') window.dispatchEvent(new Event('cloud-offline'));
+  throw error instanceof Error ? error : new Error('Não foi possível confirmar a operação na nuvem.');
 }
 
 // ---------------------------------------------------------------------------
@@ -100,27 +72,16 @@ export interface ActiveStoreSession {
   employeeEmail?: string;
 }
 
-const STORE_SESSION_KEY = 'eu_gerencio_active_store_session';
-
-export const getActiveStoreSession = (): ActiveStoreSession | null => {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(STORE_SESSION_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-};
-
+let activeStoreSession: ActiveStoreSession | null = null;
+export const getActiveStoreSession = (): ActiveStoreSession | null => activeStoreSession;
 export const setActiveStoreSession = (session: ActiveStoreSession | null) => {
-  if (typeof window === 'undefined') return;
-  if (!session) {
-    localStorage.removeItem(STORE_SESSION_KEY);
-  } else {
-    localStorage.setItem(STORE_SESSION_KEY, JSON.stringify(session));
-  }
-  window.dispatchEvent(new CustomEvent('store-session-changed', { detail: session }));
+  activeStoreSession = session;
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('store-session-changed', { detail: session }));
 };
+if (typeof window !== 'undefined') window.addEventListener('auth-user-changed', () => {
+  setActiveStoreSession(null);
+  setActiveEmployeeStorage(null);
+});
 
 export const getEffectiveOwnerId = (): string => {
   const currentUid = auth.currentUser?.uid;
@@ -135,27 +96,28 @@ export const getEffectiveOwnerId = (): string => {
 // ---------------------------------------------------------------------------
 // SETTINGS
 // ---------------------------------------------------------------------------
-export const subscribeSettings = (callback: (s: Settings | null) => void) => {
+export const subscribeSettings = (callback: (s: Settings | null) => void, onError?: (error: unknown) => void) => {
   const uid = getEffectiveOwnerId();
   if (!uid) return () => {};
   return onSnapshot(doc(db, 'settings', uid), (snapshot) => {
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('firestore-online'));
+      window.dispatchEvent(new CustomEvent('cloud-online'));
     }
     if (snapshot.exists()) {
       callback({ id: snapshot.id, ...snapshot.data() } as Settings);
     } else {
       callback(null);
     }
-  }, (error) => handleFirestoreError(error, OperationType.GET, `settings/${uid}`));
+  }, onError || ((error) => handleCloudError(error, OperationType.GET, `settings/${uid}`)));
 };
 
-export const saveStoreProfile = async (profile: {storeName: string, cnpj: string, phone: string, email: string, languageMode?: 'technical' | 'neutral' | 'basic', businessSector?: string}) => {
+export const saveStoreProfile = async (profile: {storeName: string, cnpj: string, phone: string, email: string, languageMode?: 'technical' | 'neutral' | 'basic', businessSector?: string, customCategories?: string[]}) => {
   const uid = auth.currentUser?.uid;
-  if (!uid) return;
+  if (!uid) throw new Error('Entre na sua conta para salvar o comércio.');
   try {
     const initial: Settings = {
       ...profile,
+      language: 'pt', fontSize: 'normal', simpleViewMode: profile.languageMode === 'basic',
       theme: 'standard',
       darkMode: false,
       defaultMargin: 30,
@@ -167,12 +129,12 @@ export const saveStoreProfile = async (profile: {storeName: string, cnpj: string
     };
     await setDoc(doc(db, 'settings', uid), initial);
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `settings/${uid}`);
+    handleCloudError(error, OperationType.WRITE, `settings/${uid}`);
   }
 };
 
 export const updateSettings = withActionDeadline(async (data: Partial<Settings>) => {
-  const uid = auth.currentUser?.uid;
+  const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   const path = `settings/${uid}`;
   try {
@@ -198,7 +160,7 @@ export const updateSettings = withActionDeadline(async (data: Partial<Settings>)
       await setDoc(settingsRef, initial);
     }
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    handleCloudError(error, OperationType.WRITE, path);
     throw error;
   }
 });
@@ -212,7 +174,7 @@ export const subscribeProducts = (callback: (p: Product[]) => void) => {
   const q = query(collection(db, 'products'), where('ownerId', '==', uid));
   return onSnapshot(q, (snapshot) => {
     callback(snapshot.docs.map(doc => normalizeCigaretteStock({ id: doc.id, ...doc.data() } as Product)));
-  }, (error) => handleFirestoreError(error, OperationType.LIST, 'products'));
+  }, (error) => handleCloudError(error, OperationType.LIST, 'products'));
 };
 
 export const addProduct = withActionDeadline(async (product: Omit<Product, 'id'|'ownerId'|'createdAt'|'updatedAt'>) => {
@@ -232,6 +194,7 @@ export const addProduct = withActionDeadline(async (product: Omit<Product, 'id'|
 
     const activeEmp = getActiveEmployeeStorage();
     recordMovement({
+      sourceOwnerId: uid,
       timestamp: now,
       employeeId: activeEmp.id,
       employeeName: activeEmp.name,
@@ -243,16 +206,8 @@ export const addProduct = withActionDeadline(async (product: Omit<Product, 'id'|
       quantity: product.stock,
       amount: product.basePrice
     }).catch(() => {});
-
-    // Grava o novo produto no Supabase (tabela PRODUTOS / produtos)
-    syncProductToSupabase({
-      name: product.name,
-      basePrice: product.basePrice,
-      unitCost: product.unitCost,
-      stock: product.stock
-    }).catch(e => console.warn('[Supabase] Falha ao salvar produto:', e));
   } catch (err) {
-    handleFirestoreError(err, OperationType.CREATE, path);
+    handleCloudError(err, OperationType.CREATE, path);
   }
 });
 
@@ -265,7 +220,7 @@ export const addMultipleProducts = withActionDeadline(async (productsList: Omit<
   const now = Date.now();
   let count = 0;
 
-  // Firestore writeBatch supports up to 500 operations per batch
+  // Atomic Supabase RPC supports up to 500 operations per batch
   const CHUNK_SIZE = 400;
   for (let i = 0; i < productsList.length; i += CHUNK_SIZE) {
     const chunk = productsList.slice(i, i + CHUNK_SIZE);
@@ -281,25 +236,18 @@ export const addMultipleProducts = withActionDeadline(async (productsList: Omit<
         updatedAt: now
       });
       count++;
-
-      // Grava no Supabase em segundo plano
-      syncProductToSupabase({
-        name: prod.name,
-        basePrice: prod.basePrice,
-        unitCost: prod.unitCost,
-        stock: prod.stock
-      }).catch(() => {});
     }
 
     try {
       await batch.commit();
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, path);
+      handleCloudError(err, OperationType.CREATE, path);
     }
   }
 
   const activeEmp = getActiveEmployeeStorage();
   recordMovement({
+      sourceOwnerId: uid,
     timestamp: now,
     employeeId: activeEmp.id,
     employeeName: activeEmp.name,
@@ -328,8 +276,8 @@ export const adjustProductStock = withActionDeadline(async (id: string, individu
     transaction.update(ref, { ...cigaretteStockFields(product), stock: newStock, updatedAt: Date.now() });
     return { name: product.name, newStock };
   });
-  updateProductStockInSupabase(result.name, result.newStock).catch(() => {});
   recordMovement({
+      sourceOwnerId: uid,
     type: 'product_update', entityId: id, entityName: result.name,
     description: `Estoque de ${result.name}: ${individualUnits > 0 ? '+' : ''}${individualUnits} unidades de estoque.`,
     quantity: individualUnits
@@ -338,24 +286,17 @@ export const adjustProductStock = withActionDeadline(async (id: string, individu
 });
 
 export const updateProduct = withActionDeadline(async (id: string, data: Partial<Product>) => {
+  const uid = getEffectiveOwnerId();
+  if (!uid) throw new Error('Unauthenticated');
   try {
-    const current = await getDoc(doc(db, 'products', id));
-    const stockFields = current.exists() ? cigaretteStockFields(current.data() as Product) : {};
-    const cleanData = removeUndefinedFields({ ...stockFields, ...data } as any);
     const now = Date.now();
-    await updateDoc(doc(db, 'products', id), { ...cleanData, updatedAt: now });
-
-    // Sincroniza atualização de estoque ou preços no Supabase
-    if (data.name && data.stock !== undefined) {
-      updateProductStockInSupabase(data.name, data.stock).catch(() => {});
-    } else if (data.name) {
-      syncProductToSupabase({
-        name: data.name,
-        basePrice: data.basePrice,
-        unitCost: data.unitCost,
-        stock: data.stock
-      }).catch(() => {});
-    }
+    await runTransaction(db, async transaction => {
+      const ref = doc(db, 'products', id);
+      const current = await transaction.get(ref);
+      if (!current.exists()) throw new Error('Produto não encontrado.');
+      const stockFields = cigaretteStockFields(current.data() as Product);
+      transaction.update(ref, { ...removeUndefinedFields({ ...stockFields, ...data }), updatedAt: now });
+    });
 
     const activeEmp = getActiveEmployeeStorage();
     const descParts: string[] = [];
@@ -365,6 +306,7 @@ export const updateProduct = withActionDeadline(async (id: string, data: Partial
     if (data.unitCost !== undefined) descParts.push(`custo: R$ ${data.unitCost.toFixed(2)}`);
 
     recordMovement({
+      sourceOwnerId: uid,
       timestamp: now,
       employeeId: activeEmp.id,
       employeeName: activeEmp.name,
@@ -377,7 +319,7 @@ export const updateProduct = withActionDeadline(async (id: string, data: Partial
       amount: data.basePrice
     }).catch(() => {});
   } catch (err) {
-    handleFirestoreError(err, OperationType.UPDATE, `products/${id}`);
+    handleCloudError(err, OperationType.UPDATE, `products/${id}`);
   }
 });
 
@@ -397,7 +339,7 @@ export const deleteProduct = withActionDeadline(async (id: string, productName?:
       entityName: productName
     }).catch(() => {});
   } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `products/${id}`);
+    handleCloudError(err, OperationType.DELETE, `products/${id}`);
     throw err;
   }
 });
@@ -408,14 +350,7 @@ function catalogStore(ownerId: string) {
       const snapshot = await getDocs(query(collection(db, 'products'), where('ownerId', '==', ownerId)));
       return snapshot.docs.map(record => ({ name: String(record.data().name || '') }));
     },
-    insertSupabase: async (rows: ReturnType<typeof import('./standardCatalog').toSupabaseCatalogRows>) => {
-      // One request, full metadata, scoped idempotency key; preserve existing stock/prices.
-      const { error } = await supabase.from('PRODUTOS').upsert(rows, {
-        onConflict: 'catalog_owner_id,catalog_key', ignoreDuplicates: true
-      });
-      if (error) throw new Error('Não foi possível confirmar a importação no Supabase. Confira a conexão e a configuração do catálogo.');
-    },
-    insertStock: async (missing: CatalogProduct[]) => {
+    insertProducts: async (missing: CatalogProduct[]) => {
       const refs = await Promise.all(missing.map(async product => doc(db, 'products', await catalogDocumentId(ownerId, product.name))));
       // Deterministic IDs make retries safe after a partial confirmation.
       return runTransaction(db, async transaction => {
@@ -447,7 +382,8 @@ export const importSupplierCatalog = withActionDeadline(async (products: Catalog
     }
   }
   const count = await executeCatalogImport(ownerId, catalogStore(ownerId), products);
-  recordMovement({ type: 'product_create', description: `Catálogo do fornecedor: ${count} produtos cadastrados.`, quantity: count }).catch(() => {});
+  recordMovement({
+      sourceOwnerId: ownerId, type: 'product_create', description: `Catálogo do fornecedor: ${count} produtos cadastrados.`, quantity: count }).catch(() => {});
   return count;
 }, 60000);
 
@@ -456,7 +392,8 @@ export const importStandardCatalog = withActionDeadline(async (): Promise<number
   const ownerId = getEffectiveOwnerId();
   if (!ownerId) throw new Error('Entre na sua conta para importar o catálogo.');
   const count = await executeCatalogImport(ownerId, catalogStore(ownerId));
-  recordMovement({ type: 'product_create', description: `Importação do catálogo padrão: ${count} produtos.`, quantity: count }).catch(() => {});
+  recordMovement({
+      sourceOwnerId: ownerId, type: 'product_create', description: `Importação do catálogo padrão: ${count} produtos.`, quantity: count }).catch(() => {});
   return count;
 }, 60000);
 
@@ -469,7 +406,7 @@ export const subscribeCustomers = (callback: (c: Customer[]) => void) => {
   const q = query(collection(db, 'customers'), where('ownerId', '==', uid));
   return onSnapshot(q, (snapshot) => {
     callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer)));
-  }, (error) => handleFirestoreError(error, OperationType.LIST, 'customers'));
+  }, (error) => handleCloudError(error, OperationType.LIST, 'customers'));
 };
 
 export const addCustomer = withActionDeadline(async (customer: Omit<Customer, 'id'|'ownerId'|'createdAt'|'updatedAt'>): Promise<string> => {
@@ -481,6 +418,7 @@ export const addCustomer = withActionDeadline(async (customer: Omit<Customer, 'i
     await setDoc(ref, { ...removeUndefinedFields(customer as any), ownerId: uid, createdAt: now, updatedAt: now });
 
     recordMovement({
+      sourceOwnerId: uid,
       timestamp: now,
       type: 'debt_add',
       description: `Novo cliente adicionado à caderneta de fiado: "${customer.name}"${customer.phone ? ` (Tel: ${customer.phone})` : ''}${customer.previousDebt > 0 ? ` com dívida inicial de R$ ${customer.previousDebt.toFixed(2)}` : ''}`,
@@ -491,7 +429,7 @@ export const addCustomer = withActionDeadline(async (customer: Omit<Customer, 'i
 
     return ref.id;
   } catch (err) {
-    handleFirestoreError(err, OperationType.CREATE, 'customers');
+    handleCloudError(err, OperationType.CREATE, 'customers');
     return '';
   }
 });
@@ -501,7 +439,7 @@ export const updateCustomer = withActionDeadline(async (id: string, data: Partia
     const cleanData = removeUndefinedFields(data as any);
     await updateDoc(doc(db, 'customers', id), { ...cleanData, updatedAt: Date.now() });
   } catch (err) {
-    handleFirestoreError(err, OperationType.UPDATE, `customers/${id}`);
+    handleCloudError(err, OperationType.UPDATE, `customers/${id}`);
   }
 });
 
@@ -514,6 +452,7 @@ export const deleteCustomer = withActionDeadline(async (id: string, customerName
 
     const activeEmp = getActiveEmployeeStorage();
     recordMovement({
+      sourceOwnerId: uid,
       timestamp: Date.now(),
       employeeId: activeEmp.id,
       employeeName: activeEmp.name,
@@ -524,7 +463,7 @@ export const deleteCustomer = withActionDeadline(async (id: string, customerName
       entityName: customerName
     }).catch(() => {});
   } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `customers/${id}`);
+    handleCloudError(err, OperationType.DELETE, `customers/${id}`);
     throw err;
   }
 });
@@ -532,65 +471,69 @@ export const deleteCustomer = withActionDeadline(async (id: string, customerName
 // ---------------------------------------------------------------------------
 // SALES & PAYMENTS
 // ---------------------------------------------------------------------------
+function productFormatUnits(product: Product, format: string): number {
+  return product.type === 'cigarro' ? getCigaretteFormats(product).find(item => item.label === format)?.units || 0
+    : /^(Fardo|Pacote) \(/.test(format) ? product.unitsPerPackage : 1;
+}
+
 export const recordSale = withActionDeadline(async (
   sale: { total: number, type: 'cash' | 'card' | 'fiado', customerId: string, employeeId?: string, employeeName?: string },
   items: Omit<SaleItem, 'id'|'ownerId'|'createdAt'>[],
-  productsToUpdate: {id: string, newStock: number}[]
+  _productsToUpdate: {id: string, newStock: number}[]
 ) => {
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   
-  const batch = writeBatch(db);
   const now = Date.now();
-  const summary = items.map(i => `${i.quantity}x ${i.name} (${i.format})`).join(', ').slice(0, 950);
+  const summary = items.map(item => `${item.quantity}x ${item.name} (${item.format})`).join(', ').slice(0, 950);
   const activeEmp = getActiveEmployeeStorage();
   const empId = sale.employeeId || activeEmp.id;
   const empName = sale.employeeName || activeEmp.name;
-  
   const saleRef = doc(collection(db, 'sales'));
-  batch.set(saleRef, {
-    total: sale.total,
-    type: sale.type,
-    customerId: sale.customerId,
-    itemsSummary: summary,
-    employeeId: empId,
-    employeeName: empName,
-    ownerId: uid,
-    createdAt: now
-  });
-
-  items.forEach(item => {
-    const itemRef = doc(collection(db, `sales/${saleRef.id}/saleItems`));
-    batch.set(itemRef, {
-      ...item,
-      ownerId: uid,
-      createdAt: now
-    });
-  });
-
-  for (const p of productsToUpdate) {
-    const ref = doc(db, 'products', p.id);
-    const snapshot = await getDoc(ref);
-    const stockFields = snapshot.exists() ? cigaretteStockFields(snapshot.data() as Product) : {};
-    batch.update(ref, { ...stockFields, stock: p.newStock, updatedAt: now });
-  }
-
-  if (sale.type === 'fiado' && sale.customerId) {
-    const custRef = doc(db, 'customers', sale.customerId);
-    const cDoc = await getDoc(custRef);
-    if(cDoc.exists()){
-      const c = cDoc.data() as Customer;
-      batch.update(custRef, { totalDebt: c.totalDebt + sale.total, updatedAt: now });
-    }
-  }
-
+  const itemRefs = items.map(() => doc(collection(db, `sales/${saleRef.id}/saleItems`)));
+  if (!items.length || !Number.isFinite(sale.total) || sale.total <= 0) throw new Error('Venda inválida.');
   try {
-    await batch.commit();
+    await runTransaction(db, async transaction => {
+      const ids = [...new Set(items.map(item => item.productId))];
+      const snapshots = await Promise.all(ids.map(id => transaction.get(doc(db, 'products', id))));
+      const customer = sale.type === 'fiado' && sale.customerId ? await transaction.get(doc(db, 'customers', sale.customerId)) : null;
+      const deductions = new Map<string, number>();
+      const stockProducts = new Map<string, Product>();
+      for (const snapshot of snapshots) {
+        if (!snapshot.exists()) throw new Error('Um produto não está mais disponível.');
+        stockProducts.set(snapshot.id, normalizeCigaretteStock(snapshot.data() as Product));
+      }
+      for (const item of items) {
+        const product = stockProducts.get(item.productId)!;
+        if (!Number.isSafeInteger(item.quantity) || item.quantity <= 0) throw new Error('Quantidade inválida.');
+        const units = item.stockDeduction ?? (product.type === 'cigarro'
+          ? getCigaretteFormats(product).find(format => format.label === item.format)?.units
+          : /^(Fardo|Pacote) \(/.test(item.format) ? product.unitsPerPackage : 1);
+        if (!units || !isValidStockQuantity(units)) throw new Error('Formato inválido.');
+        if (product.type === 'cigarro' && !getCigaretteFormats(product).some(format => format.units === units && format.price === item.price)) throw new Error('O preço ou formato mudou. Confira o carrinho.');
+        deductions.set(item.productId, (deductions.get(item.productId) || 0) + Math.round(units * 20) * item.quantity);
+      }
+      for (const [id, deduction] of deductions) {
+        const product = stockProducts.get(id)!;
+        const balance = Math.round(product.stock * 20) - deduction;
+        if (balance < 0) throw new Error(`Estoque insuficiente para ${product.name}.`);
+        transaction.update(doc(db, 'products', id), { ...cigaretteStockFields(product), stock: balance / 20, updatedAt: now });
+      }
+      if (sale.type === 'fiado') {
+        if (!customer?.exists()) throw new Error('Cliente de fiado não encontrado.');
+        transaction.update(customer.ref, { totalDebt: Math.round((Number(customer.data().totalDebt) + sale.total) * 100) / 100, updatedAt: now });
+      }
+      transaction.set(saleRef, { ...sale, itemsSummary: summary, employeeId: empId, employeeName: empName, ownerId: uid, createdAt: now });
+      items.forEach((item, index) => transaction.set(itemRefs[index], {
+        ...item, unitCost: stockProducts.get(item.productId)!.unitCost * (item.stockDeduction ?? (productFormatUnits(stockProducts.get(item.productId)!, item.format))), ownerId: uid, createdAt: now
+      }));
+    });
 
     const typeLabel = sale.type === 'cash' ? 'Dinheiro' : sale.type === 'card' ? 'Cartão' : 'Fiado';
     const totalQuantity = items.reduce((acc, it) => acc + (it.quantity || 1), 0);
 
     recordMovement({
+      sourceOwnerId: uid,
       timestamp: now,
       employeeId: empId,
       employeeName: empName,
@@ -601,30 +544,8 @@ export const recordSale = withActionDeadline(async (
       quantity: totalQuantity,
       skipSupabaseSync: true
     }).catch(() => {});
-
-    // Sincroniza a venda no Supabase (tabela MOVIMENTAÇOES / movimentacoes)
-    // Ao registrar com sucesso no Supabase, a função auxiliar dispara automaticamente o Webhook para o Google Sheets
-    syncMovementToSupabase({
-      type: 'venda',
-      description: `Venda de R$ ${sale.total.toFixed(2)} (${typeLabel}) - ${items.length} item(ns): ${summary.slice(0, 120)}`,
-      amount: sale.total,
-      quantity: totalQuantity,
-      entityName: summary.slice(0, 120),
-      timestamp: now,
-      paymentMethod: typeLabel,
-      customerName: (sale as any).customerName || (sale.customerId ? 'Cliente Cadastrado' : undefined),
-      employeeName: empName
-    }).catch(e => console.warn('[Supabase] Erro ao sincronizar venda na tabela movimentacoes:', e));
-
-    // Atualiza o estoque no Supabase (tabela PRODUTOS / produtos)
-    items.forEach(item => {
-      const pUpd = productsToUpdate.find(p => p.id === item.productId);
-      if (pUpd) {
-        updateProductStockInSupabase(item.name, pUpd.newStock).catch(() => {});
-      }
-    });
   } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, 'sales (batch)');
+    handleCloudError(err, OperationType.WRITE, 'sales (batch)');
   }
 });
 
@@ -637,36 +558,25 @@ export const recordPayment = withActionDeadline(async (
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   
-  const batch = writeBatch(db);
   const now = Date.now();
   const activeEmp = getActiveEmployeeStorage();
   const empId = employee?.id || activeEmp.id;
   const empName = employee?.name || activeEmp.name;
-  
   const pRef = doc(collection(db, 'payments'));
-  batch.set(pRef, {
-    customerId,
-    amount,
-    method,
-    employeeId: empId,
-    employeeName: empName,
-    ownerId: uid,
-    createdAt: now
-  });
-
-  const custRef = doc(db, 'customers', customerId);
-  const cDoc = await getDoc(custRef);
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error('Pagamento inválido.');
   let customerName = 'Cliente';
-  if(cDoc.exists()){
-    const c = cDoc.data() as Customer;
-    customerName = c.name;
-    batch.update(custRef, { totalDebt: Math.max(0, c.totalDebt - amount), updatedAt: now });
-  }
-
   try {
-    await batch.commit();
+    await runTransaction(db, async transaction => {
+      const ref = doc(db, 'customers', customerId);
+      const customer = await transaction.get(ref);
+      if (!customer.exists()) throw new Error('Cliente não encontrado.');
+      customerName = customer.data().name;
+      transaction.update(ref, { totalDebt: Math.max(0, Math.round((Number(customer.data().totalDebt) - amount) * 100) / 100), updatedAt: now });
+      transaction.set(pRef, { customerId, amount, method, employeeId: empId, employeeName: empName, ownerId: uid, createdAt: now });
+    });
 
     recordMovement({
+      sourceOwnerId: uid,
       timestamp: now,
       employeeId: empId,
       employeeName: empName,
@@ -677,7 +587,7 @@ export const recordPayment = withActionDeadline(async (
       amount: amount
     }).catch(() => {});
   } catch(err) {
-    handleFirestoreError(err, OperationType.WRITE, 'payments (batch)');
+    handleCloudError(err, OperationType.WRITE, 'payments (batch)');
   }
 });
 
@@ -699,7 +609,7 @@ export const subscribeTodaySales = (callback: (s: Sale[]) => void) => {
       .filter(s => s.createdAt >= startTs)
       .sort((a, b) => b.createdAt - a.createdAt);
     callback(todaySales);
-  }, (error) => handleFirestoreError(error, OperationType.LIST, 'sales'));
+  }, (error) => handleCloudError(error, OperationType.LIST, 'sales'));
 };
 
 export const getSalesByDateRange = async (start: number, end: number): Promise<Sale[]> => {
@@ -715,7 +625,7 @@ export const getSalesByDateRange = async (start: number, end: number): Promise<S
     // Memory filtering to avoid requiring composite indexes for inequality checks
     return allSales.filter(s => s.createdAt >= start && s.createdAt <= end);
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, 'sales');
+    handleCloudError(error, OperationType.LIST, 'sales');
     return [];
   }
 };
@@ -728,7 +638,7 @@ export const getSaleItems = async (saleId: string): Promise<SaleItem[]> => {
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SaleItem));
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, `sales/${saleId}/saleItems`);
+    handleCloudError(error, OperationType.LIST, `sales/${saleId}/saleItems`);
     return [];
   }
 };
@@ -877,6 +787,7 @@ export const saveCashClosure = withActionDeadline(async (closure: Omit<CashClosu
     });
 
     recordMovement({
+      sourceOwnerId: uid,
       timestamp: now,
       employeeId: empId,
       employeeName: empName,
@@ -888,7 +799,7 @@ export const saveCashClosure = withActionDeadline(async (closure: Omit<CashClosu
 
     return ref.id;
   } catch (err) {
-    handleFirestoreError(err, OperationType.CREATE, path);
+    handleCloudError(err, OperationType.CREATE, path);
     return '';
   }
 });
@@ -901,7 +812,7 @@ export const subscribeCashClosures = (callback: (closures: CashClosure[]) => voi
     const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CashClosure));
     data.sort((a, b) => b.closedAt - a.closedAt);
     callback(data);
-  }, (error) => handleFirestoreError(error, OperationType.LIST, 'cashClosures'));
+  }, (error) => handleCloudError(error, OperationType.LIST, 'cashClosures'));
 };
 
 // ---------------------------------------------------------------------------
@@ -909,87 +820,13 @@ export const subscribeCashClosures = (callback: (closures: CashClosure[]) => voi
 // ---------------------------------------------------------------------------
 export const deleteEntireAccountData = async (): Promise<void> => {
   const uid = auth.currentUser?.uid;
-  if (!uid) throw new Error('Unauthenticated');
-
-  try {
-    // 1. Fetch all products
-    const productsSnap = await getDocs(query(collection(db, 'products'), where('ownerId', '==', uid)));
-    // 2. Fetch all customers
-    const customersSnap = await getDocs(query(collection(db, 'customers'), where('ownerId', '==', uid)));
-    // 3. Fetch all payments
-    const paymentsSnap = await getDocs(query(collection(db, 'payments'), where('ownerId', '==', uid)));
-    // 4. Fetch all sales
-    const salesSnap = await getDocs(query(collection(db, 'sales'), where('ownerId', '==', uid)));
-
-    let batch = writeBatch(db);
-    let opCount = 0;
-
-    const commitBatchIfNeeded = async () => {
-      if (opCount >= 400) {
-        await batch.commit();
-        batch = writeBatch(db);
-        opCount = 0;
-      }
-    };
-
-    for (const docSnap of productsSnap.docs) {
-      batch.delete(docSnap.ref);
-      opCount++;
-      await commitBatchIfNeeded();
-    }
-
-    for (const docSnap of customersSnap.docs) {
-      batch.delete(docSnap.ref);
-      opCount++;
-      await commitBatchIfNeeded();
-    }
-
-    for (const docSnap of paymentsSnap.docs) {
-      batch.delete(docSnap.ref);
-      opCount++;
-      await commitBatchIfNeeded();
-    }
-
-    // Fetch and delete all purchases
-    const purchasesSnap = await getDocs(query(collection(db, 'purchases'), where('ownerId', '==', uid)));
-    for (const docSnap of purchasesSnap.docs) {
-      batch.delete(docSnap.ref);
-      opCount++;
-      await commitBatchIfNeeded();
-    }
-
-    for (const saleDoc of salesSnap.docs) {
-      try {
-        const itemsSnap = await getDocs(collection(db, `sales/${saleDoc.id}/saleItems`));
-        for (const itemDoc of itemsSnap.docs) {
-          batch.delete(itemDoc.ref);
-          opCount++;
-          await commitBatchIfNeeded();
-        }
-      } catch (err) {
-        console.warn('Error fetching saleItems for deletion:', err);
-      }
-      batch.delete(saleDoc.ref);
-      opCount++;
-      await commitBatchIfNeeded();
-    }
-
-    // 5. Delete settings document
-    const settingsRef = doc(db, 'settings', uid);
-    batch.delete(settingsRef);
-    opCount++;
-
-    if (opCount > 0) {
-      await batch.commit();
-    }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `account/${uid}`);
-  }
+  if (!uid) throw new Error('Entre na sua conta para excluir os dados.');
+  const { error } = await supabase.rpc('eu_clear_account_data');
+  if (error) throw new Error(error.message);
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('cloud-refresh'));
 };
 
-// ---------------------------------------------------------------------------
-// PURCHASES / REPOSIÇÃO DE ESTOQUE
-// ---------------------------------------------------------------------------
+
 export const subscribePurchases = (callback: (purchases: Purchase[]) => void) => {
   const uid = getEffectiveOwnerId();
   if (!uid) return () => {};
@@ -998,7 +835,7 @@ export const subscribePurchases = (callback: (purchases: Purchase[]) => void) =>
     const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Purchase));
     list.sort((a, b) => b.createdAt - a.createdAt);
     callback(list);
-  }, (error) => handleFirestoreError(error, OperationType.LIST, 'purchases'));
+  }, (error) => handleCloudError(error, OperationType.LIST, 'purchases'));
 };
 
 export const recordPurchase = withActionDeadline(async (
@@ -1028,6 +865,7 @@ export const recordPurchase = withActionDeadline(async (
   if (purchase.productId && (options?.updateProductStock !== false || options?.updateUnitCost || options?.updateExpirationDate || options?.updatePromoPrice)) {
     const prodRef = doc(db, 'products', purchase.productId);
     const prodDoc = await getDoc(prodRef);
+    batch.expect(prodDoc);
     if (prodDoc.exists()) {
       const p = normalizeCigaretteStock(prodDoc.data() as Product);
       const updatePayload: any = {
@@ -1036,7 +874,7 @@ export const recordPurchase = withActionDeadline(async (
       };
 
       if (options?.updateProductStock !== false) {
-        updatePayload.stock = Math.max(0, (p.stock || 0) + purchase.quantity);
+        updatePayload.stock = Math.max(0, Math.round(((p.stock || 0) + purchase.quantity) * 20) / 20);
       }
 
       if (options?.updateUnitCost && purchase.unitCost > 0) {
@@ -1056,9 +894,6 @@ export const recordPurchase = withActionDeadline(async (
       }
 
       batch.update(prodRef, removeUndefinedFields(updatePayload));
-      if (purchase.productName && updatePayload.stock !== undefined) {
-        updateProductStockInSupabase(purchase.productName, updatePayload.stock).catch(() => {});
-      }
     }
   }
 
@@ -1067,6 +902,7 @@ export const recordPurchase = withActionDeadline(async (
 
     const activeEmp = getActiveEmployeeStorage();
     recordMovement({
+      sourceOwnerId: uid,
       timestamp: now,
       employeeId: purchase.employeeId || activeEmp.id,
       employeeName: purchase.employeeName || activeEmp.name,
@@ -1080,7 +916,7 @@ export const recordPurchase = withActionDeadline(async (
 
     return purchaseRef.id;
   } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, 'purchases');
+    handleCloudError(err, OperationType.WRITE, 'purchases');
     throw err;
   }
 });
@@ -1095,9 +931,10 @@ export const deletePurchase = withActionDeadline(async (purchaseId: string, reve
   if (revertStock?.productId && revertStock.quantityToSubtract > 0) {
     const prodRef = doc(db, 'products', revertStock.productId);
     const prodDoc = await getDoc(prodRef);
+    batch.expect(prodDoc);
     if (prodDoc.exists()) {
       const p = prodDoc.data() as Product;
-      const newStock = Math.max(0, (p.stock || 0) - revertStock.quantityToSubtract);
+      const newStock = Math.max(0, Math.round(((p.stock || 0) - revertStock.quantityToSubtract) * 20) / 20);
       batch.update(prodRef, { stock: newStock, updatedAt: Date.now() });
     }
   }
@@ -1105,7 +942,7 @@ export const deletePurchase = withActionDeadline(async (purchaseId: string, reve
   try {
     await batch.commit();
   } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `purchases/${purchaseId}`);
+    handleCloudError(err, OperationType.DELETE, `purchases/${purchaseId}`);
     throw err;
   }
 });
@@ -1124,7 +961,7 @@ export const getPurchasesByDateRange = async (startTimestamp: number, endTimesta
       .filter(p => p.createdAt >= startTimestamp && p.createdAt <= endTimestamp)
       .sort((a, b) => b.createdAt - a.createdAt);
   } catch (err) {
-    handleFirestoreError(err, OperationType.LIST, 'purchases');
+    handleCloudError(err, OperationType.LIST, 'purchases');
     return [];
   }
 };
@@ -1166,7 +1003,7 @@ export const submitFeedback = withActionDeadline(async (feedbackData: {
   try {
     await setDoc(doc(db, 'feedbacks', feedbackId), feedbackDoc);
   } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `feedbacks/${feedbackId}`);
+    handleCloudError(err, OperationType.WRITE, `feedbacks/${feedbackId}`);
     throw err;
   }
 });
@@ -1184,7 +1021,7 @@ export const subscribeFeedbacks = (callback: (feedbacks: Feedback[]) => void) =>
     const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Feedback));
     list.sort((a, b) => b.createdAt - a.createdAt);
     callback(list);
-  }, (err) => handleFirestoreError(err, OperationType.LIST, 'feedbacks'));
+  }, (err) => handleCloudError(err, OperationType.LIST, 'feedbacks'));
 };
 
 // ---------------------------------------------------------------------------
@@ -1239,7 +1076,7 @@ export const subscribeEmployees = (callback: (employees: Employee[]) => void) =>
     const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Employee));
     list.sort((a, b) => a.name.localeCompare(b.name));
     callback(list);
-  }, (err) => handleFirestoreError(err, OperationType.LIST, 'employees'));
+  }, (err) => handleCloudError(err, OperationType.LIST, 'employees'));
 };
 
 export const addEmployee = withActionDeadline(async (
@@ -1262,7 +1099,7 @@ export const addEmployee = withActionDeadline(async (
     await setDoc(ref, cleanData);
     return ref.id;
   } catch (err) {
-    handleFirestoreError(err, OperationType.CREATE, 'employees');
+    handleCloudError(err, OperationType.CREATE, 'employees');
     throw err;
   }
 });
@@ -1278,7 +1115,7 @@ export const updateEmployee = withActionDeadline(async (id: string, data: Partia
     });
     await updateDoc(doc(db, 'employees', id), cleanData);
   } catch (err) {
-    handleFirestoreError(err, OperationType.UPDATE, `employees/${id}`);
+    handleCloudError(err, OperationType.UPDATE, `employees/${id}`);
     throw err;
   }
 });
@@ -1292,6 +1129,7 @@ export const deleteEmployee = withActionDeadline(async (id: string, employeeName
 
     const activeEmp = getActiveEmployeeStorage();
     recordMovement({
+      sourceOwnerId: uid,
       timestamp: Date.now(),
       employeeId: activeEmp.id,
       employeeName: activeEmp.name,
@@ -1302,7 +1140,7 @@ export const deleteEmployee = withActionDeadline(async (id: string, employeeName
       entityName: employeeName
     }).catch(() => {});
   } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `employees/${id}`);
+    handleCloudError(err, OperationType.DELETE, `employees/${id}`);
     throw err;
   }
 });
@@ -1312,6 +1150,7 @@ export const deleteEmployee = withActionDeadline(async (id: string, employeeName
 // ---------------------------------------------------------------------------
 export const recordMovement = withActionDeadline(async (
   movement: {
+    sourceOwnerId?: string; // Capture the mutation store; late responses never create logs in another account.
     type: MovementType;
     description: string;
     timestamp?: number;
@@ -1329,6 +1168,7 @@ export const recordMovement = withActionDeadline(async (
   }
 ): Promise<string> => {
   const uid = getEffectiveOwnerId();
+  if (movement.sourceOwnerId && movement.sourceOwnerId !== uid) return '';
   if (!uid) return '';
 
   const now = Date.now();
@@ -1357,24 +1197,14 @@ export const recordMovement = withActionDeadline(async (
 
   try {
     await setDoc(ref, cleanPayload);
+    if (getEffectiveOwnerId() !== uid) return ref.id;
     // Dispatch local event for instant UI awareness
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('movement-recorded', { detail: cleanPayload }));
     }
 
-    // Sincroniza a movimentação no Supabase (tabela MOVIMENTAÇOES / movimentacoes)
-    // Ao gravar no Supabase, a função auxiliar faz o POST dos dados para o Google Sheets via Webhook
-    if (!movement.skipSupabaseSync) {
-      syncMovementToSupabase({
-        type: movement.type,
-        description: movement.description,
-        amount: movement.amount,
-        quantity: movement.quantity,
-        entityName: movement.entityName,
-        timestamp: movement.timestamp || now,
-        employeeName: movement.employeeName || activeEmp.name
-      }).catch(e => console.warn('[Supabase] Erro ao gravar na tabela movimentacoes:', e));
-    }
+    postToGoogleSheets({ tipo: movement.type, descricao: movement.description, valor: movement.amount,
+      quantidade: movement.quantity, produto: movement.entityName, created_at: new Date(movement.timestamp || now).toISOString() }).catch(() => {});
 
     return ref.id;
   } catch (err) {
@@ -1396,7 +1226,7 @@ export const subscribeMovements = (callback: (movements: Movement[]) => void) =>
     const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Movement));
     list.sort((a, b) => b.timestamp - a.timestamp);
     callback(list);
-  }, (err) => handleFirestoreError(err, OperationType.LIST, 'movements'));
+  }, (err) => handleCloudError(err, OperationType.LIST, 'movements'));
 };
 
 export const getMovementsByDateRange = async (
@@ -1429,7 +1259,7 @@ export const getMovementsByDateRange = async (
 
     return list.sort((a, b) => b.timestamp - a.timestamp);
   } catch (err) {
-    handleFirestoreError(err, OperationType.LIST, 'movements');
+    handleCloudError(err, OperationType.LIST, 'movements');
     return [];
   }
 };
@@ -1529,6 +1359,7 @@ export const checkAndAcceptPendingInvitation = async (
   if (!userUid || !userEmail) return null;
 
   const cleanEmail = userEmail.trim().toLowerCase();
+  setActiveStoreSession(null);
 
   try {
     // 1. Verificar se o usuário já tem uma associação ativa de sub-conta
@@ -1558,7 +1389,7 @@ export const checkAndAcceptPendingInvitation = async (
       const invSnap = await getDoc(invRef);
       if (invSnap.exists()) {
         const invData = invSnap.data() as TeamInvitation;
-        if (invData.status === 'pending' || invData.email.toLowerCase() === cleanEmail) {
+        if (invData.status === 'pending' && invData.email.toLowerCase() === cleanEmail) {
           targetInvite = invData;
           targetDocId = invSnap.id;
         }
@@ -1580,24 +1411,9 @@ export const checkAndAcceptPendingInvitation = async (
 
     if (targetInvite) {
       const now = Date.now();
-      // Atualizar convite para aceito
-      await updateDoc(doc(db, 'teamInvitations', targetDocId), {
-        status: 'accepted',
-        acceptedAt: now,
-        acceptedByUid: userUid
-      });
-
-      // Salvar sub-conta
-      const userStoreData: UserStore = {
-        userUid,
-        ownerId: targetInvite.ownerId,
-        storeName: targetInvite.storeName,
-        email: cleanEmail,
-        name: targetInvite.name,
-        role: targetInvite.role,
-        linkedAt: now
-      };
-      await setDoc(userStoreRef, removeUndefinedFields(userStoreData as any));
+      const { data: accepted, error } = await supabase.rpc('eu_accept_invitation', { invite_id: targetDocId });
+      if (error) throw new Error(error.message);
+      if (!accepted || accepted.ownerId !== targetInvite.ownerId) throw new Error('Não foi possível confirmar o vínculo com a loja.');
 
       const session: ActiveStoreSession = {
         storeOwnerId: targetInvite.ownerId,
@@ -1619,6 +1435,7 @@ export const checkAndAcceptPendingInvitation = async (
 
       // Gravar no histórico de movimentações da loja
       recordMovement({
+      sourceOwnerId: targetInvite.ownerId,
         timestamp: now,
         employeeId: userUid,
         employeeName: targetInvite.name,
@@ -1634,8 +1451,8 @@ export const checkAndAcceptPendingInvitation = async (
 
     return null;
   } catch (err) {
-    console.warn('Error checking pending invitation:', err);
-    return null;
+    console.warn('Não foi possível confirmar a loja da conta.');
+    throw err;
   }
 };
 
@@ -1670,7 +1487,7 @@ export const subscribeCustomerSales = (
     const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Sale));
     list.sort((a, b) => b.createdAt - a.createdAt);
     callback(list);
-  }, (err) => handleFirestoreError(err, OperationType.LIST, 'sales/byCustomer'));
+  }, (err) => handleCloudError(err, OperationType.LIST, 'sales/byCustomer'));
 };
 
 export const subscribeCustomerPayments = (
@@ -1690,7 +1507,7 @@ export const subscribeCustomerPayments = (
     const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Payment));
     list.sort((a, b) => b.createdAt - a.createdAt);
     callback(list);
-  }, (err) => handleFirestoreError(err, OperationType.LIST, 'payments/byCustomer'));
+  }, (err) => handleCloudError(err, OperationType.LIST, 'payments/byCustomer'));
 };
 
 export const getSaleItemsForSale = async (saleId: string): Promise<SaleItem[]> => {
@@ -1707,7 +1524,7 @@ export const getSaleItemsForSale = async (saleId: string): Promise<SaleItem[]> =
 
 async function deleteMultipleProductsImpl(ids: string[]) {
   if (!ids || ids.length === 0) return;
-  const { doc, writeBatch } = await import('firebase/firestore');
+  const { doc, writeBatch } = await import('./cloudStore');
   const batch = writeBatch(db);
   
   ids.forEach(id => {

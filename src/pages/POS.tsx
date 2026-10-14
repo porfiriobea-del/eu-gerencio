@@ -233,6 +233,7 @@ export default function POS() {
       productId: i.product.id!,
       name: i.product.name,
       format: i.format,
+      stockDeduction: i.stockDeduction,
       quantity: i.quantity,
       price: i.price,
       unitCost: i.product.unitCost * i.stockDeduction,
