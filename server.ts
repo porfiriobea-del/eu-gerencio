@@ -1,6 +1,7 @@
 import express from 'express';
 import { recognizeProduct } from './server/geminiRecognition.ts';
 import { recognizeCatalog } from './api/gemini/recognize-catalog.ts';
+import relatorio from './api/relatorio.ts';
 import exportFeedback from './api/feedback/export.ts';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -17,6 +18,7 @@ app.use(express.json({ limit: '25mb' }));
 app.post('/api/gemini/recognize-product', recognizeProduct);
 app.post('/api/gemini/recognize-catalog', recognizeCatalog);
 app.post('/api/feedback/export', exportFeedback);
+app.post('/api/relatorio', relatorio);
 
 // Vite middleware in dev or static files in production
 const isProduction = process.env.NODE_ENV === 'production';

@@ -1,47 +1,53 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import handler from '../api/feedback/export.ts';
+import handler from '../api/relatorio.ts';
+import { createHash } from 'node:crypto';
 
-const feedback={ownerId:'owner',category:'suggestion',message:'Melhorar relatórios',storeName:'Loja de teste',userEmail:'owner@test.invalid',rating:5,createdAt:Date.UTC(2026,9,14),contact:'Contato de teste'};
-async function invoke(body={feedbackId:'fb_test'},authorization='Bearer mock-jwt') {
- const result={status:200};
- const res={status(value){result.status=value;return this;},json(value){result.body=value;return this;}};
- await handler({method:'POST',body,headers:{authorization}},res);return result;
-}
-function transport(t,{owner='owner',record=feedback,ack=true}={}) {
+const feedback={ownerId:'owner',category:'suggestion',message:'Melhorar relatórios',storeName:'Private Store',userEmail:'private@test.invalid',rating:5,createdAt:Date.now(),contact:'Contato solicitado'};
+const code=(kind,id)=>`${kind}_${createHash('sha256').update(`${kind}:${id}`).digest('hex')}`;
+function setup(t,{ack=true,record=feedback}={}) {
+ const previous={url:process.env.APPS_SCRIPT_URL,secret:process.env.APPS_SCRIPT_SECRET};
+ process.env.APPS_SCRIPT_URL='https://script.google.com/macros/s/test/exec';process.env.APPS_SCRIPT_SECRET='test-only-secret';
+ t.after(()=>{for(const [key,value] of [['APPS_SCRIPT_URL',previous.url],['APPS_SCRIPT_SECRET',previous.secret]]){if(value===undefined)delete process.env[key];else process.env[key]=value;}});
  const exports=[];
  t.mock.method(globalThis,'fetch',async(url,init)=>{
-  if(String(url).includes('/rpc/eu_user_id')){assert.equal(init.headers.Authorization,'Bearer mock-jwt');return Response.json(owner);}
-  if(String(url).includes('/eu_feedbacks?')){assert.ok(String(url).includes('owner_id=eq.owner'));return Response.json(record?[{id:'fb_test',data:record}]:[]);}
-  assert.match(String(url),/^https:\/\/script.google.com\/macros\/s\/.+\/exec$/);
-  assert.equal(init.headers.Authorization,undefined);
-  exports.push(JSON.parse(init.body));
-  return ack?Response.json({success:true}):new Response('<html>Not confirmed</html>');
+  if(String(url).includes('/rpc/eu_user_id'))return Response.json('owner');
+  if(String(url).includes('/eu_feedbacks?'))return Response.json([{id:'fb_test',data:record}]);
+  assert.equal(init.headers['Content-Type'],'text/plain');assert.equal(init.headers.Authorization,undefined);
+  exports.push(JSON.parse(init.body));return ack?Response.json({success:true}):new Response('Unavailable',{status:503});
  });return exports;
 }
-test('feedback export requires authentication before making any network request',async t=>{
- t.mock.method(globalThis,'fetch',()=>assert.fail('No anonymous export'));
- assert.equal((await invoke({},undefined)).status,400);
- assert.equal((await invoke({feedbackId:'fb_test'},'')).status,401);
+async function invoke(body,authorization='Bearer mock-jwt') {
+ const result={status:200};const res={status(value){result.status=value;return this;},json(value){result.body=value;return this;}};
+ await handler({method:'POST',body,headers:{authorization}},res);return result;
+}
+test('feedback is read from Supabase, receives a server-only secret and anonymous identities',async t=>{
+ const exports=setup(t);
+ assert.equal((await invoke({categoria:'feedback',feedbackId:'fb_test',loja:'Private Store',usuario:'private@test.invalid',secret:'browser-value',mensagem:'untrusted'})).body.success,true);
+ const payload=exports[0];assert.equal(payload.secret,'test-only-secret');assert.equal(payload.loja,code('loja','owner'));assert.equal(payload.usuario,code('usuario','owner'));
+ assert.equal(payload.categoria,'feedback');assert.equal(payload.tipo,'suggestion');assert.equal(payload.nota,5);assert.equal(payload.mensagem,feedback.message);assert.equal(payload.contato,feedback.contact);
+ assert.ok(!JSON.stringify(payload).includes('Private Store'));assert.ok(!JSON.stringify(payload).includes('private@test.invalid'));
 });
-test('feedback export reads the cloud record and exports all five category labels',async t=>{
- const exports=transport(t);
- for(const [category,label] of [['suggestion','Sugestão'],['praise','Elogio'],['bug','Problema'],['question','Dúvida'],['other','Outro']]){
-  feedback.category=category;
-  assert.equal((await invoke({feedbackId:'fb_test',message:'Untrusted browser content'})).body.success,true);
-  assert.equal(exports.at(-1).categoria,label);assert.equal(exports.at(-1).mensagem,'Melhorar relatórios');assert.equal(exports.at(-1).linha.length,8);
+test('usage only forwards allowed event/value fields and anonymous store/user codes',async t=>{
+ const exports=setup(t);
+ for(const evento of ['venda','produto_cadastrado','foto_ia','fiado_lancado','compra_registrada']) {
+  assert.equal((await invoke({categoria:'uso',evento,valor:10,loja:code('loja','store'),email:'private@test.invalid',telefone:'private'})).body.success,true);
+  assert.equal(exports.at(-1).evento,evento);assert.equal(exports.at(-1).valor,10);assert.equal(exports.at(-1).loja,code('loja','store'));
+  assert.equal(exports.at(-1).email,undefined);assert.equal(exports.at(-1).telefone,undefined);
  }
 });
-test('missing or another users feedback cannot be exported',async t=>{
- const exports=transport(t,{record:{...feedback,ownerId:'different-user'}});
- assert.equal((await invoke()).status,404);assert.equal(exports.length,0);
+test('missing configuration, anonymous requests and provider failures quietly skip reporting',async t=>{
+ setup(t,{ack:false});
+ assert.equal((await invoke({categoria:'uso',evento:'venda'},'')).status,202);
+ assert.equal((await invoke({categoria:'uso',evento:'venda'})).status,202);
+ process.env.APPS_SCRIPT_SECRET='';
+ assert.equal((await invoke({categoria:'uso',evento:'venda'})).status,202);
 });
-test('an HTML response is never announced as a confirmed spreadsheet write',async t=>{
- transport(t,{ack:false});t.mock.method(console,'warn',()=>{});
- assert.equal((await invoke()).status,502);
+test('another users feedback cannot be forwarded',async t=>{
+ const exports=setup(t,{record:{...feedback,ownerId:'other-user'}});
+ assert.equal((await invoke({categoria:'feedback',feedbackId:'fb_test'})).status,202);assert.equal(exports.length,0);
 });
-test('spreadsheet cells cannot turn submitted feedback into a formula',async t=>{
- const exports=transport(t,{record:{...feedback,message:'=IMPORTXML("example")'}});
- assert.equal((await invoke()).status,200);
- assert.ok(exports[0].linha[6].startsWith("'="));
+test('voluntary feedback contact is omitted when absent',async t=>{
+ const exports=setup(t,{record:{...feedback,contact:''}});
+ await invoke({categoria:'feedback',feedbackId:'fb_test'});assert.equal(exports[0].contato,undefined);
 });

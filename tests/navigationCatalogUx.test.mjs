@@ -21,9 +21,10 @@ window.matchMedia = () => ({ matches: desktop, addEventListener() {}, removeEven
 const cache = new URL('../node_modules/.cache/', import.meta.url);
 await mkdir(cache, { recursive: true });
 const dir = await mkdtemp(new URL('navigation-catalog-ui-', cache));
-const apiExports = ['subscribeSettings', 'getActiveStoreSession', 'subscribeProducts', 'subscribeTodaySales', 'updateProduct', 'adjustProductStock', 'addProduct', 'addMultipleProducts', 'deleteProduct', 'deleteMultipleProducts', 'recordMovement', 'importSupplierCatalog', 'getProductDuplicates', 'mergeProducts'];
+const apiExports = ['subscribeSettings', 'getActiveStoreSession', 'subscribeProducts', 'subscribeTodaySales', 'updateProduct', 'adjustProductStock', 'addProduct', 'addMultipleProducts', 'deleteProduct', 'deleteMultipleProducts', 'recordMovement', 'importSupplierCatalog', 'getProductDuplicates', 'mergeProducts', 'getEffectiveOwnerId'];
 const mocks = {
   api: apiExports.map(name => `export const ${name} = (...args) => globalThis.__uiApi.${name}(...args);`).join('\n'),
+  usageReporting: 'export const reportUsage=()=>{};',
   auth: 'export const logout = () => {};',
   preferencesContext: "export const usePreferences=()=>({t:k=>k,v:(k,f)=>f||k,entityName:()=> 'Produto',languageMode:'neutral',isBasicMode:false,simpleViewMode:false,darkMode:false,setDarkMode:()=>{},toggleSimpleViewMode:()=>{}});",
   employeeContext: 'export const useEmployee=()=>({currentEmployee:null,activeAnnouncement:null,clearAnnouncement:()=>{},openSwitchModal:()=>{}});',
@@ -53,7 +54,7 @@ function api() {
   globalThis.__uiApi={
     subscribeSettings(cb){cb({storeName:'Loja Teste'});return()=>{};},getActiveStoreSession:()=>null,
     subscribeProducts(cb){cb([]);return()=>{};},subscribeTodaySales(cb){cb([]);return()=>{};},
-    getProductDuplicates:async()=>[],mergeProducts:()=>assert.fail('Unexpected merge'),
+    getEffectiveOwnerId:()=> 'owner',getProductDuplicates:async()=>[],mergeProducts:()=>assert.fail('Unexpected merge'),
     importSupplierCatalog:()=>assert.fail('Unexpected save')
   };
 }

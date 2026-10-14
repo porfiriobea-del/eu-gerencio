@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteField } from '../lib/cloudStore';
 import { subscribeProducts, updateProduct, adjustProductStock, addProduct, addMultipleProducts, deleteProduct, deleteMultipleProducts, subscribeTodaySales, recordMovement, getProductDuplicates, mergeProducts } from '../lib/api';
+import { reportUsage } from '../lib/usageReporting';
+import { getEffectiveOwnerId } from '../lib/api';
 import { ProductDuplicateDialog, type DuplicateDecision } from '../components/ProductDuplicateDialog';
 import { Product, Sale } from '../types';
 import { getAllCategories, saveCustomCategory } from '../lib/categories';
@@ -139,6 +141,7 @@ export default function Stock() {
       setFormData((prev: any) => ({ ...prev, imageUrl: imageBase64 }));
 
       const { name, category } = await recognizeProductFromImage(imageBase64, categories);
+      reportUsage('foto_ia', getEffectiveOwnerId());
       if (requestId !== labelRequestRef.current) return;
       setFormData((prev: any) => ({ ...prev, name, category }));
       handleCategoryChange(category);
@@ -3443,6 +3446,7 @@ export default function Stock() {
         onClose={() => setIsCameraModalOpen(false)}
         availableCategories={categories}
         onRecognized={(product, imageUrl) => {
+          reportUsage('foto_ia', getEffectiveOwnerId());
           if (isModalOpen) {
             setFormData((prev: any) => ({ ...prev, name: product.name, category: product.category, imageUrl }));
             handleCategoryChange(product.category);

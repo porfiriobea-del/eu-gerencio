@@ -1,5 +1,6 @@
 import { findDuplicateProducts, isDuplicateProduct } from './duplicateDetector';
 import { supabase } from './supabase';
+import { reportUsage } from './usageReporting';
 import { exportFeedbackToSheets } from './feedbackSheets';
 import { type CatalogProduct } from './standardCatalog';
 import { executeCatalogImport, catalogDocumentId } from './catalogImport';
@@ -194,6 +195,7 @@ export const addProduct = withActionDeadline(async (product: Omit<Product, 'id'|
       updatedAt: now
     });
 
+    reportUsage('produto_cadastrado', uid);
     const activeEmp = getActiveEmployeeStorage();
     recordMovement({
       sourceOwnerId: uid,
@@ -259,6 +261,7 @@ export const addMultipleProducts = withActionDeadline(async (productsList: Omit<
     quantity: count
   }).catch(() => {});
 
+  reportUsage('produto_cadastrado', uid);
   return count;
 });
 
@@ -407,6 +410,7 @@ export const importSupplierCatalog = withActionDeadline(async (products: Catalog
   })() : await executeCatalogImport(ownerId, catalogStore(ownerId), products);
   recordMovement({
       sourceOwnerId: ownerId, type: 'product_create', description: `Catálogo do fornecedor: ${count} produtos cadastrados.`, quantity: count }).catch(() => {});
+  if (count > 0) reportUsage('produto_cadastrado', ownerId);
   return count;
 }, 60000);
 
@@ -554,6 +558,8 @@ export const recordSale = withActionDeadline(async (
       }));
     });
 
+    reportUsage('venda', uid, sale.total);
+    if (sale.type === 'fiado') reportUsage('fiado_lancado', uid, sale.total);
     const typeLabel = sale.type === 'cash' ? 'Dinheiro' : sale.type === 'card' ? 'Cartão' : 'Fiado';
     const totalQuantity = items.reduce((acc, it) => acc + (it.quantity || 1), 0);
 
@@ -940,6 +946,7 @@ export const recordPurchase = withActionDeadline(async (
 
     });
 
+    reportUsage('compra_registrada', uid, purchase.totalCost || 0);
     const activeEmp = getActiveEmployeeStorage();
     recordMovement({
       sourceOwnerId: uid,
@@ -1047,9 +1054,7 @@ export const submitFeedback = withActionDeadline(async (feedbackData: {
     throw err;
   }
   // The confirmed cloud record remains the source of truth if Sheets is unavailable.
-  void exportFeedbackToSheets(feedbackId).then(confirmed => {
-    if (!confirmed) console.warn('[Feedback Sheets export]', { code: 'EXPORT_NOT_CONFIRMED' });
-  });
+  void exportFeedbackToSheets(feedbackId, getEffectiveOwnerId());
 });
 
 export const subscribeFeedbacks = (callback: (feedbacks: Feedback[]) => void, onError?: (error: unknown) => void) => {

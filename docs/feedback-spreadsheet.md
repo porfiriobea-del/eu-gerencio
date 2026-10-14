@@ -1,18 +1,18 @@
-# Cópia dos feedbacks para a planilha
+# Relatório anônimo para Apps Script
 
-Os feedbacks continuam gravados em `eu_feedbacks` no Supabase. Após a confirmação, o aplicativo solicita uma cópia à planilha; uma falha de exportação não apaga o registro nem impede consultar o histórico em outro aparelho. O botão **Enviar histórico à planilha** permite encaminhar feedbacks anteriores e repetir envios não confirmados, um por vez.
+Supabase continua como banco principal. `/api/relatorio` envia uma cópia de feedback e eventos de uso ao Apps Script; falhas ou configuração ausente não travam o app nem mostram erro ao usuário. O histórico continua no Supabase. A antiga rota `/api/feedback/export` encaminha para o novo formato, sem enviar nome da loja ou e-mail.
 
-O destino padrão é a URL `/exec` informada nesta conversa, configurada em `api/feedback/export.ts`. A variável de servidor `FEEDBACK_SHEETS_WEBHOOK_URL` permite trocar esse destino na Vercel. A rota usa a sessão Firebase verificada pelo Supabase e só exporta registros do próprio usuário. Ela não aceita mensagens ou URLs de destino enviadas pelo navegador.
+Configure somente no projeto **eu-gerencio**, em Vercel → Settings → Environment Variables:
 
-## Configuração necessária no Apps Script
+- `APPS_SCRIPT_URL`: URL de produção `/exec` fornecida nesta conversa.
+- `APPS_SCRIPT_SECRET`: segredo escolhido pelo administrador, igual à propriedade de mesmo nome no Apps Script. Não coloque seu valor no GitHub, em variáveis `VITE_`, no navegador ou no chat.
 
-1. Abra o Apps Script vinculado à planilha de destino. Adapte o código de `integrations/feedback-apps-script.gs`. Se já existe `doPost`, integre a ramificação de feedback e preserve as outras integrações.
-2. Esse código cria a aba **Feedbacks**, com ID, data UTC, loja, e-mail, tipo, nota, mensagem e contato. Usa bloqueio para gravações concorrentes e ignora IDs já registrados. Nenhuma informação de feedback deve ser enviada para uma planilha de teste.
-3. Atualize a implantação existente em **Implantar → Gerenciar implantações → Editar → Nova versão**, executando como proprietário e permitindo acesso ao App da Web. Preserve a URL `/exec` fornecida. A resposta deve ser JSON `{ "success": true }` depois de confirmar a gravação. HTML ou resposta sem confirmação não será considerado sucesso.
-4. Faça o deploy do app e envie um feedback real. Confira a aba e use **Enviar histórico à planilha** para registros anteriores. Mensagens de sucesso do envio de feedback confirmam o Supabase; somente o resultado da exportação confirma a planilha.
+Integre `integrations/feedback-apps-script.gs` ao script vinculado à planilha e preserve outros handlers existentes. Em Configurações do projeto → Propriedades do script, cadastre `APPS_SCRIPT_SECRET` com o mesmo valor. Atualize a implantação para uma nova versão preservando a URL `/exec`. Depois faça Redeploy no projeto eu-gerencio da Vercel.
 
-Se o projeto Apps Script não está vinculado à planilha, substitua `SpreadsheetApp.getActiveSpreadsheet()` por `SpreadsheetApp.openById('ID_DA_PLANILHA')` no código do Apps Script. Não há ID da planilha informado na URL do App da Web.
+O POST do servidor usa `Content-Type: text/plain` e JSON. Feedback: categoria `feedback`, nota, tipo, mensagem, contato voluntário quando preenchido, loja e usuário anônimos. Uso: categoria `uso`, evento (`venda`, `produto_cadastrado`, `foto_ia`, `fiado_lancado`, `compra_registrada`), valor e IDs anônimos. Nenhum nome, e-mail ou telefone é colocado em loja/usuário. O texto livre da mensagem e o contato fornecido voluntariamente continuam sendo enviados conforme solicitado.
 
-A rota do servidor respeita `SUPABASE_URL` / `VITE_SUPABASE_URL` e `SUPABASE_ANON_KEY` / `VITE_SUPABASE_KEY` / `VITE_SUPABASE_ANON_KEY`; utiliza os mesmos valores públicos padrão do app quando ausentes. Nunca utiliza `service_role` ou copia o token do usuário ao Apps Script.
+Os códigos são SHA-256 com prefixos separados para loja e usuário. O servidor confirma a identidade via Supabase, lê o feedback persistido e seleciona apenas campos permitidos; ignora conteúdo/segredo arbitrário vindo do navegador. Nenhum token de login é enviado ao Apps Script.
 
-A configuração do código do Apps Script e a confirmação de uma linha real exigem acesso ao projeto Google. Os testes automatizados usam transporte simulado e não gravam feedbacks na planilha de produção.
+O Apps Script grava na aba **Feedback** (ID anônimo, data UTC, loja anônima, usuário anônimo, nota, tipo, mensagem, contato) e na aba **Uso** (data, loja anônima, usuário anônimo, evento, valor). Bloqueio evita gravações concorrentes; IDs de feedback evitam duplicação ao reenviar o histórico. O segredo não é gravado nas abas. Apps Script não vinculado deve usar `SpreadsheetApp.openById` com o ID real da planilha.
+
+Para confirmar produção, envie um feedback real pelo app após o deploy e confira a linha na aba Feedback. Resposta HTML, configuração ausente ou erro do serviço não contam como confirmação. Os testes locais usam transporte simulado e não provam gravação em produção. O acesso administrativo à Vercel, ao Apps Script e uma sessão Google autenticada são necessários para concluir essa verificação.

@@ -4,7 +4,7 @@ import {
   MessageSquare, Star, Send, CheckCircle2, AlertCircle, 
   HelpCircle, ThumbsUp, Bug, Lightbulb, MessageCircle, Clock, ShieldCheck
 } from 'lucide-react';
-import { submitFeedback, subscribeFeedbacks } from '../lib/api';
+import { submitFeedback, subscribeFeedbacks, getEffectiveOwnerId } from '../lib/api';
 import { Feedback } from '../types';
 import { exportFeedbackToSheets } from '../lib/feedbackSheets';
 import { format } from 'date-fns';
@@ -36,10 +36,10 @@ export function FeedbackSection({ storeName, defaultContact = '', className = ''
     let confirmed = 0;
     try {
       for (const feedback of feedbacksHistory) {
-        if (feedback.id && await exportFeedbackToSheets(feedback.id)) confirmed++;
+        if (feedback.id && await exportFeedbackToSheets(feedback.id, getEffectiveOwnerId())) confirmed++;
       }
       if (confirmed === feedbacksHistory.length) showToast(`✓ ${confirmed} feedbacks confirmados na planilha!`);
-      else showToast(`${confirmed} de ${feedbacksHistory.length} confirmados na planilha. Todos continuam salvos no Supabase. Confira a implantação do Apps Script antes de tentar novamente.`, 'warning');
+
     } finally { setExportingHistory(false); }
   };
 
