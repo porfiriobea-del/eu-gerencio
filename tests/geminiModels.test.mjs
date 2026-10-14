@@ -21,10 +21,10 @@ before(async () => {
 after(async () => { await rm(dir, { recursive: true, force: true }); });
 const product = { name: 'Suco', category: 'Bebidas' };
 const catalog = { products: [{ ...product, type: 'comum' }], truncated: false };
-async function invoke(name) {
+async function invoke(name, override = {}) {
   const result = { status: 200 };
   const res = { setHeader() {}, status(value) { result.status = value; return this; }, json(value) { result.body = value; return this; } };
-  await handlers[name]({ method: 'POST', body: { imageBase64: 'aW1hZ2U=', fileBase64: 'aW1hZ2U=', mimeType: 'image/jpeg', availableCategories: ['Bebidas'] } }, res);
+  await handlers[name]({ method: 'POST', body: { imageBase64: 'aW1hZ2U=', fileBase64: 'aW1hZ2U=', mimeType: 'image/jpeg', availableCategories: ['Bebidas'], ...override } }, res);
   return result;
 }
 for (const name of ['product', 'catalog']) {
@@ -59,3 +59,22 @@ for (const name of ['product', 'catalog']) {
     });
   }
 }
+
+
+test('catalog failures log safe diagnostics and distinguish provider size errors from malformed output', async t => {
+  const key=process.env.GEMINI_API_KEY;process.env.GEMINI_API_KEY='mock-only';
+  t.after(()=>{if(key===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=key;delete globalThis.__generateModel;});
+  const logs=[];t.mock.method(console,'error',(...args)=>logs.push(args[1]));
+  globalThis.__generateModel=async()=>{throw {status:413};};
+  const size=await invoke('catalog');
+  assert.equal(size.status,413);assert.equal(size.body.code,'FILE_TOO_LARGE');assert.match(size.body.error,/3 MB/);
+  assert.equal(logs[0].providerStatus,413);assert.equal(logs[0].mimeType,'image/jpeg');assert.equal(logs[0].fileBytes,5);
+  assert.ok(logs[0].requestId);assert.ok(!JSON.stringify(logs).includes('aW1hZ2U='));assert.ok(!JSON.stringify(logs).includes('mock-only'));
+  globalThis.__generateModel=async()=>({text:'{invalid'});
+  const invalid=await invoke('catalog');assert.equal(invalid.status,502);assert.equal(invalid.body.code,'INVALID_JSON_RESPONSE');
+  assert.equal(logs.at(-1).stage,'response-parsing');
+  globalThis.__generateModel=()=>assert.fail('Oversized files must not reach the provider');
+  const oversized=await invoke('catalog',{fileBase64:'AAAA'.repeat(1024*1024+1)});
+  assert.equal(oversized.status,413);assert.equal(oversized.body.maxFileBytes,3*1024*1024);
+  assert.equal(logs.at(-1).stage,'file-validation');
+});

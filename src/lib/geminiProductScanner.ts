@@ -16,14 +16,23 @@ export async function prepareProductImage(file: File): Promise<string> {
     };
     reader.readAsDataURL(file);
   });
-  const scale = Math.min(1, 1600 / Math.max(image.width, image.height));
+  let scale = Math.min(1, 1600 / Math.max(image.width, image.height));
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(image.width * scale));
   canvas.height = Math.max(1, Math.round(image.height * scale));
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Não foi possível processar a imagem.');
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/jpeg', 0.9);
+  for (let resize = 0; resize < 4; resize++) {
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    for (const quality of [0.9, 0.8, 0.7, 0.6]) {
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      if (dataUrl.startsWith('data:image/jpeg;base64,') && dataUrl.split(',')[1].length <= 4 * 1024 * 1024) return dataUrl;
+    }
+    scale *= 0.75;
+  }
+  throw new Error('A foto ainda excede o limite de 3 MB após compressão. Recorte a imagem ou envie partes menores.');
 }
 
 function logScannerError(details: Record<string, unknown>) {

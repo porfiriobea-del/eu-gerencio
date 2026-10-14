@@ -2,19 +2,37 @@ import { GoogleGenAI } from '@google/genai';
 import type { Request, Response } from 'express';
 
 export async function recognizeCatalog(req: Request, res: Response) {
+  const requestId = crypto.randomUUID();
+  const startedAt = Date.now();
+  res.setHeader('X-Request-ID', requestId);
   let model = process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash';
   const fallbackModel = 'gemini-3.1-flash-lite';
   if (req.method !== 'POST') { res.setHeader('Allow', 'POST'); return res.status(405).json({ error: 'Use POST para enviar o catálogo.' }); }
   const { fileBase64, mimeType, availableCategories = [] } = req.body || {};
+  const maxFileBytes = 3 * 1024 * 1024;
+  const sizeMessage = 'O limite por arquivo enviado é 3 MB. Reduza a foto ou divida o PDF em arquivos menores.';
+  const fileBytes = typeof fileBase64 === 'string' ? Math.floor(fileBase64.length * 3 / 4) - (fileBase64.endsWith('==') ? 2 : fileBase64.endsWith('=') ? 1 : 0) : 0;
+  const diagnose = (code: string, details: Record<string, unknown> = {}) => {
+    console.error('[Gemini catalog recognition]', { requestId, code, model, elapsedMs: Date.now() - startedAt,
+      mimeType: typeof mimeType === 'string' && ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(mimeType) ? mimeType : 'unsupported',
+      fileBytes, base64Length: typeof fileBase64 === 'string' ? fileBase64.length : 0, ...details });
+  };
   if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(mimeType) ||
       typeof fileBase64 !== 'string' || !fileBase64.length || fileBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(fileBase64)) {
     return res.status(400).json({ error: 'Envie PDF ou foto em Base64 válido, sem o prefixo data:.' });
   }
-  if (fileBase64.length > 4 * 1024 * 1024) return res.status(413).json({ error: 'Divida o catálogo em arquivos menores.' });
+  if (fileBytes > maxFileBytes) {
+    diagnose('FILE_TOO_LARGE', { stage: 'file-validation', providerStatus: null, maxFileBytes });
+    return res.status(413).json({ code: 'FILE_TOO_LARGE', maxFileBytes, error: sizeMessage });
+  }
   if (mimeType === 'application/pdf' && !Buffer.from(fileBase64.slice(0, 12), 'base64').toString().startsWith('%PDF-')) return res.status(400).json({ error: 'PDF inválido.' });
   if (!Array.isArray(availableCategories) || availableCategories.length > 100 || availableCategories.some(value => typeof value !== 'string' || value.length > 100)) return res.status(400).json({ error: 'Categorias inválidas.' });
-  if (!process.env.GEMINI_API_KEY) return res.status(503).json({ error: 'A leitura de catálogos está indisponível. Preencha manualmente.' });
+  if (!process.env.GEMINI_API_KEY) {
+    diagnose('MISSING_API_KEY', { stage: 'configuration', providerStatus: null });
+    return res.status(503).json({ code: 'MISSING_API_KEY', error: 'A leitura de catálogos está indisponível. Preencha manualmente.' });
+  }
   const nullablePrice = { type: ['number', 'null'], minimum: 0 };
+  let stage = 'provider-request';
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const parameters = {
@@ -47,12 +65,17 @@ Retorne somente JSON {products:[...], truncated:boolean}. Se nada for legível, 
     } catch (error: unknown) {
       const status = Number((error as { status?: number; code?: number })?.status || (error as { code?: number })?.code);
       if (status !== 404 || model === fallbackModel) throw error;
-      console.warn('[Gemini catalog recognition]', { code: 'MODEL_FALLBACK', model, fallbackModel, providerStatus: status });
+      diagnose('MODEL_FALLBACK', { stage, fallbackModel, providerStatus: status });
       model = fallbackModel;
       result = await ai.models.generateContent({ ...parameters, model });
     };
+    stage = 'response-parsing';
     const parsed = JSON.parse((result.text || '').replace(/^```(?:json)?\s*|\s*```$/g, '').trim());
-    if (!Array.isArray(parsed.products) || !parsed.products.length || parsed.products.length > 200) return res.status(422).json({ error: 'Não foram identificados produtos. Tente outro arquivo ou preencha manualmente.' });
+    stage = 'response-validation';
+    if (!Array.isArray(parsed?.products) || !parsed.products.length || parsed.products.length > 200) {
+      diagnose('NO_PRODUCTS', { stage, providerStatus: null });
+      return res.status(422).json({ code: 'NO_PRODUCTS', error: 'Não foram identificados produtos. Tente outro arquivo ou preencha manualmente.' });
+    }
     const products = parsed.products.map((row: any) => {
       if (!row || typeof row.name !== 'string' || !row.name.trim() || row.name.length > 100 || typeof row.category !== 'string' || !row.category.trim() || row.category.length > 50 || !['comum', 'cigarro'].includes(row.type)) throw new Error('Invalid product');
       const clean: any = { name: row.name.trim(), category: row.category.trim(), type: row.type === 'cigarro' || /cigar/i.test(row.category) ? 'cigarro' : 'comum' };
@@ -70,7 +93,13 @@ Retorne somente JSON {products:[...], truncated:boolean}. Se nada for legível, 
     return res.json({ success: true, products, truncated: parsed.truncated === true });
   } catch (error: unknown) {
     const status = Number((error as { status?: number; code?: number })?.status || (error as { code?: number })?.code);
-    return res.status(status === 429 ? 429 : 502).json({ error: status === 429 ? 'Limite de leitura por IA atingido. Tente mais tarde ou preencha manualmente.' : 'Não foi possível ler este catálogo. Tente outro arquivo ou preencha manualmente.' });
+    const message = error instanceof Error ? error.message : '';
+    const tooLarge = stage === 'provider-request' && (status === 413 || /payload too large|request.*too large|request.*size.*exceed/i.test(message));
+    const code = tooLarge ? 'FILE_TOO_LARGE' : stage === 'response-parsing' ? 'INVALID_JSON_RESPONSE' : stage === 'response-validation' ? 'INVALID_CATALOG_RESPONSE' :
+      status === 429 ? 'QUOTA_EXCEEDED' : status === 401 || status === 403 ? 'AUTHORIZATION_FAILED' : status === 404 ? 'MODEL_UNAVAILABLE' : /timeout|deadline|abort/i.test(message) ? 'TIMEOUT' : 'UPSTREAM_FAILURE';
+    // Provider messages can include request contents; log classified metadata only.
+    diagnose(code, { stage, providerStatus: Number.isFinite(status) ? status : null });
+    return res.status(tooLarge ? 413 : status === 429 ? 429 : status === 401 || status === 403 ? 503 : 502).json({ code, ...(tooLarge ? { maxFileBytes } : {}), error: tooLarge ? sizeMessage : status === 429 ? 'Limite de leitura por IA atingido. Tente mais tarde ou preencha manualmente.' : 'Não foi possível ler este catálogo. Tente outro arquivo ou preencha manualmente.' });
   }
 }
 export default recognizeCatalog;

@@ -92,3 +92,21 @@ test('catalogue document IDs remain stable, owner-scoped and valid for long name
   assert.equal(id, await catalogDocumentId('owner'.repeat(25), 'PRODUTO '.repeat(12)));
   assert.notEqual(id, await catalogDocumentId('other-owner', 'Produto '.repeat(12)));
 });
+
+
+test('catalog scanner explains the 3 MB limit even for a non-JSON platform 413', async t=>{
+  t.mock.method(globalThis,'fetch',async()=>new Response('Payload too large',{status:413}));
+  await assert.rejects(recognizeCatalog('data:image/jpeg;base64,aW1hZ2U=',[]),/limite.*3 MB/);
+});
+
+test('catalog photos are resized and progressively compressed before upload',async t=>{
+  const previous=new Map(['FileReader','Image','document'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
+  t.after(()=>{for(const [key,value] of previous){if(value)Object.defineProperty(globalThis,key,value);else delete globalThis[key];}});
+  const qualities=[];const sizes=[];
+  const canvas={width:0,height:0,getContext:()=>({drawImage(){sizes.push([canvas.width,canvas.height]);}}),toDataURL(type,quality){assert.equal(type,'image/jpeg');qualities.push(quality);return 'data:image/jpeg;base64,'+(qualities.length<3?'AAAA'.repeat(1024*1024+1):'aW1hZ2U=');}};
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>canvas}});
+  Object.defineProperty(globalThis,'FileReader',{configurable:true,value:class {result='data:image/png;base64,aW1hZ2U=';readAsDataURL(){queueMicrotask(()=>this.onload());}}});
+  Object.defineProperty(globalThis,'Image',{configurable:true,value:class {width=4000;height=3000;set src(value){queueMicrotask(()=>this.onload());}}});
+  const result=await prepareCatalogFile(new File(['image'],'catalog.png',{type:'image/png'}));
+  assert.equal(result,'data:image/jpeg;base64,aW1hZ2U=');assert.deepEqual(qualities,[0.9,0.8,0.7]);assert.deepEqual(sizes,[[1600,1200]]);
+});

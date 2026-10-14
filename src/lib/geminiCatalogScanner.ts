@@ -21,7 +21,8 @@ export async function prepareCatalogFile(file: File): Promise<string> {
 export async function recognizeCatalog(dataUrl: string, categories: string[], signal?: AbortSignal): Promise<{ products: SupplierDraft[]; truncated: boolean }> {
   const data = /^data:(application\/pdf|image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/i.exec(dataUrl);
   if (!data || data[2].length % 4 !== 0) throw new Error('O arquivo está inválido. Selecione outro PDF ou foto.');
-  if (data[2].length > 4 * 1024 * 1024) throw new Error('O arquivo é muito grande. Divida o catálogo em arquivos menores.');
+  const sizeMessage = 'O limite por arquivo enviado é 3 MB. Reduza a foto ou divida o PDF em arquivos menores.';
+  if (data[2].length > 4 * 1024 * 1024) throw new Error(sizeMessage);
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener('abort', abort, { once: true });
@@ -34,7 +35,7 @@ export async function recognizeCatalog(dataUrl: string, categories: string[], si
     });
     const result = await response.json().catch(() => null);
     if (response.status === 429) throw new Error('O limite da IA foi atingido. Tente mais tarde ou adicione os produtos manualmente.');
-    if (!response.ok || !result) throw new Error(response.status === 413 ? 'O arquivo é muito grande. Divida o catálogo em arquivos menores.' : 'Não foi possível ler o catálogo agora. Tente outra foto ou PDF, ou preencha manualmente.');
+    if (!response.ok || !result) throw new Error(response.status === 413 || result?.code === 'FILE_TOO_LARGE' ? sizeMessage : 'Não foi possível ler o catálogo agora. Tente outra foto ou PDF, ou preencha manualmente.');
     if (result.success !== true || !Array.isArray(result.products) || result.products.length === 0 || result.products.length > 200) throw new Error('A IA não identificou produtos. Tente um arquivo mais legível ou preencha manualmente.');
     return { products: result.products.map(parseSupplierDraft), truncated: result.truncated === true };
   } catch (error) {
