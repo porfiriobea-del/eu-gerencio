@@ -43,8 +43,24 @@ export default async function relatorio(req: Request, res: Response) {
       Object.assign(payload, { categoria: 'uso', evento: req.body.evento, valor });
     } else return skip();
     const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, signal: controller.signal, body: JSON.stringify(payload) });
-    const result = await response.json().catch(() => null);
-    if (!response.ok || result?.success !== true) return skip();
+    const responseBody = await response.text();
+    let result;
+    try { result = JSON.parse(responseBody); } catch { result = null; }
+    const confirmed = result?.ok === true || (result?.ok === undefined && result?.success === true);
+    if (!response.ok || !confirmed) {
+      let preview = responseBody;
+      // Apps Script errors can echo request values: redact before taking the excerpt.
+      for (const value of [secret, token, payload.mensagem, payload.contato]) {
+        if (typeof value !== 'string' || !value) continue;
+        preview = preview.split(value).join('[REDACTED]');
+        preview = preview.split(JSON.stringify(value).slice(1, -1)).join('[REDACTED]');
+      }
+      preview = preview.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[REDACTED]')
+        .replace(/\+?\d[\d ().-]{7,}\d/g, '[REDACTED]').replace(/\s+/g, ' ').slice(0, 320);
+      console.warn('[Apps Script report]', { code: 'EXPORT_NOT_CONFIRMED', status: response.status,
+        contentType: response.headers.get('content-type'), responsePreview: preview });
+      return skip();
+    }
     return res.json({ success: true });
   } catch { return skip(); }
   finally { clearTimeout(timer); }

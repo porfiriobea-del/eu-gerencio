@@ -14,7 +14,7 @@ function setup(t,{ack=true,record=feedback}={}) {
   if(String(url).includes('/rpc/eu_user_id'))return Response.json('owner');
   if(String(url).includes('/eu_feedbacks?'))return Response.json([{id:'fb_test',data:record}]);
   assert.equal(init.headers['Content-Type'],'text/plain');assert.equal(init.headers.Authorization,undefined);
-  exports.push(JSON.parse(init.body));return ack?Response.json({success:true}):new Response('Unavailable',{status:503});
+  exports.push(JSON.parse(init.body));return ack?Response.json(typeof ack==='object'?ack:{ok:true}):new Response('Unavailable',{status:503});
  });return exports;
 }
 async function invoke(body,authorization='Bearer mock-jwt') {
@@ -50,4 +50,26 @@ test('another users feedback cannot be forwarded',async t=>{
 test('voluntary feedback contact is omitted when absent',async t=>{
  const exports=setup(t,{record:{...feedback,contact:''}});
  await invoke({categoria:'feedback',feedbackId:'fb_test'});assert.equal(exports[0].contato,undefined);
+});
+
+
+test('legacy feedback export accepts the Apps Script ok acknowledgement with the server secret',async t=>{
+ const exports=setup(t);
+ const {default:legacy}=await import('../api/feedback/export.ts');
+ const result={};const res={status(code){result.status=code;return this;},json(body){result.body=body;return this;}};
+ await legacy({method:'POST',body:{feedbackId:'fb_test'},headers:{authorization:'Bearer mock-jwt'}},res);
+ assert.equal(result.body.success,true);assert.equal(exports[0].secret,'test-only-secret');
+});
+test('unconfirmed acknowledgements log a bounded redacted response preview and HTTP status',async t=>{
+ setup(t,{ack:{ok:false,error:'test-only-secret private@test.invalid Contato solicitado Melhorar relatórios '+ 'x'.repeat(500)}});
+ const logs=[];t.mock.method(console,'warn',(_label,data)=>logs.push(data));
+ const result=await invoke({categoria:'feedback',feedbackId:'fb_test'});
+ assert.equal(result.status,202);assert.equal(logs[0].code,'EXPORT_NOT_CONFIRMED');assert.equal(logs[0].status,200);
+ assert.ok(logs[0].responsePreview.length<=320);
+ for(const value of ['test-only-secret','private@test.invalid','Contato solicitado','Melhorar relatórios'])assert.ok(!JSON.stringify(logs).includes(value));
+ assert.ok(logs[0].responsePreview.includes('[REDACTED]'));
+});
+test('legacy success acknowledgements remain compatible',async t=>{
+ setup(t,{ack:{success:true}});
+ assert.equal((await invoke({categoria:'feedback',feedbackId:'fb_test'})).body.success,true);
 });
