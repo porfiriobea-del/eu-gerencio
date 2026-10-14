@@ -87,3 +87,28 @@ test('catalog token truncation is actionable rather than an invalid JSON 502',as
   const result=await invoke('catalog');
   assert.equal(result.status,422);assert.equal(result.body.code,'INCOMPLETE_CATALOG');assert.match(result.body.error,/menos páginas/);
 });
+
+for (const scenario of ['schema-rejected','fallback-schema-rejected','always-rejected','invalid-json-after-retry']) {
+ test(`catalog JSON mode recovery: ${scenario}`,async t=>{
+  const key=process.env.GEMINI_API_KEY; const model=process.env.GEMINI_MODEL;
+  process.env.GEMINI_API_KEY='mock-only';process.env.GEMINI_MODEL='gemini-3.5-flash';
+  t.after(()=>{for(const [name,value] of [['GEMINI_API_KEY',key],['GEMINI_MODEL',model]]){if(value===undefined)delete process.env[name];else process.env[name]=value;}delete globalThis.__generateModel;});
+  const calls=[],logs=[];t.mock.method(console,'error',(_label,data)=>logs.push(data));
+  globalThis.__generateModel=async args=>{
+   calls.push(args);
+   assert.equal(args.config.responseMimeType,'application/json');
+   if(scenario==='fallback-schema-rejected'&&calls.length===1)throw {status:404};
+   if(args.config.responseJsonSchema||scenario==='always-rejected')throw {status:400};
+   return {text:scenario==='invalid-json-after-retry'?'{bad':JSON.stringify(catalog)};
+  };
+  const result=await invoke('catalog');
+  assert.equal(result.status,['always-rejected','invalid-json-after-retry'].includes(scenario)?502:200);
+  assert.equal(calls.length,scenario==='fallback-schema-rejected'?3:2);
+  assert.ok(!calls.at(-1).config.responseJsonSchema);
+  assert.deepEqual(calls[0].contents,calls.at(-1).contents);
+  assert.equal(logs.filter(log=>log.code==='JSON_MODE_RETRY').length,1);
+  if(scenario==='always-rejected')assert.equal(result.body.code,'REQUEST_REJECTED');
+  if(scenario==='invalid-json-after-retry')assert.equal(result.body.code,'INVALID_JSON_RESPONSE');
+  if(scenario==='fallback-schema-rejected')assert.equal(calls.at(-1).model,'gemini-3.1-flash-lite');
+ });
+}

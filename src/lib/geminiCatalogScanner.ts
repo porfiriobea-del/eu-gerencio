@@ -51,7 +51,8 @@ export async function recognizeCatalog(dataUrl: string, categories: string[], si
         INCOMPLETE_CATALOG: 'O catálogo tem muitas informações. Envie menos páginas ou divida a foto em partes.',
         INVALID_JSON_RESPONSE: 'A IA não conseguiu organizar os produtos desta imagem. Envie menos itens por foto ou preencha manualmente.',
         INVALID_CATALOG_RESPONSE: 'A IA não conseguiu organizar os produtos desta imagem. Envie menos itens por foto ou preencha manualmente.',
-        TIMEOUT: 'A leitura demorou demais. Envie menos páginas ou uma foto com menos produtos.'
+        TIMEOUT: 'A leitura demorou demais. Envie menos páginas ou uma foto com menos produtos.',
+        REQUEST_REJECTED: 'O serviço não conseguiu processar este arquivo. Exporte a foto novamente como JPEG ou tente um PDF menor; você também pode preencher manualmente.'
       };
       throw new Error(messages[result?.code] || 'Não foi possível ler o catálogo agora. Tente outra foto ou PDF, ou preencha manualmente.');
     }

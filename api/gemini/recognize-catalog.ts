@@ -51,7 +51,7 @@ Retorne somente JSON {products:[...], truncated:boolean}. Se nada for legível, 
           truncated: { type: 'boolean' }, products: { type: 'array', maxItems: 200, items: {
             type: 'object', properties: {
               name: { type: 'string', maxLength: 100 }, category: { type: 'string', maxLength: 50 }, type: { type: 'string', enum: ['comum', 'cigarro'] },
-              purchaseCost: nullablePrice, costBasis: { type: ['string', 'null'], enum: ['unidade', 'carteira', 'maco', 'embalagem', null] },
+              purchaseCost: nullablePrice, costBasis: { anyOf: [{ type: 'string', enum: ['unidade', 'carteira', 'maco', 'embalagem'] }, { type: 'null' }] },
               purchaseForm: { type: 'string', enum: ['unidade', 'fardo', 'pacote'] }, unitsPerPackage: { type: ['integer', 'null'], minimum: 1, maximum: 10000 },
               basePrice: nullablePrice, pricePack: nullablePrice, priceCart: nullablePrice, priceHalfCart: nullablePrice, priceUnit: nullablePrice
             }, required: ['name', 'category', 'type', 'purchaseCost', 'costBasis', 'purchaseForm', 'unitsPerPackage', 'basePrice', 'pricePack', 'priceCart', 'priceHalfCart', 'priceUnit'], additionalProperties: false
@@ -59,15 +59,29 @@ Retorne somente JSON {products:[...], truncated:boolean}. Se nada for legível, 
         }, required: ['products', 'truncated'], additionalProperties: false
       }, maxOutputTokens: 16384, httpOptions: { timeout: 40000, retryOptions: { attempts: 1 } } }
     };
+    let schemaEnabled = true;
+    const generate = async () => {
+      const { responseJsonSchema, ...jsonConfig } = parameters.config;
+      try {
+        return await ai.models.generateContent({ ...parameters, model, config: schemaEnabled ? parameters.config : jsonConfig });
+      } catch (error: unknown) {
+        const status = Number((error as { status?: number; code?: number })?.status || (error as { code?: number })?.code);
+        if (status !== 400 || !schemaEnabled) throw error;
+        // Some models reject the structured schema. JSON mode and server validation remain active.
+        schemaEnabled = false;
+        diagnose('JSON_MODE_RETRY', { stage, providerStatus: status });
+        return await ai.models.generateContent({ ...parameters, model, config: jsonConfig });
+      }
+    };
     let result;
     try {
-      result = await ai.models.generateContent({ ...parameters, model });
+      result = await generate();
     } catch (error: unknown) {
       const status = Number((error as { status?: number; code?: number })?.status || (error as { code?: number })?.code);
       if (status !== 404 || model === fallbackModel) throw error;
       diagnose('MODEL_FALLBACK', { stage, fallbackModel, providerStatus: status });
       model = fallbackModel;
-      result = await ai.models.generateContent({ ...parameters, model });
+      result = await generate();
     };
     stage = 'response-parsing';
     if (result.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
@@ -100,7 +114,7 @@ Retorne somente JSON {products:[...], truncated:boolean}. Se nada for legível, 
     const message = error instanceof Error ? error.message : '';
     const tooLarge = stage === 'provider-request' && (status === 413 || /payload too large|request.*too large|request.*size.*exceed/i.test(message));
     const code = tooLarge ? 'FILE_TOO_LARGE' : stage === 'response-parsing' ? 'INVALID_JSON_RESPONSE' : stage === 'response-validation' ? 'INVALID_CATALOG_RESPONSE' :
-      status === 429 ? 'QUOTA_EXCEEDED' : status === 401 || status === 403 ? 'AUTHORIZATION_FAILED' : status === 404 ? 'MODEL_UNAVAILABLE' : /timeout|deadline|abort/i.test(message) ? 'TIMEOUT' : 'UPSTREAM_FAILURE';
+      status === 429 ? 'QUOTA_EXCEEDED' : status === 401 || status === 403 ? 'AUTHORIZATION_FAILED' : status === 404 ? 'MODEL_UNAVAILABLE' : status === 400 ? 'REQUEST_REJECTED' : /timeout|deadline|abort/i.test(message) ? 'TIMEOUT' : 'UPSTREAM_FAILURE';
     // Provider messages can include request contents; log classified metadata only.
     diagnose(code, { stage, providerStatus: Number.isFinite(status) ? status : null });
     const errorMessage = tooLarge ? sizeMessage : status === 429 ? 'Limite de leitura por IA atingido. Tente mais tarde ou preencha manualmente.' :
