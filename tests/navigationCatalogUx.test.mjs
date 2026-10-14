@@ -132,6 +132,8 @@ test('catalogue reading failure preserves the modal and manual entry',async()=>{
   await upload(ui);
   assert.ok(ui.getByRole('dialog'));
   assert.match(ui.getByRole('alert').textContent,/Preencha manualmente/);
+  assert.match(ui.getByRole('status').textContent,/não foi concluída/);
+  assert.ok(!ui.queryByText(/Processando catálogo com IA/));
   fireEvent.click(ui.getByRole('button',{name:'Adicionar produto manualmente'}));
   assert.ok(ui.getByLabelText('Nome do produto'));
   assert.equal(ui.getByRole('button',{name:'Enviar PDF'}).disabled,false);

@@ -78,3 +78,12 @@ test('catalog failures log safe diagnostics and distinguish provider size errors
   assert.equal(oversized.status,413);assert.equal(oversized.body.maxFileBytes,3*1024*1024);
   assert.equal(logs.at(-1).stage,'file-validation');
 });
+
+test('catalog token truncation is actionable rather than an invalid JSON 502',async t=>{
+  const key=process.env.GEMINI_API_KEY;process.env.GEMINI_API_KEY='mock-only';
+  t.after(()=>{if(key===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=key;delete globalThis.__generateModel;});
+  t.mock.method(console,'error',()=>{});
+  globalThis.__generateModel=async args=>{assert.equal(args.config.maxOutputTokens,16384);return {text:'{"products":[',candidates:[{finishReason:'MAX_TOKENS'}]};};
+  const result=await invoke('catalog');
+  assert.equal(result.status,422);assert.equal(result.body.code,'INCOMPLETE_CATALOG');assert.match(result.body.error,/menos páginas/);
+});

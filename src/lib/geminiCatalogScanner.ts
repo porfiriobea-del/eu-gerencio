@@ -34,8 +34,27 @@ export async function recognizeCatalog(dataUrl: string, categories: string[], si
       body: JSON.stringify({ fileBase64: data[2], mimeType: data[1].toLowerCase(), availableCategories: categories.slice(0, 100) })
     });
     const result = await response.json().catch(() => null);
+    if (!response.ok || !result) {
+      console.error('[Gemini catalog scanner]', {
+        code: typeof result?.code === 'string' ? result.code : 'HTTP_ERROR', status: response.status,
+        providerStatus: typeof result?.providerStatus === 'number' ? result.providerStatus : null,
+        requestId: response.headers.get('x-request-id'), mimeType: data[1].toLowerCase(), base64Length: data[2].length
+      });
+    }
     if (response.status === 429) throw new Error('O limite da IA foi atingido. Tente mais tarde ou adicione os produtos manualmente.');
-    if (!response.ok || !result) throw new Error(response.status === 413 || result?.code === 'FILE_TOO_LARGE' ? sizeMessage : 'Não foi possível ler o catálogo agora. Tente outra foto ou PDF, ou preencha manualmente.');
+    if (!response.ok || !result) {
+      if (response.status === 413 || result?.code === 'FILE_TOO_LARGE') throw new Error(sizeMessage);
+      const messages: Record<string, string> = {
+        MODEL_UNAVAILABLE: 'O serviço de leitura está indisponível. Você pode cadastrar os produtos manualmente enquanto a configuração é verificada.',
+        AUTHORIZATION_FAILED: 'O serviço de leitura está indisponível. Você pode cadastrar os produtos manualmente enquanto a configuração é verificada.',
+        MISSING_API_KEY: 'O serviço de leitura está indisponível. Você pode cadastrar os produtos manualmente enquanto a configuração é verificada.',
+        INCOMPLETE_CATALOG: 'O catálogo tem muitas informações. Envie menos páginas ou divida a foto em partes.',
+        INVALID_JSON_RESPONSE: 'A IA não conseguiu organizar os produtos desta imagem. Envie menos itens por foto ou preencha manualmente.',
+        INVALID_CATALOG_RESPONSE: 'A IA não conseguiu organizar os produtos desta imagem. Envie menos itens por foto ou preencha manualmente.',
+        TIMEOUT: 'A leitura demorou demais. Envie menos páginas ou uma foto com menos produtos.'
+      };
+      throw new Error(messages[result?.code] || 'Não foi possível ler o catálogo agora. Tente outra foto ou PDF, ou preencha manualmente.');
+    }
     if (result.success !== true || !Array.isArray(result.products) || result.products.length === 0 || result.products.length > 200) throw new Error('A IA não identificou produtos. Tente um arquivo mais legível ou preencha manualmente.');
     return { products: result.products.map(parseSupplierDraft), truncated: result.truncated === true };
   } catch (error) {

@@ -110,3 +110,11 @@ test('catalog photos are resized and progressively compressed before upload',asy
   const result=await prepareCatalogFile(new File(['image'],'catalog.png',{type:'image/png'}));
   assert.equal(result,'data:image/jpeg;base64,aW1hZ2U=');assert.deepEqual(qualities,[0.9,0.8,0.7]);assert.deepEqual(sizes,[[1600,1200]]);
 });
+
+test('catalog scanner exposes safe metadata for model failures without logging file contents',async t=>{
+  const logs=[];t.mock.method(console,'error',(...args)=>logs.push(args[1]));
+  t.mock.method(globalThis,'fetch',async()=>Response.json({code:'MODEL_UNAVAILABLE',providerStatus:404},{status:502,headers:{'x-request-id':'test-request'}}));
+  await assert.rejects(recognizeCatalog('data:image/jpeg;base64,aW1hZ2U=',[]),/serviço de leitura está indisponível/);
+  assert.deepEqual(logs[0],{code:'MODEL_UNAVAILABLE',status:502,providerStatus:404,requestId:'test-request',mimeType:'image/jpeg',base64Length:8});
+  assert.ok(!JSON.stringify(logs).includes('aW1hZ2U='));
+});

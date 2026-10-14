@@ -50,14 +50,14 @@ Retorne somente JSON {products:[...], truncated:boolean}. Se nada for legível, 
         type: 'object', properties: {
           truncated: { type: 'boolean' }, products: { type: 'array', maxItems: 200, items: {
             type: 'object', properties: {
-              name: { type: 'string' }, category: { type: 'string' }, type: { type: 'string', enum: ['comum', 'cigarro'] },
+              name: { type: 'string', maxLength: 100 }, category: { type: 'string', maxLength: 50 }, type: { type: 'string', enum: ['comum', 'cigarro'] },
               purchaseCost: nullablePrice, costBasis: { type: ['string', 'null'], enum: ['unidade', 'carteira', 'maco', 'embalagem', null] },
               purchaseForm: { type: 'string', enum: ['unidade', 'fardo', 'pacote'] }, unitsPerPackage: { type: ['integer', 'null'], minimum: 1, maximum: 10000 },
               basePrice: nullablePrice, pricePack: nullablePrice, priceCart: nullablePrice, priceHalfCart: nullablePrice, priceUnit: nullablePrice
             }, required: ['name', 'category', 'type', 'purchaseCost', 'costBasis', 'purchaseForm', 'unitsPerPackage', 'basePrice', 'pricePack', 'priceCart', 'priceHalfCart', 'priceUnit'], additionalProperties: false
           } }
         }, required: ['products', 'truncated'], additionalProperties: false
-      }, httpOptions: { timeout: 40000, retryOptions: { attempts: 1 } } }
+      }, maxOutputTokens: 16384, httpOptions: { timeout: 40000, retryOptions: { attempts: 1 } } }
     };
     let result;
     try {
@@ -70,6 +70,10 @@ Retorne somente JSON {products:[...], truncated:boolean}. Se nada for legível, 
       result = await ai.models.generateContent({ ...parameters, model });
     };
     stage = 'response-parsing';
+    if (result.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
+      diagnose('INCOMPLETE_CATALOG', { stage, providerStatus: null });
+      return res.status(422).json({ code: 'INCOMPLETE_CATALOG', requestId, error: 'O catálogo tem mais informações do que foi possível ler de uma vez. Envie menos páginas ou divida a foto em partes.' });
+    }
     const parsed = JSON.parse((result.text || '').replace(/^```(?:json)?\s*|\s*```$/g, '').trim());
     stage = 'response-validation';
     if (!Array.isArray(parsed?.products) || !parsed.products.length || parsed.products.length > 200) {
@@ -99,7 +103,13 @@ Retorne somente JSON {products:[...], truncated:boolean}. Se nada for legível, 
       status === 429 ? 'QUOTA_EXCEEDED' : status === 401 || status === 403 ? 'AUTHORIZATION_FAILED' : status === 404 ? 'MODEL_UNAVAILABLE' : /timeout|deadline|abort/i.test(message) ? 'TIMEOUT' : 'UPSTREAM_FAILURE';
     // Provider messages can include request contents; log classified metadata only.
     diagnose(code, { stage, providerStatus: Number.isFinite(status) ? status : null });
-    return res.status(tooLarge ? 413 : status === 429 ? 429 : status === 401 || status === 403 ? 503 : 502).json({ code, ...(tooLarge ? { maxFileBytes } : {}), error: tooLarge ? sizeMessage : status === 429 ? 'Limite de leitura por IA atingido. Tente mais tarde ou preencha manualmente.' : 'Não foi possível ler este catálogo. Tente outro arquivo ou preencha manualmente.' });
+    const errorMessage = tooLarge ? sizeMessage : status === 429 ? 'Limite de leitura por IA atingido. Tente mais tarde ou preencha manualmente.' :
+      code === 'MODEL_UNAVAILABLE' || code === 'AUTHORIZATION_FAILED' ? 'O serviço de leitura está indisponível. Você pode cadastrar os produtos manualmente enquanto a configuração é verificada.' :
+      code === 'TIMEOUT' ? 'A leitura demorou demais. Envie menos páginas ou uma foto com menos produtos.' :
+      code === 'INVALID_JSON_RESPONSE' || code === 'INVALID_CATALOG_RESPONSE' ? 'A IA não conseguiu organizar os produtos desta imagem. Envie menos itens por foto ou preencha manualmente.' :
+      'Não foi possível ler este catálogo. Tente outro arquivo ou preencha manualmente.';
+    return res.status(tooLarge ? 413 : status === 429 ? 429 : status === 401 || status === 403 ? 503 : 502).json({ code, requestId,
+      providerStatus: Number.isFinite(status) ? status : null, ...(tooLarge ? { maxFileBytes } : {}), error: errorMessage });
   }
 }
 export default recognizeCatalog;

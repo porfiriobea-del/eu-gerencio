@@ -92,7 +92,10 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
       }
       setStatus('Leitura concluída. Revise nomes, medidas de compra, custos e preços de venda antes de cadastrar.');
     } catch (error) {
-      if (generation === generationRef.current) setError(error instanceof Error ? error.message : 'Não foi possível ler o catálogo. Preencha os produtos manualmente.');
+      if (generation === generationRef.current) {
+        setStatus('A leitura não foi concluída. Os produtos já revisados foram mantidos.');
+        setError(error instanceof Error ? error.message : 'Não foi possível ler o catálogo. Preencha os produtos manualmente.');
+      }
     } finally {
       if (generation === generationRef.current) { setIsReading(false); readingRef.current = false; controllerRef.current = null; }
     }
