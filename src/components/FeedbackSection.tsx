@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { submitFeedback, subscribeFeedbacks } from '../lib/api';
 import { Feedback } from '../types';
+import { exportFeedbackToSheets } from '../lib/feedbackSheets';
 import { format } from 'date-fns';
 
 interface FeedbackSectionProps {
@@ -27,6 +28,20 @@ export function FeedbackSection({ storeName, defaultContact = '', className = ''
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState('');
   const [historyReload, setHistoryReload] = useState(0);
+  const [exportingHistory, setExportingHistory] = useState(false);
+
+  const exportHistory = async () => {
+    if (exportingHistory) return;
+    setExportingHistory(true);
+    let confirmed = 0;
+    try {
+      for (const feedback of feedbacksHistory) {
+        if (feedback.id && await exportFeedbackToSheets(feedback.id)) confirmed++;
+      }
+      if (confirmed === feedbacksHistory.length) showToast(`✓ ${confirmed} feedbacks confirmados na planilha!`);
+      else showToast(`${confirmed} de ${feedbacksHistory.length} confirmados na planilha. Todos continuam salvos no Supabase. Confira a implantação do Apps Script antes de tentar novamente.`, 'warning');
+    } finally { setExportingHistory(false); }
+  };
 
   useEffect(() => {
     setHistoryLoading(true);
@@ -240,6 +255,9 @@ export function FeedbackSection({ storeName, defaultContact = '', className = ''
             </h3>
           </div>
 
+          {feedbacksHistory.length > 0 && <button type="button" disabled={exportingHistory || isSubmitting} onClick={exportHistory} className="mb-3 text-xs font-semibold text-primary disabled:opacity-50">
+            {exportingHistory ? 'Enviando histórico à planilha...' : 'Enviar histórico à planilha'}
+          </button>}
           {historyLoading && <p role="status" className="mb-3 text-xs text-muted-foreground">Carregando seus feedbacks...</p>}
           {historyError && <div role="alert" className="mb-3 text-xs text-amber-600 dark:text-amber-400">
             <p>{historyError}</p>

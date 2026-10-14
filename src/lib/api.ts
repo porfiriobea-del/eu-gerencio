@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { exportFeedbackToSheets } from './feedbackSheets';
 import { type CatalogProduct } from './standardCatalog';
 import { executeCatalogImport, catalogDocumentId } from './catalogImport';
 import { withActionDeadline, ConfirmationTimeoutError } from './actionFeedback';
@@ -1023,6 +1024,10 @@ export const submitFeedback = withActionDeadline(async (feedbackData: {
     handleCloudError(err, OperationType.WRITE, `feedbacks/${feedbackId}`);
     throw err;
   }
+  // The confirmed cloud record remains the source of truth if Sheets is unavailable.
+  void exportFeedbackToSheets(feedbackId).then(confirmed => {
+    if (!confirmed) console.warn('[Feedback Sheets export]', { code: 'EXPORT_NOT_CONFIRMED' });
+  });
 });
 
 export const subscribeFeedbacks = (callback: (feedbacks: Feedback[]) => void, onError?: (error: unknown) => void) => {
