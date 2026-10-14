@@ -13,6 +13,12 @@ O cadastro da loja e os dados de produtos, clientes, vendas, pagamentos, compras
 
 A aplicação valida `eu_user_id()` antes de consultar o cadastro. Ausência de configuração, migração SQL ou autorização mostra uma tela de recuperação, **não** o cadastro de uma loja nova. A operação em produção depende das etapas acima; publicar os arquivos no GitHub não executa SQL nem altera as configurações da Vercel/Supabase.
 
+### Diagnóstico de instalação e autenticação
+
+Uma resposta HTTP 200 em `/auth/v1/settings` confirma apenas que o endpoint público aceita a chave. Ela não comprova que as tabelas existem ou que o token Firebase será aceito nas consultas da loja. Erros `PGRST202` para `eu_user_id` e `PGRST205` para `eu_store_settings` indicam que a estrutura não está disponível no projeto: aplique a migração SQL antes de tentar cadastrar a loja. Se essas funções/tabelas já foram criadas, confirme o projeto selecionado e a atualização do schema cache do PostgREST.
+
+Para erros de sessão/JWT, configure a integração Firebase acima e entre novamente. Mantenha RLS ativo. O código não contorna autenticação usando a chave publishable ou uma chave administrativa.
+
 ## Tabelas e isolamento
 
 | Modelo | Tabela |

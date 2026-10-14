@@ -5,13 +5,14 @@ import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { createClient } from '@supabase/supabase-js';
-let server, dir, store, client, api;
+let server, dir, store, client, api, responseError;
 const records=new Map(), calls=[], listeners=new Set();
 const key=(table,path,id)=>`${table}/${path}/${id}`;
 before(async()=>{
   server=http.createServer(async(req,res)=>{
     calls.push({url:req.url,authorization:req.headers.authorization});
     res.setHeader('content-type','application/json');
+    if(responseError){res.statusCode=404;res.end(JSON.stringify(responseError));return;}
     if(req.headers.authorization!=='Bearer test-firebase-jwt') {res.statusCode=401;res.end(JSON.stringify({message:'Denied'}));return;}
     const url=new URL(req.url,'http://localhost');
     if(url.pathname.endsWith('/rpc/eu_user_id')){res.end(JSON.stringify('owner'));return;}
@@ -110,4 +111,33 @@ test('POS rejects an insufficient current balance without recording a sale',asyn
   await assert.rejects(api.recordSale({total:5,type:'cash',customerId:''},[{productId:'p1',name:'Produto',format:'Padrão',quantity:1,price:5,unitCost:2,stockDeduction:1}],[{id:'p1',newStock:9}]),/insuficiente/);
   const sales=await store.getDocs(store.query(store.collection(store.db,'sales'),store.where('ownerId','==','owner')));
   assert.equal(sales.docs.length,1);
+});
+
+test('missing production schema gives actionable instructions without an empty store fallback',async()=>{
+  responseError={code:'PGRST202',message:'Could not find function'};
+  try {await assert.rejects(store.verifyCloudIdentity('owner'),/20261014_cloud_source_of_truth.sql/);}
+  finally {responseError=null;}
+});
+
+test('POS rejects stale package measures and invalid prices before committing stock',async()=>{
+  const ref=store.doc(store.db,'products','p1');
+  await store.updateDoc(ref,{stock:10,unitsPerPackage:6});
+  const item={productId:'p1',name:'Produto',format:'Fardo (12 unidades)',quantity:1,price:5,unitCost:2,stockDeduction:12};
+  await assert.rejects(api.recordSale({total:5,type:'cash',customerId:''},[item],[]),/medida/);
+  await assert.rejects(api.recordSale({total:5,type:'cash',customerId:''},[{...item,price:NaN}],[]),/Preço/);
+  assert.equal((await store.getDoc(ref)).data().stock,10);
+});
+
+test('a fiado payment above the current debt is rejected without recording money',async()=>{
+  const ref=store.doc(store.db,'customers','customer');
+  await store.setDoc(ref,{ownerId:'owner',name:'Cliente',totalDebt:10});
+  const query=store.query(store.collection(store.db,'payments'),store.where('ownerId','==','owner'));
+  const before=(await store.getDocs(query)).size;
+  await assert.rejects(api.recordPayment('customer',15,'cash'),/excede/);
+  assert.equal((await store.getDoc(ref)).data().totalDebt,10);
+  assert.equal((await store.getDocs(query)).size,before);
+  await api.recordPayment('customer',9.90,'cash');
+  assert.equal((await store.getDoc(ref)).data().totalDebt,0.10);
+  await api.recordPayment('customer',0.10,'cash');
+  assert.equal((await store.getDoc(ref)).data().totalDebt,0);
 });

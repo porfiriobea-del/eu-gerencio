@@ -122,7 +122,12 @@ function persist(values: Record<string, unknown>, rollback: () => void = () => {
   if (!cloudOwnerId) return;
   const ownerId = cloudOwnerId;
   void import('./cloudStore').then(({ db, doc, updateDoc }) => updateDoc(doc(db, 'settings', ownerId), values))
-    .catch(error => { rollback(); showActionError(error, 'Não foi possível salvar as categorias da loja. Tente novamente.'); if (typeof window !== 'undefined') window.dispatchEvent(new Event('cloud-categories')); });
+    .catch(error => {
+      // An old request must not restore categories from a store that has been left.
+      if (cloudOwnerId !== ownerId) return;
+      rollback(); showActionError(error, 'Não foi possível salvar as categorias da loja. Tente novamente.');
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('cloud-categories'));
+    });
 }
 export function getSavedBusinessSector(): string { return businessSector; }
 export function saveBusinessSector(sectorId: string) { const previous = businessSector; businessSector = sectorId; persist({ businessSector: sectorId }, () => { businessSector = previous; }); }

@@ -1,6 +1,6 @@
 import express from 'express';
-import { recognizeProduct } from './server/geminiRecognition';
-import { recognizeCatalog } from './api/gemini/recognize-catalog';
+import { recognizeProduct } from './server/geminiRecognition.ts';
+import { recognizeCatalog } from './api/gemini/recognize-catalog.ts';
 import path from 'path';
 import { fileURLToPath } from 'url';
 

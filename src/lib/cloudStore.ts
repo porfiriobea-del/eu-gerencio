@@ -50,7 +50,13 @@ export class QuerySnapshot {
 }
 function fail(error: any): never {
   if (!error?.code || /fetch|network|connection/i.test(error?.message || '')) event('cloud-offline');
-  const result = new Error(error?.message || 'Não foi possível acessar os dados na nuvem.');
+  let message = error?.message || 'Não foi possível acessar os dados na nuvem.';
+  if (['PGRST202', 'PGRST205', '42P01', '42883'].includes(error?.code)) {
+    message = 'A estrutura do Supabase ainda não está instalada ou atualizada. Execute a migração 20261014_cloud_source_of_truth.sql no SQL Editor do projeto e tente novamente.';
+  } else if (['PGRST301', 'PGRST303'].includes(error?.code)) {
+    message = 'O Supabase não reconheceu a sessão. Entre novamente e verifique a integração Firebase em Authentication → Third-Party Auth no projeto Supabase.';
+  }
+  const result = new Error(message);
   Object.assign(result, { code: error?.code, details: error?.details });
   throw result;
 }

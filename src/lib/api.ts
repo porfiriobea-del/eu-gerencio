@@ -506,11 +506,13 @@ export const recordSale = withActionDeadline(async (
       for (const item of items) {
         const product = stockProducts.get(item.productId)!;
         if (!Number.isSafeInteger(item.quantity) || item.quantity <= 0) throw new Error('Quantidade inválida.');
+        if (!Number.isFinite(item.price) || item.price <= 0) throw new Error('Preço de venda inválido.');
         const units = item.stockDeduction ?? (product.type === 'cigarro'
           ? getCigaretteFormats(product).find(format => format.label === item.format)?.units
           : /^(Fardo|Pacote) \(/.test(item.format) ? product.unitsPerPackage : 1);
         if (!units || !isValidStockQuantity(units)) throw new Error('Formato inválido.');
-        if (product.type === 'cigarro' && !getCigaretteFormats(product).some(format => format.units === units && format.price === item.price)) throw new Error('O preço ou formato mudou. Confira o carrinho.');
+        if (units !== productFormatUnits(product, item.format)) throw new Error('A medida do produto mudou. Confira o carrinho.');
+        if (product.type === 'cigarro' && !getCigaretteFormats(product).some(format => format.label === item.format && format.units === units && format.price === item.price)) throw new Error('O preço ou formato mudou. Confira o carrinho.');
         deductions.set(item.productId, (deductions.get(item.productId) || 0) + Math.round(units * 20) * item.quantity);
       }
       for (const [id, deduction] of deductions) {
@@ -571,8 +573,13 @@ export const recordPayment = withActionDeadline(async (
       const customer = await transaction.get(ref);
       if (!customer.exists()) throw new Error('Cliente não encontrado.');
       customerName = customer.data().name;
-      transaction.update(ref, { totalDebt: Math.max(0, Math.round((Number(customer.data().totalDebt) - amount) * 100) / 100), updatedAt: now });
-      transaction.set(pRef, { customerId, amount, method, employeeId: empId, employeeName: empName, ownerId: uid, createdAt: now });
+      const debtCents = Math.round(Number(customer.data().totalDebt) * 100);
+      const amountCents = Math.round(amount * 100);
+      if (!Number.isSafeInteger(debtCents) || debtCents < 0) throw new Error('Saldo de fiado inválido. Confira o cadastro do cliente.');
+      if (!Number.isSafeInteger(amountCents) || amountCents <= 0) throw new Error('Pagamento inválido.');
+      if (amountCents > debtCents) throw new Error('O pagamento excede o saldo de fiado atual. Atualize o cliente e confira o valor.');
+      transaction.update(ref, { totalDebt: (debtCents - amountCents) / 100, updatedAt: now });
+      transaction.set(pRef, { customerId, amount: amountCents / 100, method, employeeId: empId, employeeName: empName, ownerId: uid, createdAt: now });
     });
 
     recordMovement({
