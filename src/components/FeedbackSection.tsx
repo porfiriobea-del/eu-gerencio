@@ -24,11 +24,21 @@ export function FeedbackSection({ storeName, defaultContact = '', className = ''
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [feedbacksHistory, setFeedbacksHistory] = useState<Feedback[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState('');
+  const [historyReload, setHistoryReload] = useState(0);
 
   useEffect(() => {
-    const unsub = subscribeFeedbacks(setFeedbacksHistory);
+    setHistoryLoading(true);
+    setHistoryError('');
+    const unsub = subscribeFeedbacks(history => {
+      setFeedbacksHistory(history); setHistoryLoading(false); setHistoryError('');
+    }, () => {
+      setHistoryLoading(false);
+      setHistoryError('Não foi possível carregar seus feedbacks da nuvem. Verifique sua conexão e tente novamente.');
+    });
     return () => unsub();
-  }, []);
+  }, [historyReload]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -222,7 +232,6 @@ export function FeedbackSection({ storeName, defaultContact = '', className = ''
       </form>
 
       {/* Histórico de Feedbacks Enviados */}
-      {feedbacksHistory.length > 0 && (
         <div className="mt-8 pt-6 border-t border-border">
           <div className="flex items-center gap-2 mb-3">
             <Clock className="w-4 h-4 text-muted-foreground" />
@@ -230,6 +239,13 @@ export function FeedbackSection({ storeName, defaultContact = '', className = ''
               Seus Feedbacks Anteriores ({feedbacksHistory.length})
             </h3>
           </div>
+
+          {historyLoading && <p role="status" className="mb-3 text-xs text-muted-foreground">Carregando seus feedbacks...</p>}
+          {historyError && <div role="alert" className="mb-3 text-xs text-amber-600 dark:text-amber-400">
+            <p>{historyError}</p>
+            <button type="button" onClick={() => setHistoryReload(value => value + 1)} className="mt-2 font-semibold underline">Tentar novamente</button>
+          </div>}
+          {!historyLoading && !historyError && !feedbacksHistory.length && <p className="text-xs text-muted-foreground">Você ainda não enviou feedbacks.</p>}
 
           <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
             {feedbacksHistory.map((fb) => (
@@ -259,7 +275,6 @@ export function FeedbackSection({ storeName, defaultContact = '', className = ''
             ))}
           </div>
         </div>
-      )}
     </div>
   );
 }

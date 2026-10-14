@@ -1025,7 +1025,7 @@ export const submitFeedback = withActionDeadline(async (feedbackData: {
   }
 });
 
-export const subscribeFeedbacks = (callback: (feedbacks: Feedback[]) => void) => {
+export const subscribeFeedbacks = (callback: (feedbacks: Feedback[]) => void, onError?: (error: unknown) => void) => {
   const uid = auth.currentUser?.uid;
   if (!uid) return () => {};
 
@@ -1038,7 +1038,7 @@ export const subscribeFeedbacks = (callback: (feedbacks: Feedback[]) => void) =>
     const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Feedback));
     list.sort((a, b) => b.createdAt - a.createdAt);
     callback(list);
-  }, (err) => handleCloudError(err, OperationType.LIST, 'feedbacks'));
+  }, (err) => { if (onError) onError(err); else handleCloudError(err, OperationType.LIST, 'feedbacks'); });
 };
 
 // ---------------------------------------------------------------------------

@@ -52,7 +52,7 @@ before(async()=>{
   store=await import(pathToFileURL(`${dir}/store.mjs`).href);
   await build({entryPoints:[new URL('../src/lib/api.ts',import.meta.url).pathname],bundle:true,packages:'external',platform:'node',format:'esm',outfile:`${dir}/api.mjs`,plugins:[{name:'inject-api-client',setup(b){
     b.onResolve({filter:/\/(supabase|firebase)$/},args=>({path:args.path.split('/').at(-1),namespace:'api-test'}));
-    b.onLoad({filter:/.*/,namespace:'api-test'},args=>({contents:args.path==='firebase'?'export const auth={currentUser:{uid:"owner",email:"owner@test.invalid"}};':'export const supabase=globalThis.__cloudClient;export const assertSupabaseConfigured=()=>{};export const postToGoogleSheets=async()=>{};export const GOOGLE_SHEETS_WEBHOOK_URL="";',loader:'js'}));
+    b.onLoad({filter:/.*/,namespace:'api-test'},args=>({contents:args.path==='firebase'?'export const auth={currentUser:{uid:"owner",email:"owner@test.invalid"}};':'export const supabase=globalThis.__cloudClient;export const assertSupabaseConfigured=()=>{};export const postToGoogleSheets=async payload=>{if(globalThis.__sheetsFail){globalThis.__failedSheetType=payload.tipo;throw new Error("Simulated Sheets outage");}};export const GOOGLE_SHEETS_WEBHOOK_URL="";',loader:'js'}));
   }}]});
   api=await import(pathToFileURL(`${dir}/api.mjs`).href);
 });
@@ -197,4 +197,29 @@ test('purchase retries rebuild the stock adjustment without duplicating the purc
   await api.recordPurchase({productId:'p1',productName:'Renomeado',quantity:2,unitCost:1,totalCost:2,date:Date.now()});
   assert.equal((await store.getDoc(ref)).data().stock,3);
   assert.equal((await store.getDocs(store.collection(store.db,'purchases'))).size,before.size+1);
+});
+
+
+test('all five feedback types survive resubscription and are read by an independent Supabase client',async()=>{
+ const categories=['suggestion','praise','bug','question','other'];
+ for(const category of categories)await api.submitFeedback({category,message:`Teste local: ${category}`,rating:5,storeName:'Loja de teste'});
+ let history=[];
+ const stop=api.subscribeFeedbacks(value=>{history=value;});
+ try{await waitFor(()=>history.length===5);assert.deepEqual(new Set(history.map(item=>item.category)),new Set(categories));}finally{stop();}
+ history=[];const reopened=api.subscribeFeedbacks(value=>{history=value;});
+ try{await waitFor(()=>history.length===5);assert.ok(history.every(item=>item.message.startsWith('Teste local:')));}finally{reopened();}
+ const secondDevice=createClient(`http://127.0.0.1:${server.address().port}`,'test-only-public-key',{accessToken:async()=> 'test-firebase-jwt',auth:{persistSession:false,autoRefreshToken:false}});
+ const result=await secondDevice.from('eu_feedbacks').select('id,data').eq('collection_path','feedbacks').eq('owner_id','owner');
+ assert.equal(result.error,null);assert.equal(result.data.length,5);
+ assert.deepEqual(new Set(result.data.map(item=>item.data.category)),new Set(categories));
+});
+
+test('Sheets export failure cannot roll back a confirmed Supabase sale or stock deduction',async()=>{
+ const ref=store.doc(store.db,'products','p1');await store.updateDoc(ref,{stock:2});
+ globalThis.__sheetsFail=true;
+ try{
+  await api.recordSale({total:5,type:'cash',customerId:''},[{productId:'p1',name:'Produto',format:'Padrão',quantity:1,price:5,unitCost:2,stockDeduction:1}],[]);
+  await waitFor(()=>globalThis.__failedSheetType==='sale');
+  assert.equal((await store.getDoc(ref)).data().stock,1);
+ }finally{delete globalThis.__sheetsFail;delete globalThis.__failedSheetType;}
 });
