@@ -121,6 +121,64 @@ export function CameraCaptureModal({
     setIsCameraActive(false);
   };
 
+  // Capture a ready video frame, then await the shared Gemini analysis.
+  const capturePhoto = async () => {
+    if (!isOpen || isSaving || isAnalyzing) return;
+    if (!videoRef.current || !videoRef.current.videoWidth || !videoRef.current.videoHeight) {
+      setCameraError('Aguarde a câmera ficar pronta antes de tirar a foto.');
+      return;
+    }
+    try {
+      const video = videoRef.current;
+      const canvas = canvasRef.current || document.createElement('canvas');
+      const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
+      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas indisponível');
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      stopCamera();
+      setCapturedImage(dataUrl);
+      setMode('preview');
+      // The scanner validates this data URL and sends only raw Base64 to Gemini.
+      await analyzeImage(dataUrl);
+    } catch {
+      stopCamera();
+      resetDraft();
+      setMode('preview');
+      setAnalysisError('Não foi possível capturar a foto. Preencha nome e categoria manualmente ou tire outra foto.');
+    }
+  };
+
+  // Read and resize the gallery photo before the same Gemini/manual-preview flow.
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !isOpen || isSaving || isAnalyzing) return;
+    analysisControllerRef.current?.abort();
+    const analysisId = ++analysisIdRef.current;
+    stopCamera();
+    setMode('preview');
+    resetDraft();
+    setCapturedImage(null);
+    setAnalysisError(null);
+    setIsAnalyzing(true);
+    try {
+      const dataUrl = await prepareProductImage(file);
+      if (analysisId !== analysisIdRef.current) return;
+      setCapturedImage(dataUrl);
+      await analyzeImage(dataUrl);
+    } catch (error) {
+      if (analysisId !== analysisIdRef.current) return;
+      setAnalysisError(error instanceof Error ? error.message : 'Não foi possível processar a foto. Preencha manualmente.');
+    } finally {
+      // analyzeImage owns its newer request; only release this file-reading phase here.
+      if (analysisId === analysisIdRef.current) setIsAnalyzing(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       setCapturedImage(null);
@@ -143,61 +201,6 @@ export function CameraCaptureModal({
     if (isOpen && mode === 'camera') startCamera();
     return () => stopCamera();
   }, [isOpen, mode]);
-
-  // Capture photo from live camera
-  const capturePhoto = () => {
-    if (!videoRef.current || !videoRef.current.videoWidth || !videoRef.current.videoHeight) {
-      setCameraError('Aguarde a câmera ficar pronta antes de tirar a foto.');
-      return;
-    }
-    try {
-      const video = videoRef.current;
-      const canvas = canvasRef.current || document.createElement('canvas');
-      const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
-      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Canvas indisponível');
-
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-      stopCamera();
-      setCapturedImage(dataUrl);
-      setMode('preview');
-      // The scanner validates this data URL and sends only raw Base64 to Gemini.
-      void analyzeImage(dataUrl);
-    } catch {
-      stopCamera();
-      resetDraft();
-      setMode('preview');
-      setAnalysisError('Não foi possível capturar a foto. Preencha nome e categoria manualmente ou tire outra foto.');
-    }
-  };
-
-  // Upload photo from file input
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    analysisControllerRef.current?.abort();
-    const analysisId = ++analysisIdRef.current;
-    stopCamera();
-    setMode('preview');
-    resetDraft();
-    setCapturedImage(null);
-    setAnalysisError(null);
-    setIsAnalyzing(true);
-    try {
-      const dataUrl = await prepareProductImage(file);
-      if (analysisId !== analysisIdRef.current) return;
-      setCapturedImage(dataUrl);
-      await analyzeImage(dataUrl);
-    } catch (error) {
-      if (analysisId !== analysisIdRef.current) return;
-      setAnalysisError(error instanceof Error ? error.message : 'Não foi possível processar a foto.');
-      setIsAnalyzing(false);
-    }
-  };
 
   const resetDraft = () => {
     setEditName('');

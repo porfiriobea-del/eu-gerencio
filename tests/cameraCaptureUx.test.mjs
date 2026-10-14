@@ -87,3 +87,48 @@ for (const failure of ['network', 'quota', 'canvas']) {
     assert.ok(!ui.queryByText('Processando imagem com IA...'));
   });
 }
+
+function galleryRuntime(t) {
+  const names = ['FileReader', 'Image'];
+  const saved = new Map(names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
+  Object.defineProperty(globalThis, 'FileReader', { configurable: true, value: dom.window.FileReader });
+  Object.defineProperty(globalThis, 'Image', { configurable: true, value: class {
+    width = 1280; height = 720;
+    set src(value) { queueMicrotask(() => this.onload()); }
+  } });
+  t.after(() => {
+    for (const [name, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else delete globalThis[name];
+    }
+  });
+}
+
+test('gallery upload uses the same raw Base64 analysis and leaves financial fields manual', async t => {
+  galleryRuntime(t);
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    assert.equal(JSON.parse(options.body).imageBase64, 'aW1hZ2U=');
+    return Response.json({ success: true, product: { name: 'Produto da Galeria', category: 'Bebidas' } });
+  });
+  const ui = setup();
+  fireEvent.change(ui.container.querySelector('input[type="file"]'), { target: { files: [new dom.window.File(['image'], 'produto.jpg', { type: 'image/jpeg' })] } });
+  assert.ok(await ui.findByDisplayValue('Produto da Galeria'));
+  assert.equal(ui.container.querySelector('select').value, 'Bebidas');
+  for (const input of ui.container.querySelectorAll('input[type="number"]')) assert.equal(input.value, '');
+  assert.ok(!ui.queryByText('Processando imagem com IA...'));
+});
+
+test('gallery file read failure resets loading and keeps manual name/category editable', async t => {
+  galleryRuntime(t);
+  Object.defineProperty(globalThis, 'FileReader', { configurable: true, value: class {
+    readAsDataURL() { queueMicrotask(() => this.onerror()); }
+  } });
+  t.mock.method(globalThis, 'fetch', () => assert.fail('No Gemini request after a file read error'));
+  const ui = setup();
+  fireEvent.change(ui.container.querySelector('input[type="file"]'), { target: { files: [new dom.window.File(['image'], 'produto.jpg', { type: 'image/jpeg' })] } });
+  assert.ok(await ui.findByText('Preenchimento manual disponível'));
+  assert.ok(!ui.queryByText('Processando imagem com IA...'));
+  const input = ui.getByPlaceholderText('Ex: Coca-Cola 2L ou Cerveja Heineken 330ml');
+  fireEvent.change(input, { target: { value: 'Nome manual' } });
+  assert.equal(input.value, 'Nome manual');
+});
