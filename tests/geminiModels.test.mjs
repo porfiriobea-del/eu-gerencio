@@ -50,11 +50,12 @@ for (const name of ['product', 'catalog']) {
       };
       const result = await invoke(name);
       assert.equal(result.status, scenario === 'quota' ? 429 : ['both-unavailable', 'fallback-is-primary'].includes(scenario) ? 502 : 200);
-      const expected = scenario === 'custom-fallback' ? ['custom-model', 'gemini-3.1-flash-lite'] : scenario === 'both-unavailable' ? ['gemini-3.5-flash', 'gemini-3.1-flash-lite'] : scenario === 'fallback-is-primary' ? ['gemini-3.1-flash-lite'] : ['gemini-3.5-flash'];
+      const expected = scenario === 'quota' ? ['gemini-3.5-flash', 'gemini-3.1-flash-lite'] : scenario === 'custom-fallback' ? ['custom-model', 'gemini-3.1-flash-lite'] : scenario === 'both-unavailable' ? ['gemini-3.5-flash', 'gemini-3.1-flash-lite'] : scenario === 'fallback-is-primary' ? ['gemini-3.1-flash-lite'] : ['gemini-3.5-flash'];
       assert.deepEqual(calls.map(call => call.model), expected);
       if (calls.length === 2) {
         assert.deepEqual(calls[0].contents, calls[1].contents);
-        assert.deepEqual(calls[0].config, calls[1].config);
+        assert.deepEqual(calls[0].config.responseJsonSchema, calls[1].config.responseJsonSchema);
+        assert.equal(calls[0].config.responseMimeType, calls[1].config.responseMimeType);
       }
     });
   }
@@ -111,4 +112,25 @@ for (const scenario of ['schema-rejected','fallback-schema-rejected','always-rej
   if(scenario==='invalid-json-after-retry')assert.equal(result.body.code,'INVALID_JSON_RESPONSE');
   if(scenario==='fallback-schema-rejected')assert.equal(calls.at(-1).model,'gemini-3.1-flash-lite');
  });
+}
+
+for (const name of ['product','catalog']) {
+ for (const scenario of ['overload-fallback','all-overloaded','quota-fallback']) {
+  test(`${name}: ${scenario} automatically recovers or returns a temporary service status`,async t=>{
+   const saved={key:process.env.GEMINI_API_KEY,model:process.env.GEMINI_MODEL};
+   process.env.GEMINI_API_KEY='mock-only';process.env.GEMINI_MODEL='gemini-3.5-flash';
+   t.after(()=>{for(const [key,value] of [['GEMINI_API_KEY',saved.key],['GEMINI_MODEL',saved.model]]){if(value===undefined)delete process.env[key];else process.env[key]=value;}delete globalThis.__generateModel;});
+   const calls=[];t.mock.method(console,'error',()=>{});t.mock.method(console,'warn',()=>{});
+   globalThis.__generateModel=async args=>{
+    calls.push(args);
+    if(scenario==='all-overloaded'||args.model==='gemini-3.5-flash')throw {status:scenario==='quota-fallback'?429:503};
+    return {text:JSON.stringify(name==='product'?product:catalog)};
+   };
+   const result=await invoke(name);
+   assert.equal(result.status,scenario==='all-overloaded'?503:200);
+   assert.deepEqual(calls.map(call=>call.model),name==='catalog'&&scenario!=='quota-fallback'?['gemini-3.5-flash','gemini-3.5-flash','gemini-3.1-flash-lite']:['gemini-3.5-flash','gemini-3.1-flash-lite']);
+   if(scenario==='all-overloaded')assert.equal(result.body.code,'PROVIDER_UNAVAILABLE');
+   for(const call of calls)assert.ok(call.config.httpOptions.timeout<=20000);
+  });
+ }
 }

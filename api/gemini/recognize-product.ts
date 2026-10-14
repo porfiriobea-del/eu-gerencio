@@ -4,7 +4,7 @@ import type { Request, Response } from 'express';
 // Analyze only the product label. Never fabricate a successful recognition.
 export async function recognizeProduct(req: Request, res: Response) {
   let model = process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash';
-  const fallbackModel = 'gemini-3.1-flash-lite';
+  const fallbackModel = process.env.GEMINI_FALLBACK_MODEL?.trim() || 'gemini-3.1-flash-lite';
   const requestId = crypto.randomUUID();
   const startedAt = Date.now();
   res.setHeader('X-Request-ID', requestId);
@@ -58,7 +58,7 @@ Retorne APENAS {"name": string, "category": string}. Nunca estime preço, custo,
           required: ['name', 'category'],
           additionalProperties: false
         },
-        httpOptions: { timeout: 30000, retryOptions: { attempts: 1 } }
+        httpOptions: { timeout: 19000, retryOptions: { attempts: 1 } }
       }
     };
     let response;
@@ -66,7 +66,7 @@ Retorne APENAS {"name": string, "category": string}. Nunca estime preço, custo,
       response = await ai.models.generateContent({ ...parameters, model });
     } catch (error: unknown) {
       const status = Number((error as { status?: number; code?: number })?.status || (error as { code?: number })?.code);
-      if (status !== 404 || model === fallbackModel) throw error;
+      if (![404, 429, 500, 502, 503, 504].includes(status) || model === fallbackModel) throw error;
       console.warn('[Gemini product recognition]', { code: 'MODEL_FALLBACK', model, fallbackModel, providerStatus: status });
       model = fallbackModel;
       response = await ai.models.generateContent({ ...parameters, model });
@@ -90,12 +90,16 @@ Retorne APENAS {"name": string, "category": string}. Nunca estime preço, custo,
     const status = Number((error as { status?: number; code?: number })?.status || (error as { code?: number })?.code);
     const message = error instanceof Error ? error.message : '';
     const reason = status === 429 ? 'QUOTA_EXCEEDED' : status === 401 || status === 403 ? 'AUTHORIZATION_FAILED' :
-      status === 404 ? 'MODEL_UNAVAILABLE' : /timeout|deadline|abort/i.test(message) ? 'TIMEOUT' : 'UPSTREAM_FAILURE';
+      [500, 502, 503, 504].includes(status) ? 'PROVIDER_UNAVAILABLE' : status === 404 ? 'MODEL_UNAVAILABLE' : /timeout|deadline|abort/i.test(message) ? 'TIMEOUT' : 'UPSTREAM_FAILURE';
     // SDK errors may contain request bodies/URLs; report classified metadata rather than raw errors.
     diagnose(reason, { stage: 'provider-request', providerStatus: Number.isFinite(status) ? status : null,
       mimeType: imageMimeType, base64Length: data.length });
     if (status === 429) {
       return res.status(429).json({ code: 'QUOTA_EXCEEDED', error: 'O limite de leitura por IA foi atingido. Preencha nome e categoria manualmente ou tente mais tarde.' });
+    }
+    if (reason === 'PROVIDER_UNAVAILABLE') {
+      res.setHeader('Retry-After', '10');
+      return res.status(503).json({ code: reason, error: 'A IA está temporariamente indisponível. Tente novamente em alguns minutos ou preencha nome e categoria manualmente.' });
     }
     if (status === 401 || status === 403) {
       return res.status(503).json({ code: 'SERVICE_UNAVAILABLE', error: 'A leitura automática não está disponível no momento. Você pode preencher os dados manualmente.' });

@@ -45,6 +45,7 @@ export async function recognizeCatalog(dataUrl: string, categories: string[], si
     if (!response.ok || !result) {
       if (response.status === 413 || result?.code === 'FILE_TOO_LARGE') throw new Error(sizeMessage);
       const messages: Record<string, string> = {
+        PROVIDER_UNAVAILABLE: 'A IA está temporariamente indisponível, mesmo após as tentativas automáticas. Tente novamente em alguns minutos ou preencha manualmente.',
         MODEL_UNAVAILABLE: 'O serviço de leitura está indisponível. Você pode cadastrar os produtos manualmente enquanto a configuração é verificada.',
         AUTHORIZATION_FAILED: 'O serviço de leitura está indisponível. Você pode cadastrar os produtos manualmente enquanto a configuração é verificada.',
         MISSING_API_KEY: 'O serviço de leitura está indisponível. Você pode cadastrar os produtos manualmente enquanto a configuração é verificada.',
