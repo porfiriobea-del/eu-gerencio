@@ -26,6 +26,11 @@ export async function prepareProductImage(file: File): Promise<string> {
   return canvas.toDataURL('image/jpeg', 0.9);
 }
 
+function logScannerError(details: Record<string, unknown>) {
+  // Never log image data, provider response bodies or API credentials.
+  console.error('=== ERRO DETALHADO DO GEMINI NA CÂMARA ===', details);
+}
+
 /** Sends only image data and category context; prices and stock are entered manually. */
 export async function recognizeProductFromImage(
   imageDataUrl: string,
@@ -34,10 +39,12 @@ export async function recognizeProductFromImage(
 ): Promise<RecognizedProduct> {
   const image = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/i.exec(imageDataUrl);
   if (!image || image[2].length % 4 !== 0) {
+    logScannerError({ stage: 'image-validation', code: 'INVALID_IMAGE' });
     throw new Error('Escolha uma imagem JPEG, PNG ou WebP válida.');
   }
 
   if (image[2].length > 4 * 1024 * 1024) {
+    logScannerError({ stage: 'image-validation', code: 'IMAGE_TOO_LARGE', base64Length: image[2].length });
     throw new Error('A foto é muito grande. Tire outra foto ou escolha uma imagem menor.');
   }
 
@@ -49,7 +56,12 @@ export async function recognizeProductFromImage(
   signal?.addEventListener('abort', abort, { once: true });
   if (signal?.aborted) controller.abort();
 
-  let result: { success?: boolean; product?: RecognizedProduct; error?: string } | null;
+  const startedAt = Date.now();
+  let status: number | undefined;
+  let requestId: string | null = null;
+  let contentType: string | null = null;
+  let stage = 'request';
+  let result: { success?: boolean; product?: RecognizedProduct; error?: string; code?: string } | null = null;
   try {
     const res = await fetch('/api/gemini/recognize-product', {
       method: 'POST',
@@ -57,6 +69,10 @@ export async function recognizeProductFromImage(
       body: JSON.stringify({ imageBase64, mimeType: image[1].toLowerCase(), availableCategories }),
       signal: controller.signal
     });
+    status = res.status;
+    requestId = res.headers.get('x-request-id');
+    contentType = res.headers.get('content-type');
+    stage = 'response-validation';
     result = await res.json().catch(() => null);
     if (res.status === 413) throw new Error('A foto é muito grande. Escolha uma imagem menor.');
     if (res.status === 429) {
@@ -75,6 +91,14 @@ export async function recognizeProductFromImage(
       throw new Error('A IA retornou dados incompletos. Tente outra foto ou preencha manualmente.');
     }
   } catch (error) {
+    if (!signal?.aborted) {
+      const code = controller.signal.aborted ? 'TIMEOUT' : error instanceof TypeError ? 'NETWORK_ERROR' :
+        status === 429 ? 'QUOTA_EXCEEDED' : status !== undefined && status >= 400 ? 'HTTP_ERROR' :
+        !result ? 'NON_JSON_RESPONSE' : 'INVALID_PRODUCT_DATA';
+      logScannerError({ stage, code, endpoint: '/api/gemini/recognize-product', status, requestId,
+        serverCode: ['MISSING_API_KEY', 'QUOTA_EXCEEDED', 'SERVICE_UNAVAILABLE'].includes(result?.code || '') ? result?.code : undefined,
+        contentType, mimeType: image[1].toLowerCase(), base64Length: imageBase64.length, elapsedMs: Date.now() - startedAt });
+    }
     if (controller.signal.aborted) {
       throw new Error(signal?.aborted ? 'Leitura interrompida. Preencha os dados manualmente.' : 'A leitura demorou mais que o esperado. Preencha os dados manualmente ou tente novamente.');
     }

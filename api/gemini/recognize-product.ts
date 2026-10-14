@@ -3,6 +3,12 @@ import type { Request, Response } from 'express';
 
 // Analyze only the product label. Never fabricate a successful recognition.
 export async function recognizeProduct(req: Request, res: Response) {
+  const requestId = crypto.randomUUID();
+  const startedAt = Date.now();
+  res.setHeader('X-Request-ID', requestId);
+  const diagnose = (code: string, details: Record<string, unknown> = {}) => {
+    console.error('[Gemini product recognition]', { requestId, code, model: 'gemini-2.5-flash', elapsedMs: Date.now() - startedAt, ...details });
+  };
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Use POST para enviar a foto.' });
@@ -25,7 +31,8 @@ export async function recognizeProduct(req: Request, res: Response) {
     return res.status(400).json({ error: 'A lista de categorias é inválida.' });
   }
   if (!process.env.GEMINI_API_KEY) {
-    return res.status(503).json({ error: 'Leitura por IA indisponível. Preencha nome e categoria manualmente.' });
+    diagnose('MISSING_API_KEY', { configured: false });
+    return res.status(503).json({ code: 'MISSING_API_KEY', error: 'Leitura por IA indisponível. Preencha nome e categoria manualmente.' });
   }
 
   try {
@@ -58,16 +65,24 @@ Retorne APENAS {"name": string, "category": string}. Nunca estime preço, custo,
     try {
       product = JSON.parse((response.text || '').replace(/^```(?:json)?\s*|\s*```$/g, '').trim());
     } catch {
+      diagnose('INVALID_JSON_RESPONSE', { stage: 'response-parsing' });
       return res.status(502).json({ error: 'A IA retornou uma resposta inválida. Tente outra foto ou preencha manualmente.' });
     }
     if (typeof product?.name !== 'string' || !product.name.trim() ||
         typeof product?.category !== 'string' || !product.category.trim()) {
+      diagnose('UNREADABLE_LABEL', { stage: 'product-validation' });
       return res.status(422).json({ error: 'Não foi possível identificar o rótulo. Tente outra foto ou preencha manualmente.' });
     }
     const category = availableCategories.find(value => value.toLowerCase() === product.category.trim().toLowerCase()) || product.category.trim();
     return res.json({ success: true, product: { name: product.name.trim(), category } });
   } catch (error: unknown) {
     const status = Number((error as { status?: number; code?: number })?.status || (error as { code?: number })?.code);
+    const message = error instanceof Error ? error.message : '';
+    const reason = status === 429 ? 'QUOTA_EXCEEDED' : status === 401 || status === 403 ? 'AUTHORIZATION_FAILED' :
+      status === 404 ? 'MODEL_UNAVAILABLE' : /timeout|deadline|abort/i.test(message) ? 'TIMEOUT' : 'UPSTREAM_FAILURE';
+    // SDK errors may contain request bodies/URLs; report classified metadata rather than raw errors.
+    diagnose(reason, { stage: 'provider-request', providerStatus: Number.isFinite(status) ? status : null,
+      mimeType: imageMimeType, base64Length: data.length });
     if (status === 429) {
       return res.status(429).json({ code: 'QUOTA_EXCEEDED', error: 'O limite de leitura por IA foi atingido. Preencha nome e categoria manualmente ou tente mais tarde.' });
     }

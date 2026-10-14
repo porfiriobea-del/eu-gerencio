@@ -65,3 +65,32 @@ test('manual continuation can abort a pending analysis', async t => {
   controller.abort();
   await assert.rejects(pending, /interrompida.*manualmente/);
 });
+
+test('diagnostics correlate HTTP failures without exposing photos, response bodies or credentials', async t => {
+  const logs = [];
+  t.mock.method(console, 'error', (...args) => logs.push(args));
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ code: 'MISSING_API_KEY', error: 'provider-secret-must-not-be-logged' }, {
+    status: 503, headers: { 'x-request-id': 'request-test-123' }
+  }));
+  await assert.rejects(recognizeProductFromImage(image), /manualmente/);
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0][1].status, 503);
+  assert.equal(logs[0][1].requestId, 'request-test-123');
+  assert.equal(logs[0][1].code, 'HTTP_ERROR');
+  assert.equal(logs[0][1].serverCode, 'MISSING_API_KEY');
+  assert.equal(logs[0][1].mimeType, 'image/jpeg');
+  assert.ok(!JSON.stringify(logs).includes('provider-secret'));
+  assert.ok(!JSON.stringify(logs).includes('aW1hZ2U='));
+});
+
+test('manual cancellation is not logged as a Gemini failure', async t => {
+  const log = t.mock.method(console, 'error', () => {});
+  t.mock.method(globalThis, 'fetch', async (_url, options) => new Promise((_resolve, reject) => {
+    options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+  }));
+  const controller = new AbortController();
+  const pending = recognizeProductFromImage(image, [], controller.signal);
+  controller.abort();
+  await assert.rejects(pending, /interrompida/);
+  assert.equal(log.mock.callCount(), 0);
+});

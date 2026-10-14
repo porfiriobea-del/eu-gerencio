@@ -48,3 +48,23 @@ test('compiled API entries load in native Node without a TypeScript loader', asy
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('missing server key has actionable diagnostics and a correlating request ID', async t => {
+  const original = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = '';
+  t.after(() => { if (original === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = original; });
+  const logs = [];
+  t.mock.method(console, 'error', (...args) => logs.push(args));
+  const result = {};
+  const response = {
+    setHeader(name, value) { result[name] = value; },
+    status(value) { result.status = value; return this; },
+    json(value) { result.body = value; return this; }
+  };
+  await handler({ method: 'POST', body: { imageBase64: 'aW1hZ2U=' } }, response);
+  assert.equal(result.status, 503);
+  assert.equal(result.body.code, 'MISSING_API_KEY');
+  assert.equal(logs[0][1].requestId, result['X-Request-ID']);
+  assert.equal(logs[0][1].code, 'MISSING_API_KEY');
+  assert.ok(!JSON.stringify(logs).includes('aW1hZ2U='));
+});
