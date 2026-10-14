@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
-    "start": "node server.ts",
+    "build": "vite build && npm run build:server",
+    "start": "node build/server/server.js",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test tests/*.test.mjs"
+    "test": "node --import tsx --test tests/*.test.mjs",
+    "build:server": "tsc -p tsconfig.server.json"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

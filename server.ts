@@ -31,7 +31,8 @@ if (!isProduction) {
   });
   app.use(vite.middlewares);
 } else {
-  const distPath = path.resolve(__dirname, 'dist');
+  const projectRoot = __filename.endsWith('.js') ? path.resolve(__dirname, '../..') : __dirname;
+  const distPath = path.resolve(projectRoot, 'dist');
   app.use(express.static(distPath));
   app.get('*', (_req, res) => {
     res.sendFile(path.resolve(distPath, 'index.html'));
