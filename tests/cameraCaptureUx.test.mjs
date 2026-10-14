@@ -81,7 +81,7 @@ for (const failure of ['network', 'quota', 'canvas']) {
     await capture(ui);
     assert.ok(await ui.findByText('Preenchimento manual disponível'));
     const name = ui.getByPlaceholderText('Ex: Coca-Cola 2L ou Cerveja Heineken 330ml');
-    await waitFor(() => assert.equal(document.activeElement, name));
+    await waitFor(() => assert.ok(document.activeElement === name, 'Manual entry must focus the name field'));
     fireEvent.change(name, { target: { value: 'Produto manual' } });
     assert.equal(name.value, 'Produto manual');
     assert.ok(!ui.queryByText('Processando imagem com IA...'));

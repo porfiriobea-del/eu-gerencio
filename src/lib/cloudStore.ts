@@ -7,6 +7,16 @@ export const TABLES: Record<string, string> = {
   feedbacks: 'eu_feedbacks', teamInvitations: 'eu_team_invitations', userStores: 'eu_user_stores'
 };
 export const db = Object.freeze({ provider: 'supabase' });
+const writeQueues = new Map<string, Promise<void>>();
+export function enqueueCloudWrite<T>(key: string, action: () => Promise<T>): Promise<T> {
+  const previous = writeQueues.get(key) || Promise.resolve();
+  const result = previous.then(action);
+  // A failed click must not prevent later clicks from being processed.
+  const tail = result.then(() => {}, () => {});
+  writeQueues.set(key, tail);
+  void tail.then(() => { if (writeQueues.get(key) === tail) writeQueues.delete(key); });
+  return result;
+}
 export interface Reference { path: string; id: string; collectionPath: string; table: string }
 interface Filter { kind: 'where' | 'order'; field: string; operator?: string; value?: unknown; direction?: 'asc' | 'desc' }
 interface Query { path: string; table: string; filters: Filter[] }
@@ -124,12 +134,17 @@ export const setDoc = (ref: Reference, data: Record<string, any>, options?: { me
 export const updateDoc = (ref: Reference, data: Record<string, any>) => { const batch = writeBatch(db); batch.update(ref, data); return batch.commit(); };
 export const deleteDoc = (ref: Reference) => { const batch = writeBatch(db); batch.delete(ref); return batch.commit(); };
 export async function runTransaction<T>(_db: unknown, action: (transaction: ReturnType<typeof writeBatch> & { get: typeof getDoc }) => Promise<T>): Promise<T> {
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     const batch = writeBatch(db);
     const transaction = { ...batch, get: async (ref: Reference) => { const snapshot = await getDoc(ref); batch.expect(snapshot); return snapshot; } };
-    const result = await action(transaction);
-    try { await batch.commit(); return result; }
-    catch (error) { if (!String((error as Error).message).includes('TRANSACTION_CONFLICT') || attempt === 4) throw error; }
+    try {
+      const result = await action(transaction);
+      await batch.commit(); return result;
+    } catch (error) {
+      const conflict = [String((error as any)?.code), String((error as any)?.message), String((error as any)?.details)].some(value => value.includes('TRANSACTION_CONFLICT'));
+      if (!conflict) throw error;
+      if (attempt === 2) throw new Error('Não foi possível confirmar a alteração após 3 tentativas. O registro está sendo alterado em outro dispositivo. Atualize os dados e tente novamente.');
+    }
   }
   throw new Error('O estoque mudou em outro dispositivo. Atualize os dados e tente novamente.');
 }

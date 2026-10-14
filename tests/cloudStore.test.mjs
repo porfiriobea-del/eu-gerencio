@@ -5,7 +5,8 @@ import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { createClient } from '@supabase/supabase-js';
-let server, dir, store, client, api, responseError;
+let server, dir, store, client, api, responseError, forcedConflicts = 0;
+const transactionalWrites = [];
 const records=new Map(), calls=[], listeners=new Set();
 const key=(table,path,id)=>`${table}/${path}/${id}`;
 before(async()=>{
@@ -19,6 +20,13 @@ before(async()=>{
     if(url.pathname.endsWith('/rpc/eu_apply_changes')){
       let text='';for await(const chunk of req)text+=chunk;
       const body=JSON.parse(text);
+      if (body.read_versions.length) {
+        transactionalWrites.push(body);
+        if (forcedConflicts > 0) {
+          forcedConflicts--; res.statusCode=400;
+          res.end(JSON.stringify({code:'P0001',message:'TRANSACTION_CONFLICT'})); return;
+        }
+      }
       for(const read of body.read_versions){if((records.get(key(read.table,read.path,read.id))?.revision||0)!==read.revision){res.statusCode=409;res.end(JSON.stringify({code:'P0001',message:'TRANSACTION_CONFLICT'}));return;}}
       for(const op of body.operations){
         const id=key(op.table,op.path,op.id),old=records.get(id);
@@ -140,4 +148,53 @@ test('a fiado payment above the current debt is rejected without recording money
   assert.equal((await store.getDoc(ref)).data().totalDebt,0.10);
   await api.recordPayment('customer',0.10,'cash');
   assert.equal((await store.getDoc(ref)).data().totalDebt,0);
+});
+
+
+test('two HTTP 400 conflicts trigger fresh reads and succeed on the third attempt', async()=>{
+  const ref=store.doc(store.db,'products','p1');
+  await store.updateDoc(ref,{stock:10});
+  forcedConflicts=2; let reads=0;
+  const before=transactionalWrites.length;
+  await store.runTransaction(store.db,async tx=>{reads++;const snapshot=await tx.get(ref);tx.update(ref,{stock:snapshot.data().stock+1});});
+  assert.equal(reads,3);assert.equal(transactionalWrites.length-before,3);
+  assert.equal((await store.getDoc(ref)).data().stock,11);
+});
+
+test('three conflicts fail once and do not change the stock', async()=>{
+  const ref=store.doc(store.db,'products','p1');
+  const before=transactionalWrites.length;
+  forcedConflicts=3;let reads=0;
+  await assert.rejects(store.runTransaction(store.db,async tx=>{reads++;const snapshot=await tx.get(ref);tx.update(ref,{stock:snapshot.data().stock+1});}),/3 tentativas/);
+  assert.equal(reads,3);assert.equal(transactionalWrites.length-before,3);
+  assert.equal((await store.getDoc(ref)).data().stock,11);
+});
+
+test('rapid stock clicks preserve order and use the previous confirmed balance', async()=>{
+  const ref=store.doc(store.db,'products','p1');await store.updateDoc(ref,{stock:20});
+  const deltas=[1,1,-1,1,-1,1,1,-1,1,1];
+  const before=transactionalWrites.length;
+  const results=await Promise.all(deltas.map(delta=>api.adjustProductStock('p1',delta)));
+  let expected=20;
+  assert.deepEqual(results,deltas.map(delta=>expected+=delta));
+  const writes=transactionalWrites.slice(before);
+  assert.equal(writes.length,deltas.length);
+  assert.equal((await store.getDoc(ref)).data().stock,expected);
+  assert.ok(writes.every((write,index)=>index===0||write.read_versions[0].revision===writes[index-1].read_versions[0].revision+1));
+});
+
+test('a rejected stock click does not block later writes for the same product', async()=>{
+  const ref=store.doc(store.db,'products','p1');await store.updateDoc(ref,{stock:0});
+  const result=await Promise.allSettled([api.adjustProductStock('p1',-1),api.adjustProductStock('p1',1),api.updateProduct('p1',{name:'Renomeado'})]);
+  assert.deepEqual(result.map(item=>item.status),['rejected','fulfilled','fulfilled']);
+  const product=(await store.getDoc(ref)).data();assert.equal(product.stock,1);assert.equal(product.name,'Renomeado');
+});
+
+test('purchase retries rebuild the stock adjustment without duplicating the purchase', async()=>{
+  const ref=store.doc(store.db,'products','p1');await store.updateDoc(ref,{stock:1});
+  forcedConflicts=2;
+  const before=await store.getDocs(store.collection(store.db,'purchases'));
+  await api.recordPurchase({productId:'p1',productName:'Renomeado',quantity:2,unitCost:1,totalCost:2,date:Date.now()});
+  assert.equal((await store.getDoc(ref)).data().stock,3);
+  assert.equal((await store.getDocs(store.collection(store.db,'purchases'))).size,before.size+1);
 });

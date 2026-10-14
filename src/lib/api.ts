@@ -4,7 +4,7 @@ import { executeCatalogImport, catalogDocumentId } from './catalogImport';
 import { withActionDeadline, ConfirmationTimeoutError } from './actionFeedback';
 import { normalizeCigaretteStock, cigaretteStockFields, isValidStockQuantity, getCigaretteFormats } from './productUnits';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, writeBatch, runTransaction } from './cloudStore';
-import { db } from './cloudStore';
+import { db, enqueueCloudWrite } from './cloudStore';
 import { auth } from './firebase';
 import { 
   OperationType, 
@@ -261,7 +261,18 @@ export const addMultipleProducts = withActionDeadline(async (productsList: Omit<
 });
 
 // Apply quick stock entries to the current database balance, not a stale UI snapshot.
-export const adjustProductStock = withActionDeadline(async (id: string, individualUnits: number) => {
+function withProductWriteQueue<A extends unknown[], R>(action: (id: string, ...args: A) => Promise<R>) {
+  return (id: string, ...args: A): Promise<R> => {
+    const ownerId = getEffectiveOwnerId();
+    return enqueueCloudWrite(`products/${ownerId}/${id}`, () => {
+      if (!ownerId || getEffectiveOwnerId() !== ownerId) throw new Error('A sessão da loja mudou. Entre novamente antes de alterar o estoque.');
+      // Keep the queue locked until the actual operation finishes, including retries.
+      // Individual HTTP requests are bounded by fetchCloud's timeout.
+      return action(id, ...args);
+    });
+  };
+}
+export const adjustProductStock = withProductWriteQueue(async (id: string, individualUnits: number) => {
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   if (!isValidStockQuantity(Math.abs(individualUnits))) throw new Error('Quantidade inválida: use incrementos de 0,05 carteira.');
@@ -285,7 +296,7 @@ export const adjustProductStock = withActionDeadline(async (id: string, individu
   return result.newStock;
 });
 
-export const updateProduct = withActionDeadline(async (id: string, data: Partial<Product>) => {
+export const updateProduct = withProductWriteQueue(async (id: string, data: Partial<Product>) => {
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   try {
@@ -323,7 +334,7 @@ export const updateProduct = withActionDeadline(async (id: string, data: Partial
   }
 });
 
-export const deleteProduct = withActionDeadline(async (id: string, productName?: string) => {
+export const deleteProduct = withProductWriteQueue(async (id: string, productName?: string) => {
   try {
     await deleteDoc(doc(db, 'products', id));
 
@@ -857,55 +868,54 @@ export const recordPurchase = withActionDeadline(async (
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
 
-  const batch = writeBatch(db);
   const now = Date.now();
   const purchaseRef = doc(collection(db, 'purchases'));
 
   const cleanPurchase = removeUndefinedFields(purchase as any);
-  batch.set(purchaseRef, {
-    ...cleanPurchase,
-    ownerId: uid,
-    createdAt: now
-  });
+  try {
+    await runTransaction(db, async batch => {
+      batch.set(purchaseRef, {
+        ...cleanPurchase,
+        ownerId: uid,
+        createdAt: now
+      });
 
-  // Atualizar automaticamente o estoque do produto sem precisar abrir o modal
-  if (purchase.productId && (options?.updateProductStock !== false || options?.updateUnitCost || options?.updateExpirationDate || options?.updatePromoPrice)) {
-    const prodRef = doc(db, 'products', purchase.productId);
-    const prodDoc = await getDoc(prodRef);
-    batch.expect(prodDoc);
-    if (prodDoc.exists()) {
-      const p = normalizeCigaretteStock(prodDoc.data() as Product);
-      const updatePayload: any = {
-        ...cigaretteStockFields(p),
-        updatedAt: now
-      };
+      // Atualizar automaticamente o estoque do produto sem precisar abrir o modal
+      if (purchase.productId && (options?.updateProductStock !== false || options?.updateUnitCost || options?.updateExpirationDate || options?.updatePromoPrice)) {
+        const prodRef = doc(db, 'products', purchase.productId);
+        const prodDoc = await batch.get(prodRef);
+        if (prodDoc.exists()) {
+          const p = normalizeCigaretteStock(prodDoc.data() as Product);
+          const updatePayload: any = {
+            ...cigaretteStockFields(p),
+            updatedAt: now
+          };
 
-      if (options?.updateProductStock !== false) {
-        updatePayload.stock = Math.max(0, Math.round(((p.stock || 0) + purchase.quantity) * 20) / 20);
-      }
+          if (options?.updateProductStock !== false) {
+            updatePayload.stock = Math.max(0, Math.round(((p.stock || 0) + purchase.quantity) * 20) / 20);
+          }
 
-      if (options?.updateUnitCost && purchase.unitCost > 0) {
-        updatePayload.unitCost = purchase.unitCost;
-      }
+          if (options?.updateUnitCost && purchase.unitCost > 0) {
+            updatePayload.unitCost = purchase.unitCost;
+          }
 
-      if (options?.updateExpirationDate && purchase.expirationDate) {
-        updatePayload.expirationDate = purchase.expirationDate;
-      }
+          if (options?.updateExpirationDate && purchase.expirationDate) {
+            updatePayload.expirationDate = purchase.expirationDate;
+          }
 
-      if (options?.updatePromoPrice && purchase.suggestedPromoPrice !== undefined && purchase.suggestedPromoPrice > 0) {
-        updatePayload.hasPromoSuggestion = purchase.suggestPromo !== false;
-        updatePayload.promoPrice = purchase.suggestedPromoPrice;
-        if (purchase.promoDiscountPercent !== undefined) {
-          updatePayload.promoDiscountPercent = purchase.promoDiscountPercent;
+          if (options?.updatePromoPrice && purchase.suggestedPromoPrice !== undefined && purchase.suggestedPromoPrice > 0) {
+            updatePayload.hasPromoSuggestion = purchase.suggestPromo !== false;
+            updatePayload.promoPrice = purchase.suggestedPromoPrice;
+            if (purchase.promoDiscountPercent !== undefined) {
+              updatePayload.promoDiscountPercent = purchase.promoDiscountPercent;
+            }
+          }
+
+          batch.update(prodRef, removeUndefinedFields(updatePayload));
         }
       }
 
-      batch.update(prodRef, removeUndefinedFields(updatePayload));
-    }
-  }
-
-  try {
-    await batch.commit();
+    });
 
     const activeEmp = getActiveEmployeeStorage();
     recordMovement({
@@ -932,27 +942,27 @@ export const deletePurchase = withActionDeadline(async (purchaseId: string, reve
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
 
-  const batch = writeBatch(db);
-  batch.delete(doc(db, 'purchases', purchaseId));
-
-  if (revertStock?.productId && revertStock.quantityToSubtract > 0) {
-    const prodRef = doc(db, 'products', revertStock.productId);
-    const prodDoc = await getDoc(prodRef);
-    batch.expect(prodDoc);
-    if (prodDoc.exists()) {
-      const p = prodDoc.data() as Product;
-      const newStock = Math.max(0, Math.round(((p.stock || 0) - revertStock.quantityToSubtract) * 20) / 20);
-      batch.update(prodRef, { stock: newStock, updatedAt: Date.now() });
-    }
-  }
-
   try {
-    await batch.commit();
+    await runTransaction(db, async batch => {
+      batch.delete(doc(db, 'purchases', purchaseId));
+
+      if (revertStock?.productId && revertStock.quantityToSubtract > 0) {
+        const prodRef = doc(db, 'products', revertStock.productId);
+        const prodDoc = await batch.get(prodRef);
+        if (prodDoc.exists()) {
+          const p = prodDoc.data() as Product;
+          const newStock = Math.max(0, Math.round(((p.stock || 0) - revertStock.quantityToSubtract) * 20) / 20);
+          batch.update(prodRef, { stock: newStock, updatedAt: Date.now() });
+        }
+      }
+
+    });
   } catch (err) {
     handleCloudError(err, OperationType.DELETE, `purchases/${purchaseId}`);
     throw err;
   }
 });
+
 
 export const getPurchasesByDateRange = async (startTimestamp: number, endTimestamp: number): Promise<Purchase[]> => {
   const uid = getEffectiveOwnerId();
