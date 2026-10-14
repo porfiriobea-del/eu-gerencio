@@ -3,13 +3,14 @@ import { createPortal } from 'react-dom';
 import { Camera, FileText, Image, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { prepareCatalogFile, recognizeCatalog } from '../lib/geminiCatalogScanner';
 import { blankSupplierDraft, buildSupplierProducts, type SupplierDraft } from '../lib/supplierCatalog';
-import { normalizeProductName } from '../lib/duplicateDetector';
-import { importSupplierCatalog } from '../lib/api';
+import type { Product } from '../types';
+import { normalizeProductName, findDuplicateProducts, isDuplicateProduct } from '../lib/duplicateDetector';
+import { importSupplierCatalog, adjustProductStock } from '../lib/api';
 import { showActionError, showToast } from '../lib/actionFeedback';
 
-interface Props { isOpen: boolean; onClose: () => void; availableCategories: string[]; existingProductNames: string[] }
+interface Props { isOpen: boolean; onClose: () => void; availableCategories: string[]; existingProductNames: string[]; existingProducts?: Product[]; onBeforeSave?: (product: Pick<Product, 'name' | 'barcode' | 'stock' | 'type'>) => Promise<boolean>; onOpenExisting?: (product: Product) => void }
 
-export function CatalogImportModal({ isOpen, onClose, availableCategories, existingProductNames }: Props) {
+export function CatalogImportModal({ isOpen, onClose, availableCategories, existingProductNames, existingProducts = [], onBeforeSave, onOpenExisting }: Props) {
   const [drafts, setDrafts] = useState<SupplierDraft[]>([]);
   const [isReading, setIsReading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -29,6 +30,8 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
   const headingId = useId();
   const categoriesId = useId();
   const existing = new Set(existingProductNames.map(normalizeProductName));
+  const match = (row: SupplierDraft) => findDuplicateProducts(row, existingProducts)[0];
+  const duplicated = (row: SupplierDraft, index: number) => !!match(row) || existing.has(normalizeProductName(row.name)) || drafts.some((other, otherIndex) => otherIndex < index && isDuplicateProduct(row, other));
 
   useEffect(() => {
     if (!isOpen) return;
@@ -62,7 +65,15 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
 
   if (!isOpen) return null;
 
-  const update = (id: string, patch: Partial<SupplierDraft>) => setDrafts(previous => previous.map(row => row.id === id ? { ...row, ...patch } : row));
+  const update = (id: string, patch: Partial<SupplierDraft>) => setDrafts(previous => previous.map((row, index) => {
+    if (row.id !== id) return row;
+    const next = { ...row, ...patch };
+    if ('name' in patch || 'barcode' in patch) {
+      next.allowDuplicate = false;
+      if (match(next) || existing.has(normalizeProductName(next.name)) || previous.some((other, i) => i < index && isDuplicateProduct(next, other))) next.selected = false;
+    }
+    return next;
+  }));
   const readFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     event.target.value = '';
@@ -80,12 +91,8 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
         const result = await recognizeCatalog(data, availableCategories, controller.signal);
         if (generation !== generationRef.current) return;
         setDrafts(previous => {
-          const seen = new Set(previous.map(row => normalizeProductName(row.name)));
-          const added = result.products.filter(row => {
-            const key = normalizeProductName(row.name);
-            if (seen.has(key)) return false;
-            seen.add(key); return true;
-          }).map(row => ({ ...row, selected: !existing.has(normalizeProductName(row.name)) }));
+          const added = result.products.map((row, index) => ({ ...row,
+            selected: !match(row) && !existing.has(normalizeProductName(row.name)) && ![...previous, ...result.products.slice(0, index)].some(other => isDuplicateProduct(row, other)) }));
           return [...previous, ...added];
         });
         if (result.truncated) setError('Este arquivo tem mais de 200 itens. A IA retornou os primeiros; envie as páginas restantes separadamente.');
@@ -107,14 +114,19 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
   const save = async () => {
     if (savingRef.current || readingRef.current) return;
     let products;
-    try { products = buildSupplierProducts(drafts, existingProductNames); }
+    try { products = buildSupplierProducts(drafts.filter((row, index) => !duplicated(row, index) || row.allowDuplicate), existingProductNames); }
     catch (error) { setError(error instanceof Error ? error.message : 'Confira os produtos selecionados.'); return; }
     if (!products.length) { setError('Os produtos selecionados já estão no estoque. Nenhum item foi duplicado.'); return; }
     savingRef.current = true; setIsSaving(true); setError('');
     try {
-      const count = await importSupplierCatalog(products);
-      showToast(count ? `✓ ${count} produtos do seu catálogo adicionados ao estoque com sucesso!` : 'Os produtos já estão no estoque. Nenhum item foi duplicado.');
-      setDrafts([]); setStatus('');
+      const accepted: ReturnType<typeof buildSupplierProducts> = [];
+      for (const product of products) {
+        const approved = drafts.some(row => row.selected && row.allowDuplicate && row.name.trim() === product.name && (row.barcode || '').trim() === (product.barcode || ''));
+        if (approved || !onBeforeSave || await onBeforeSave(product)) accepted.push(product);
+      }
+      const count = accepted.length ? await importSupplierCatalog(accepted, { allowDuplicates: true }) : 0;
+      showToast(count ? `✓ ${count} produtos do seu catálogo adicionados ao estoque com sucesso!` : 'Nenhum novo cadastro. Os produtos continuam no estoque.');
+      setDrafts(previous => previous.filter(row => !accepted.some(product => product.name === row.name.trim() && (product.barcode || '') === (row.barcode || '').trim()))); setStatus('');
     } catch (error) {
       showActionError(error, 'Não foi possível confirmar a importação. Confira o estoque e a conexão antes de repetir.');
     } finally { savingRef.current = false; setIsSaving(false); onClose(); }
@@ -148,10 +160,23 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
           <fieldset disabled={isReading || isSaving} className="space-y-3 disabled:opacity-70">
             {drafts.map((row, index) => (
               <article key={row.id} className="rounded-2xl border border-border p-3">
-                <div className="mb-3 flex items-center justify-between gap-2"><label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={row.selected} onChange={event => update(row.id, { selected: event.target.checked })} />Produto {index + 1}</label><button type="button" aria-label={`Remover produto ${index + 1}`} onClick={() => setDrafts(previous => previous.filter(item => item.id !== row.id))} className="rounded-lg p-2 text-red-600 hover:bg-muted"><Trash2 className="h-4 w-4" /></button></div>
-                {existing.has(normalizeProductName(row.name)) && <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">Já cadastrado: este produto será ignorado.</p>}
+                <div className="mb-3 flex items-center justify-between gap-2"><label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={row.selected} onChange={event => update(row.id, { selected: event.target.checked && (!duplicated(row, index) || !!row.allowDuplicate) })} />Produto {index + 1}</label><button type="button" aria-label={`Remover produto ${index + 1}`} onClick={() => setDrafts(previous => previous.filter(item => item.id !== row.id))} className="rounded-lg p-2 text-red-600 hover:bg-muted"><Trash2 className="h-4 w-4" /></button></div>
+                {duplicated(row, index) && <div className="mb-3 rounded-lg border border-amber-500 p-3 text-xs">
+                  <p className="font-semibold">Duplicado suspeito: {match(row)?.name || row.name}. Desmarcado por padrão.</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button type="button" disabled={!match(row) || !onOpenExisting} onClick={() => onOpenExisting?.(match(row)!)} className="rounded border border-border px-2 py-1">Abrir o existente</button>
+                    <input aria-label={`Quantidade a somar de ${row.name}`} type="number" min="0" step={row.type === 'cigarro' ? '0.05' : '1'} value={row.stockToAdd ?? 1} onChange={event => update(row.id, { stockToAdd: Number(event.target.value) })} className="w-20 rounded border border-border bg-background p-1" />
+                    <button type="button" disabled={!match(row) || match(row)?.type !== row.type} onClick={async () => {
+                      try { await adjustProductStock(match(row)!.id!, row.stockToAdd ?? 1); update(row.id, { selected: false }); showToast('✓ Estoque atualizado!'); }
+                      catch (error) { setError(error instanceof Error ? error.message : 'Não foi possível somar ao estoque.'); }
+                    }} className="rounded border border-border px-2 py-1">Somar ao estoque dele</button>
+                    <button type="button" onClick={() => update(row.id, { allowDuplicate: true, selected: true })} className="rounded border border-amber-500 px-2 py-1">Cadastrar mesmo assim</button>
+                  </div>
+                  {row.allowDuplicate && <p className="mt-2">Novo cadastro duplicado autorizado.</p>}
+                </div>}
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <label className="block text-xs font-medium sm:col-span-2">Nome do produto<input value={row.name} maxLength={100} onChange={event => update(row.id, { name: event.target.value })} className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm" /></label>
+                  <label className="block text-xs font-medium">Código de barras<input value={row.barcode || ''} onChange={event => update(row.id, { barcode: event.target.value })} className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm" /></label>
                   <label className="block text-xs font-medium">Categoria<input list={categoriesId} value={row.category} maxLength={50} onChange={event => update(row.id, { category: event.target.value, ...(/cigar/i.test(event.target.value) && row.type !== 'cigarro' ? { type: 'cigarro', costBasis: '', unitsPerPackage: 10 } : {}) })} className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm" /></label>
                   <label className="block text-xs font-medium">Tipo<select value={row.type} onChange={event => update(row.id, { type: event.target.value as SupplierDraft['type'], costBasis: '', unitsPerPackage: event.target.value === 'cigarro' ? 10 : 1 })} className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm"><option value="comum">Comum</option><option value="cigarro">Cigarro fracionado</option></select></label>
                   {numberField(row, 'purchaseCost', 'Custo da compra (R$)')}
@@ -168,7 +193,7 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
           </fieldset>
         </div>
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-4">
-          <div><p className="text-xs text-muted-foreground">{drafts.filter(row => row.selected && !existing.has(normalizeProductName(row.name))).length} selecionados. Confira os valores antes de salvar.</p><div className="mt-1 flex gap-3 text-xs"><button type="button" disabled={isReading || isSaving} onClick={() => setDrafts(previous => previous.map(row => ({ ...row, selected: !existing.has(normalizeProductName(row.name)) })))} className="text-primary hover:underline">Selecionar todos</button><button type="button" disabled={isReading || isSaving} onClick={() => setDrafts(previous => previous.map(row => ({ ...row, selected: false })))} className="text-primary hover:underline">Desmarcar todos</button></div></div>
+          <div><p className="text-xs text-muted-foreground">{drafts.filter(row => row.selected).length} selecionados. Confira os valores antes de salvar.</p><div className="mt-1 flex gap-3 text-xs"><button type="button" disabled={isReading || isSaving} onClick={() => setDrafts(previous => previous.map((row, index) => ({ ...row, selected: !duplicated(row, index) || !!row.allowDuplicate })))} className="text-primary hover:underline">Selecionar todos</button><button type="button" disabled={isReading || isSaving} onClick={() => setDrafts(previous => previous.map(row => ({ ...row, selected: false })))} className="text-primary hover:underline">Desmarcar todos</button></div></div>
           <button type="button" onClick={save} disabled={isReading || isSaving || !drafts.some(row => row.selected)} className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">{isSaving ? 'Salvando produtos...' : 'Cadastrar selecionados'}</button>
         </footer>
       </div>

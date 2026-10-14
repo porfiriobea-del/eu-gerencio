@@ -26,6 +26,7 @@ interface CameraCaptureModalProps {
   onClose: () => void;
   availableCategories: string[];
   onRecognized?: (product: RecognizedProduct, imageUrl: string) => void;
+  onBeforeSave?: (product: Pick<Product, 'name' | 'barcode' | 'stock' | 'type'>) => Promise<boolean>;
   onProductSaved?: (productName: string) => void;
   onSelectForEdit?: (draft: CameraProductDraft) => void;
 }
@@ -35,6 +36,7 @@ export function CameraCaptureModal({
   onClose,
   availableCategories,
   onProductSaved,
+  onBeforeSave,
   onRecognized,
   onSelectForEdit
 }: CameraCaptureModalProps) {
@@ -317,6 +319,7 @@ export function CameraCaptureModal({
         pricePackage: !isCigarro && unitsPerPkg > 1 ? Number((basePrice * unitsPerPkg * 0.95).toFixed(2)) : undefined
       };
 
+      if (onBeforeSave && !await onBeforeSave(productPayload)) return;
       await addMultipleProducts([productPayload]);
       setSavedCount(prev => Number(prev) + 1);
       if (onProductSaved) {

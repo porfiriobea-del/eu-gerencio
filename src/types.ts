@@ -6,6 +6,8 @@ export interface Product {
   category: string;
   imageUrl?: string;
   barcode?: string;
+  mergedIntoId?: string;
+  mergedAt?: number;
   purchaseForm: 'pacote' | 'fardo' | 'unidade';
   unitsPerPackage: number;
   unitCost: number; // Per stock unit: carteira for cigarettes, individual unit otherwise.

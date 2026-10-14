@@ -3,7 +3,8 @@ import { getPackageUnits, getCigaretteFormats, CIGARETTE_UNITS, isValidStockQuan
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteField } from '../lib/cloudStore';
-import { subscribeProducts, updateProduct, adjustProductStock, addProduct, addMultipleProducts, deleteProduct, deleteMultipleProducts, subscribeTodaySales, recordMovement } from '../lib/api';
+import { subscribeProducts, updateProduct, adjustProductStock, addProduct, addMultipleProducts, deleteProduct, deleteMultipleProducts, subscribeTodaySales, recordMovement, getProductDuplicates, mergeProducts } from '../lib/api';
+import { ProductDuplicateDialog, type DuplicateDecision } from '../components/ProductDuplicateDialog';
 import { Product, Sale } from '../types';
 import { getAllCategories, saveCustomCategory } from '../lib/categories';
 import { Plus, Edit2, Trash2, Package, AlertTriangle, CheckCircle2, ShoppingBag, Calendar, ArrowUpRight, TrendingUp, Info, Tag, Check, X, RotateCcw, Sparkles, Camera, Image as ImageIcon, Clock, Flame, Percent, LayoutGrid, List, ChevronDown, ChevronUp, Minus, Eye, EyeOff, Loader2 } from 'lucide-react';
@@ -13,7 +14,7 @@ import { PocketTip } from '../components/PocketTip';
 import { CatalogImportModal } from '../components/CatalogImportModal';
 import { recognizeProductFromImage, prepareProductImage } from '../lib/geminiProductScanner';
 import { CameraCaptureModal } from '../components/CameraCaptureModal';
-import { analyzeDuplicates, normalizeProductName } from '../lib/duplicateDetector';
+import { analyzeDuplicates, findDuplicateProducts } from '../lib/duplicateDetector';
 import { 
   calculateExpirationStatus, 
   getQuickExpirationDates, 
@@ -26,6 +27,11 @@ import {
 export default function Stock() {
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
   const [products, setProducts] = useState<Product[]>([]);
+  const [duplicateRequest, setDuplicateRequest] = useState<{ matches: Product[]; quantity: number; isMerge: boolean; resolve: (decision: DuplicateDecision) => void } | null>(null);
+  const [showDuplicateReview, setShowDuplicateReview] = useState(false);
+  const [mergingPair, setMergingPair] = useState('');
+  const duplicateResolverRef = useRef<((decision: DuplicateDecision) => void) | null>(null);
+  useEffect(() => () => { duplicateResolverRef.current?.({ action: 'cancel' }); }, []);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filterReplenishOnly, setFilterReplenishOnly] = useState(false);
@@ -147,6 +153,27 @@ export default function Stock() {
   useEffect(() => {
     return subscribeProducts(setProducts);
   }, []);
+
+  const checkProductDuplicate = async (draft: Pick<Product, 'name' | 'barcode' | 'stock' | 'type'>, excludeId?: string): Promise<boolean> => {
+    const matches = await getProductDuplicates(draft, excludeId);
+    if (!matches.length) return true;
+    const decision = await new Promise<DuplicateDecision>(resolve => { duplicateResolverRef.current = resolve; setDuplicateRequest({ matches, quantity: draft.stock || 1, isMerge: !!excludeId, resolve }); });
+    duplicateResolverRef.current = null;
+    setDuplicateRequest(null);
+    if (decision.action === 'allow') return true;
+    if (decision.action === 'open' && decision.product) {
+      setIsCameraModalOpen(false); setIsCatalogImportOpen(false); openModal(decision.product);
+    }
+    if (decision.action === 'add' && decision.product?.id) {
+      if (draft.type !== decision.product.type) throw new Error('Os produtos usam medidas diferentes. Corrija o tipo antes de somar.');
+      if (excludeId) {
+        await mergeProducts(decision.product.id, excludeId);
+        setIsModalOpen(false);
+      } else await adjustProductStock(decision.product.id, decision.quantity!);
+      showToast('✓ Estoque somado ao produto existente!');
+    }
+    return false;
+  };
 
   const handleAddNewCategory = () => {
     const trimmed = newCategoryName.trim();
@@ -376,14 +403,17 @@ export default function Stock() {
 
     if (isSavingProduct) return;
     setIsSavingProduct(true);
+    let submitted = false;
     try {
+      if (!await checkProductDuplicate(payload, editingId || undefined)) return;
+      submitted = true;
       if (editingId) await updateProduct(editingId, payload);
       else await addProduct(payload);
       showToast(editingId ? '✓ Alterações salvas!' : '✓ Produto cadastrado com sucesso!');
     } catch (error) {
       showActionError(error, 'Não foi possível salvar o produto. Confira os dados e tente novamente.');
     } finally {
-      setIsModalOpen(false);
+      if (submitted) setIsModalOpen(false);
       setIsSavingProduct(false);
     }
   };
@@ -499,6 +529,18 @@ export default function Stock() {
   const duplicateAnalysis = useMemo(() => {
     return analyzeDuplicates(products);
   }, [products]);
+
+  const duplicatePairs = useMemo(() => {
+    const pairs = new Map<string, { target: Product; source: Product }>();
+    for (const group of duplicateAnalysis.duplicateGroups.values()) {
+      const target = group[0];
+      for (const source of group.slice(1)) {
+        const key = [target.id, source.id].sort().join('/');
+        if (!pairs.has(key)) pairs.set(key, { target, source });
+      }
+    }
+    return Array.from(pairs.entries());
+  }, [duplicateAnalysis]);
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
@@ -757,6 +799,8 @@ export default function Stock() {
       </div>
 
       {/* Banner de Alerta de Produtos Duplicados (se houver) */}
+      <button type="button" onClick={() => setShowDuplicateReview(true)} className="mb-3 rounded-xl border border-border px-4 py-2 text-sm font-semibold">Verificar duplicados</button>
+
       {duplicateAnalysis.totalDuplicates > 0 && (
         <div className="p-4 sm:p-5 rounded-2xl bg-rose-500/10 border-2 border-rose-500/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
           <div className="flex items-start gap-3.5">
@@ -1720,11 +1764,11 @@ export default function Stock() {
                     placeholder="Ex: Coca-Cola 350ml, Sabonete Dove..."
                     className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground" 
                   />
-                  {!editingId && formData.name.trim().length > 1 && products.some(p => normalizeProductName(p.name) === normalizeProductName(formData.name)) && (
+                  {findDuplicateProducts(formData, products, editingId || undefined).length > 0 && (
                     <div className="mt-2 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2 animate-in fade-in">
                       <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
                       <span>
-                        <strong>Atenção (Produto Duplicado):</strong> Já existe outro produto cadastrado com o nome &quot;{formData.name}&quot;. Se salvar, ele ficará marcado como duplicado no estoque.
+                        <strong>Atenção (Produto Duplicado):</strong> Existe um produto com este nome ou código de barras. Ao salvar, você poderá abrir o existente, somar estoque ou cadastrar mesmo assim.
                       </span>
                     </div>
                   )}
@@ -3375,12 +3419,27 @@ export default function Stock() {
         </div>
       )}
 
+      {duplicateRequest && <ProductDuplicateDialog matches={duplicateRequest.matches} quantity={duplicateRequest.quantity} isMerge={duplicateRequest.isMerge} onDecision={duplicateRequest.resolve} />}
+      {showDuplicateReview && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"><section role="dialog" aria-modal="true" aria-label="Verificar duplicados" className="max-h-[85vh] w-full max-w-2xl overflow-auto rounded-2xl border border-border bg-surface p-6">
+        <div className="mb-4 flex justify-between"><h2 className="text-lg font-bold">Verificar duplicados</h2><button type="button" onClick={() => setShowDuplicateReview(false)}>Fechar</button></div>
+        <p className="mb-4 text-sm text-muted-foreground">A mesclagem soma o estoque e mantém nome, preços e medidas do primeiro produto. O segundo fica arquivado para preservar o histórico.</p>
+        {!duplicateAnalysis.duplicateGroups.size && <p>Nenhum par suspeito encontrado.</p>}
+        {duplicatePairs.map(([key, { target, source }]) => <div key={key} className="mb-3 rounded-xl border border-border p-3"><strong>{target.name} — estoque {target.stock}</strong><div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span>{source.name} — {source.stock} {source.type === 'cigarro' ? 'carteiras' : 'unidades'}</span><button type="button" disabled={!!mergingPair || source.type !== target.type} onClick={async () => {
+          setMergingPair(source.id!);
+          try { await mergeProducts(target.id!, source.id!); showToast('✓ Produtos mesclados!'); }
+          catch (error) { showActionError(error, error instanceof Error ? error.message : 'Não foi possível mesclar.'); }
+          finally { setMergingPair(''); }
+        }} className="rounded-lg bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50">{mergingPair === source.id ? 'Mesclando...' : 'Mesclar neste produto'}</button></div></div>)}
+      </section></div>}
+
       <CatalogImportModal isOpen={isCatalogImportOpen} onClose={() => setIsCatalogImportOpen(false)}
-        availableCategories={categories} existingProductNames={products.map(product => product.name)} />
+        availableCategories={categories} existingProductNames={products.map(product => product.name)} existingProducts={products}
+        onBeforeSave={checkProductDuplicate} onOpenExisting={product => { setIsCatalogImportOpen(false); openModal(product); }} />
 
       {/* Camera AI Recognition Modal */}
       <CameraCaptureModal
         isOpen={isCameraModalOpen}
+        onBeforeSave={checkProductDuplicate}
         onClose={() => setIsCameraModalOpen(false)}
         availableCategories={categories}
         onRecognized={(product, imageUrl) => {

@@ -1,3 +1,4 @@
+import { findDuplicateProducts, isDuplicateProduct } from './duplicateDetector';
 import { supabase } from './supabase';
 import { exportFeedbackToSheets } from './feedbackSheets';
 import { type CatalogProduct } from './standardCatalog';
@@ -174,7 +175,7 @@ export const subscribeProducts = (callback: (p: Product[]) => void) => {
   if (!uid) return () => {};
   const q = query(collection(db, 'products'), where('ownerId', '==', uid));
   return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map(doc => normalizeCigaretteStock({ id: doc.id, ...doc.data() } as Product)));
+    callback(snapshot.docs.map(doc => normalizeCigaretteStock({ id: doc.id, ...doc.data() } as Product)).filter(product => !product.mergedIntoId));
   }, (error) => handleCloudError(error, OperationType.LIST, 'products'));
 };
 
@@ -282,6 +283,8 @@ export const adjustProductStock = withProductWriteQueue(async (id: string, indiv
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists()) throw new Error('Produto não encontrado.');
     const product = normalizeCigaretteStock(snapshot.data() as Product);
+    if (product.mergedIntoId) throw new Error('Este produto foi mesclado. Abra o produto existente.');
+    if (product.type !== 'cigarro' && !Number.isSafeInteger(individualUnits)) throw new Error('Informe unidades inteiras para este produto.');
     if (product.ownerId !== uid) throw new Error('Sem acesso a este produto.');
     const newStock = (Math.round(Number(product.stock) * 20) + Math.round(individualUnits * 20)) / 20;
     if (newStock < 0) throw new Error('Estoque insuficiente.');
@@ -306,6 +309,7 @@ export const updateProduct = withProductWriteQueue(async (id: string, data: Part
       const ref = doc(db, 'products', id);
       const current = await transaction.get(ref);
       if (!current.exists()) throw new Error('Produto não encontrado.');
+      if (current.data().mergedIntoId) throw new Error('Este produto foi mesclado. Abra o produto existente.');
       const stockFields = cigaretteStockFields(current.data() as Product);
       transaction.update(ref, { ...removeUndefinedFields({ ...stockFields, ...data }), updatedAt: now });
     });
@@ -360,7 +364,7 @@ function catalogStore(ownerId: string) {
   return {
     readExisting: async () => {
       const snapshot = await getDocs(query(collection(db, 'products'), where('ownerId', '==', ownerId)));
-      return snapshot.docs.map(record => ({ name: String(record.data().name || '') }));
+      return snapshot.docs.filter(record => !record.data().mergedIntoId).map(record => ({ name: String(record.data().name || '') }));
     },
     insertProducts: async (missing: CatalogProduct[]) => {
       const refs = await Promise.all(missing.map(async product => doc(db, 'products', await catalogDocumentId(ownerId, product.name))));
@@ -381,7 +385,7 @@ function catalogStore(ownerId: string) {
 }
 
 /** Supplier drafts are reviewed by the merchant; never seed generic products or fictitious stock. */
-export const importSupplierCatalog = withActionDeadline(async (products: CatalogProduct[]): Promise<number> => {
+export const importSupplierCatalog = withActionDeadline(async (products: CatalogProduct[], options?: { allowDuplicates?: boolean }): Promise<number> => {
   const ownerId = getEffectiveOwnerId();
   if (!ownerId) throw new Error('Entre na sua conta para importar o catálogo.');
   if (!products.length || products.length > 200) throw new Error('Importe entre 1 e 200 produtos por vez.');
@@ -393,7 +397,14 @@ export const importSupplierCatalog = withActionDeadline(async (products: Catalog
       throw new Error('Confira os nomes, custos, medidas e preços dos produtos antes de importar.');
     }
   }
-  const count = await executeCatalogImport(ownerId, catalogStore(ownerId), products);
+  const count = options?.allowDuplicates ? await (async () => {
+    const refs = products.map(() => doc(collection(db, 'products')));
+    await runTransaction(db, async transaction => {
+      const now = Date.now();
+      products.forEach((product, index) => transaction.set(refs[index], { ...product, ownerId, createdAt: now, updatedAt: now }));
+    });
+    return products.length;
+  })() : await executeCatalogImport(ownerId, catalogStore(ownerId), products);
   recordMovement({
       sourceOwnerId: ownerId, type: 'product_create', description: `Catálogo do fornecedor: ${count} produtos cadastrados.`, quantity: count }).catch(() => {});
   return count;
@@ -512,7 +523,7 @@ export const recordSale = withActionDeadline(async (
       const deductions = new Map<string, number>();
       const stockProducts = new Map<string, Product>();
       for (const snapshot of snapshots) {
-        if (!snapshot.exists()) throw new Error('Um produto não está mais disponível.');
+        if (!snapshot.exists() || snapshot.data().mergedIntoId) throw new Error('Um produto não está mais disponível. Atualize o carrinho.');
         stockProducts.set(snapshot.id, normalizeCigaretteStock(snapshot.data() as Product));
       }
       for (const item of items) {
@@ -857,6 +868,17 @@ export const subscribePurchases = (callback: (purchases: Purchase[]) => void) =>
   }, (error) => handleCloudError(error, OperationType.LIST, 'purchases'));
 };
 
+async function resolveActiveProduct(transaction: { get: typeof getDoc }, productId: string) {
+  const visited = new Set<string>();
+  let snapshot = await transaction.get(doc(db, 'products', productId));
+  while (snapshot.exists() && snapshot.data().mergedIntoId) {
+    if (visited.has(snapshot.id) || visited.size >= 20) throw new Error('Não foi possível localizar o produto mesclado.');
+    visited.add(snapshot.id);
+    snapshot = await transaction.get(doc(db, 'products', snapshot.data().mergedIntoId));
+  }
+  return snapshot;
+}
+
 export const recordPurchase = withActionDeadline(async (
   purchase: Omit<Purchase, 'id' | 'ownerId' | 'createdAt'>,
   options?: { 
@@ -883,8 +905,8 @@ export const recordPurchase = withActionDeadline(async (
 
       // Atualizar automaticamente o estoque do produto sem precisar abrir o modal
       if (purchase.productId && (options?.updateProductStock !== false || options?.updateUnitCost || options?.updateExpirationDate || options?.updatePromoPrice)) {
-        const prodRef = doc(db, 'products', purchase.productId);
-        const prodDoc = await batch.get(prodRef);
+        const prodDoc = await resolveActiveProduct(batch, purchase.productId);
+        const prodRef = prodDoc.ref;
         if (prodDoc.exists()) {
           const p = normalizeCigaretteStock(prodDoc.data() as Product);
           const updatePayload: any = {
@@ -948,8 +970,8 @@ export const deletePurchase = withActionDeadline(async (purchaseId: string, reve
       batch.delete(doc(db, 'purchases', purchaseId));
 
       if (revertStock?.productId && revertStock.quantityToSubtract > 0) {
-        const prodRef = doc(db, 'products', revertStock.productId);
-        const prodDoc = await batch.get(prodRef);
+        const prodDoc = await resolveActiveProduct(batch, revertStock.productId);
+        const prodRef = prodDoc.ref;
         if (prodDoc.exists()) {
           const p = prodDoc.data() as Product;
           const newStock = Math.max(0, Math.round(((p.stock || 0) - revertStock.quantityToSubtract) * 20) / 20);
@@ -1558,3 +1580,31 @@ async function deleteMultipleProductsImpl(ids: string[]) {
 }
 
 export const deleteMultipleProducts = withActionDeadline(deleteMultipleProductsImpl);
+
+
+export async function getProductDuplicates(candidate: Pick<Product, 'name' | 'barcode'>, excludeId?: string) {
+  const uid = getEffectiveOwnerId();
+  if (!uid) throw new Error('Entre na sua conta.');
+  const snapshot = await getDocs(query(collection(db, 'products'), where('ownerId', '==', uid)));
+  return findDuplicateProducts(candidate, snapshot.docs.map(row => normalizeCigaretteStock({ ...row.data(), id: row.id } as Product)), excludeId);
+}
+
+// Preserve the original record for historical sales and purchases; hide it from active lists.
+export const mergeProducts = withProductWriteQueue(async (targetId: string, sourceId: string) => {
+  if (targetId === sourceId) throw new Error('Escolha dois produtos diferentes.');
+  const uid = getEffectiveOwnerId();
+  await runTransaction(db, async transaction => {
+    const targetRef = doc(db, 'products', targetId), sourceRef = doc(db, 'products', sourceId);
+    const [targetDoc, sourceDoc] = await Promise.all([transaction.get(targetRef), transaction.get(sourceRef)]);
+    if (!targetDoc.exists() || !sourceDoc.exists()) throw new Error('Produto não encontrado.');
+    const target = normalizeCigaretteStock(targetDoc.data() as Product), source = normalizeCigaretteStock(sourceDoc.data() as Product);
+    if (target.ownerId !== uid || source.ownerId !== uid || target.mergedIntoId || source.mergedIntoId) throw new Error('Estes produtos não estão disponíveis para mesclar.');
+    if (!isDuplicateProduct(target, source)) throw new Error('Os produtos não correspondem. Atualize a lista.');
+    if (target.type !== source.type) throw new Error('Não é possível somar carteiras de cigarro com unidades comuns. Corrija o tipo antes de mesclar.');
+    const stock = (Math.round(target.stock * 20) + Math.round(source.stock * 20)) / 20;
+    if (!isValidStockQuantity(stock)) throw new Error('Estoque inválido.');
+    const now = Date.now();
+    transaction.update(targetRef, { ...cigaretteStockFields(target), stock, initialStock: (Math.round((target.initialStock ?? target.stock) * 20) + Math.round((source.initialStock ?? source.stock) * 20)) / 20, updatedAt: now });
+    transaction.update(sourceRef, { ...cigaretteStockFields(source), stock: 0, initialStock: 0, mergedIntoId: targetId, mergedAt: now, updatedAt: now });
+  });
+});

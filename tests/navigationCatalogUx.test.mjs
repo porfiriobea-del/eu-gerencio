@@ -21,7 +21,7 @@ window.matchMedia = () => ({ matches: desktop, addEventListener() {}, removeEven
 const cache = new URL('../node_modules/.cache/', import.meta.url);
 await mkdir(cache, { recursive: true });
 const dir = await mkdtemp(new URL('navigation-catalog-ui-', cache));
-const apiExports = ['subscribeSettings', 'getActiveStoreSession', 'subscribeProducts', 'subscribeTodaySales', 'updateProduct', 'adjustProductStock', 'addProduct', 'addMultipleProducts', 'deleteProduct', 'deleteMultipleProducts', 'recordMovement', 'importSupplierCatalog'];
+const apiExports = ['subscribeSettings', 'getActiveStoreSession', 'subscribeProducts', 'subscribeTodaySales', 'updateProduct', 'adjustProductStock', 'addProduct', 'addMultipleProducts', 'deleteProduct', 'deleteMultipleProducts', 'recordMovement', 'importSupplierCatalog', 'getProductDuplicates', 'mergeProducts'];
 const mocks = {
   api: apiExports.map(name => `export const ${name} = (...args) => globalThis.__uiApi.${name}(...args);`).join('\n'),
   auth: 'export const logout = () => {};',
@@ -33,7 +33,7 @@ const mocks = {
   geminiCatalogScanner: 'export const prepareCatalogFile=(file)=>globalThis.__prepareFile(file); export const recognizeCatalog=(...args)=>globalThis.__recognizeCatalog(...args);'
 };
 const childMocks = ['TutorialModal', 'InviteModal', 'EmployeeSwitchModal', 'GlobalMovementHistory', 'PocketTip', 'CameraCaptureModal'];
-for (const [name, source] of [['Layout','components/Layout'],['CatalogImportModal','components/CatalogImportModal'],['Stock','pages/Stock']]) {
+for (const [name, source] of [['Layout','components/Layout'],['CatalogImportModal','components/CatalogImportModal'],['Stock','pages/Stock'],['ProductDuplicateDialog','components/ProductDuplicateDialog']]) {
   await build({ entryPoints: [new URL(`../src/${source}.tsx`, import.meta.url).pathname], bundle:true, packages:'external', format:'esm', platform:'node', jsx:'automatic', outfile:`${dir}/${name}.mjs`,
     plugins:[{name:'mock-integrations',setup(builder){
       builder.onResolve({filter:/.*/},args=> {
@@ -47,11 +47,13 @@ for (const [name, source] of [['Layout','components/Layout'],['CatalogImportModa
 }
 const {Layout}=await import(pathToFileURL(`${dir}/Layout.mjs`).href);
 const {CatalogImportModal}=await import(pathToFileURL(`${dir}/CatalogImportModal.mjs`).href);
+const {ProductDuplicateDialog}=await import(pathToFileURL(`${dir}/ProductDuplicateDialog.mjs`).href);
 const {default:Stock}=await import(pathToFileURL(`${dir}/Stock.mjs`).href);
 function api() {
   globalThis.__uiApi={
     subscribeSettings(cb){cb({storeName:'Loja Teste'});return()=>{};},getActiveStoreSession:()=>null,
     subscribeProducts(cb){cb([]);return()=>{};},subscribeTodaySales(cb){cb([]);return()=>{};},
+    getProductDuplicates:async()=>[],mergeProducts:()=>assert.fail('Unexpected merge'),
     importSupplierCatalog:()=>assert.fail('Unexpected save')
   };
 }
@@ -101,10 +103,10 @@ test('Stock header has only the three requested actions and no generic banner',(
 });
 
 const draft={id:'s-1',selected:true,name:'Suco Fornecedor 1L',category:'Bebidas',type:'comum',purchaseCost:60,costBasis:'embalagem',unitsPerPackage:12,purchaseForm:'fardo',basePrice:'',pricePack:'',priceCart:'',priceHalfCart:'',priceUnit:''};
-function importer(){
+function importer(props={}){
   api();globalThis.__prepareFile=async()=> 'data:application/pdf;base64,JVBERi0=';
   globalThis.__recognizeCatalog=async()=>({products:[draft],truncated:false});
-  function Harness(){const[open,setOpen]=React.useState(true);return React.createElement(React.Fragment,null,React.createElement('button',{onClick:()=>setOpen(true)},'Abrir importação'),React.createElement(CatalogImportModal,{isOpen:open,onClose:()=>setOpen(false),availableCategories:['Bebidas'],existingProductNames:[]}),React.createElement(AppToast));}
+  function Harness(){const[open,setOpen]=React.useState(true);return React.createElement(React.Fragment,null,React.createElement('button',{onClick:()=>setOpen(true)},'Abrir importação'),React.createElement(CatalogImportModal,{isOpen:open,onClose:()=>setOpen(false),availableCategories:['Bebidas'],existingProductNames:[],...props}),React.createElement(AppToast));}
   return render(React.createElement(Harness));
 }
 async function upload(ui){await act(async()=>{fireEvent.change(document.querySelector('input[accept="application/pdf,.pdf"]'),{target:{files:[new dom.window.File(['%PDF'], 'fornecedor.pdf',{type:'application/pdf'})]}});});}
@@ -151,4 +153,60 @@ test('interrupting analysis prevents late results from overwriting manual review
   await act(async()=>{finish({products:[draft],truncated:false});});
   assert.ok(ui.getByDisplayValue('Cadastro manual preservado'));
   assert.equal(ui.queryByDisplayValue(draft.name),null);
+});
+
+
+test('catalog barcode duplicates start unchecked and require an explicit override',async()=>{
+ const existing={id:'existing',name:'Outra apresentação',barcode:'001234',type:'comum',stock:5};
+ const ui=importer({existingProducts:[existing]});
+ globalThis.__recognizeCatalog=async()=>({products:[{...draft,barcode:'001234',basePrice:8}],truncated:false});
+ await upload(ui);
+ assert.equal(ui.getByRole('checkbox',{name:'Produto 1'}).checked,false);
+ assert.ok(ui.getByText(/Duplicado suspeito: Outra apresentação/));
+ fireEvent.click(ui.getByRole('button',{name:'Cadastrar mesmo assim'}));
+ assert.equal(ui.getByRole('checkbox',{name:'Produto 1'}).checked,true);
+ let saved;
+ globalThis.__uiApi.importSupplierCatalog=async(products,options)=>{saved={products,options};return products.length;};
+ await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Cadastrar selecionados'}));});
+ assert.equal(saved.products[0].barcode,'001234');assert.equal(saved.options.allowDuplicates,true);
+});
+
+test('duplicate confirmation exposes all three actions and the selected existing product',()=>{
+ const decisions=[];
+ const ui=render(React.createElement(ProductDuplicateDialog,{matches:[{id:'p1',name:'Café',type:'comum',stock:2}],quantity:3,onDecision:value=>decisions.push(value)}));
+ fireEvent.click(ui.getByRole('button',{name:'Abrir o existente'}));
+ fireEvent.click(ui.getByRole('button',{name:'Somar ao estoque dele'}));
+ fireEvent.click(ui.getByRole('button',{name:'Cadastrar mesmo assim'}));
+ assert.deepEqual(decisions.map(value=>value.action),['open','add','allow']);
+ assert.equal(decisions[1].quantity,3);assert.equal(decisions[0].product.id,'p1');
+});
+
+
+test('manual save checks fresh cloud duplicates and opens the existing product without inserting',async()=>{
+ api();
+ const existing={id:'existing',name:'Café existente',type:'comum',stock:5,basePrice:10,unitCost:2,unitsPerPackage:1,purchaseForm:'unidade',category:'Bebidas',safetyStock:0,dailyAverageSales:0,replacementDays:3};
+ globalThis.__uiApi.getProductDuplicates=async(candidate,excludeId)=>{assert.equal(candidate.name,'cafe existente');assert.equal(excludeId,undefined);return [existing];};
+ globalThis.__uiApi.addProduct=()=>assert.fail('Must not insert before the duplicate decision');
+ const ui=render(React.createElement(MemoryRouter,null,React.createElement(Stock)));
+ fireEvent.click(ui.getByRole('button',{name:'Novo Produto'}));
+ fireEvent.change(ui.getByPlaceholderText('Ex: Coca-Cola 350ml, Sabonete Dove...'),{target:{value:'cafe existente'}});
+ await act(async()=>{fireEvent.submit(ui.getByRole('button',{name:'Salvar Produto'}).closest('form'));});
+ assert.ok(ui.getByRole('dialog',{name:'Produto já cadastrado'}));
+ await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Abrir o existente'}));});
+ assert.ok(ui.getByDisplayValue('Café existente'));
+ assert.equal(ui.queryByRole('dialog',{name:'Produto já cadastrado'}),null);
+});
+
+
+test('stock duplicate review deduplicates name/barcode pairs and provides an explicit merge action',async()=>{
+ api();
+ const common={name:'Café',barcode:'00123',category:'Bebidas',type:'comum',basePrice:5,unitCost:1,unitsPerPackage:1,safetyStock:0,dailyAverageSales:0,replacementDays:3};
+ globalThis.__uiApi.subscribeProducts=cb=>{cb([{...common,id:'a',stock:2},{...common,id:'b',stock:3}]);return()=>{};};
+ let merged;
+ globalThis.__uiApi.mergeProducts=async(target,source)=>{merged={target,source};};
+ const ui=render(React.createElement(MemoryRouter,null,React.createElement(Stock)));
+ fireEvent.click(ui.getByRole('button',{name:'Verificar duplicados'}));
+ assert.equal(ui.getAllByRole('button',{name:'Mesclar neste produto'}).length,1);
+ await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Mesclar neste produto'}));});
+ assert.deepEqual(merged,{target:'a',source:'b'});
 });

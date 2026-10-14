@@ -37,6 +37,7 @@ export function analyzeDuplicates(products: Product[]): DuplicateAnalysis {
   const barcodeGroups = new Map<string, Product[]>();
 
   products.forEach(p => {
+    if (p.mergedIntoId) return;
     const normName = normalizeProductName(p.name);
     if (normName) {
       const existing = nameGroups.get(normName) || [];
@@ -44,8 +45,8 @@ export function analyzeDuplicates(products: Product[]): DuplicateAnalysis {
       nameGroups.set(normName, existing);
     }
 
-    const barcode = (p.barcode || '').trim();
-    if (barcode && barcode.length >= 4) {
+    const barcode = normalizeBarcode(p.barcode);
+    if (barcode) {
       const existing = barcodeGroups.get(barcode) || [];
       existing.push(p);
       barcodeGroups.set(barcode, existing);
@@ -99,4 +100,14 @@ export function analyzeDuplicates(products: Product[]): DuplicateAnalysis {
     totalDuplicates: duplicateIdSet.size,
     uniqueDuplicateNamesCount: duplicateGroups.size
   };
+}
+
+export function normalizeBarcode(value?: string): string { return (value || '').replace(/\s+/g, '').trim(); }
+export function isDuplicateProduct(candidate: Pick<Product, 'name' | 'barcode'>, product: Pick<Product, 'name' | 'barcode'>): boolean {
+  const name = normalizeProductName(candidate.name);
+  const barcode = normalizeBarcode(candidate.barcode);
+  return !!(name && name === normalizeProductName(product.name) || barcode && barcode === normalizeBarcode(product.barcode));
+}
+export function findDuplicateProducts(candidate: Pick<Product, 'name' | 'barcode'>, products: Product[], excludeId?: string): Product[] {
+  return products.filter(product => product.id !== excludeId && !product.mergedIntoId && isDuplicateProduct(candidate, product));
 }

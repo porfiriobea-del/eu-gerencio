@@ -4,6 +4,9 @@ import { normalizeProductName } from './duplicateDetector';
 export interface SupplierDraft {
   id: string;
   selected: boolean;
+  barcode?: string;
+  allowDuplicate?: boolean;
+  stockToAdd?: number;
   name: string;
   category: string;
   type: 'comum' | 'cigarro';
@@ -30,6 +33,7 @@ export function parseSupplierDraft(value: unknown): SupplierDraft {
       typeof row.category !== 'string' || !row.category.trim() || row.category.length > 50 ||
       !['comum', 'cigarro'].includes(String(row.type))) throw new Error('A IA retornou um produto inválido. Tente outro arquivo ou preencha manualmente.');
   const draft = blankSupplierDraft();
+  draft.barcode = typeof row.barcode === 'string' ? row.barcode.trim() : '';
   draft.name = row.name.trim(); draft.category = row.category.trim(); draft.type = row.type === 'cigarro' || /cigar/i.test(row.category) ? 'cigarro' : 'comum';
   for (const field of ['purchaseCost', 'basePrice', 'pricePack', 'priceCart', 'priceHalfCart', 'priceUnit'] as const) {
     const value = row[field];
@@ -51,7 +55,7 @@ export function buildSupplierProducts(drafts: SupplierDraft[], existingNames: st
     const name = row.name.trim(); const category = row.category.trim();
     if (!name || name.length > 100 || !category || category.length > 50) throw new Error('Preencha nome e categoria de todos os produtos selecionados.');
     const key = normalizeProductName(name);
-    if (names.has(key)) continue;
+    if (names.has(key) && !row.allowDuplicate) continue;
     if (row.purchaseCost === '' || !Number.isFinite(row.purchaseCost) || row.purchaseCost < 0 || !row.costBasis) throw new Error(`Confira o custo e a medida da compra de ${name}.`);
     const cigarette = row.type === 'cigarro';
     const units = cigarette ? 10 : row.unitsPerPackage;
@@ -73,7 +77,7 @@ export function buildSupplierProducts(drafts: SupplierDraft[], existingNames: st
     const pricePack = price(row.pricePack), priceCart = price(row.priceCart), priceHalfCart = price(row.priceHalfCart), priceUnit = price(row.priceUnit);
     const basePrice = cigarette ? (priceCart || priceUnit * 20 || priceHalfCart * 2 || pricePack / 10) : price(row.basePrice);
     if (basePrice <= 0) throw new Error(`Informe pelo menos um preço de venda para ${name}.`);
-    products.push({ name, category, type: row.type, stockUnit: cigarette ? 'carteira' : 'unidade',
+    products.push({ name, category, ...(row.barcode?.trim() ? { barcode: row.barcode.trim() } : {}), type: row.type, stockUnit: cigarette ? 'carteira' : 'unidade',
       purchaseForm: cigarette ? 'pacote' : row.purchaseForm, unitsPerPackage: units, unitCost,
       stock: 0, initialStock: 0, initialStockDate: new Date().toISOString().slice(0, 10), safetyStock: 0,
       dailyAverageSales: 0, replacementDays: 3, basePrice,

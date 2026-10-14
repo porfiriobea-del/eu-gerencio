@@ -223,3 +223,32 @@ test('Sheets export failure cannot roll back a confirmed Supabase sale or stock 
   assert.equal((await store.getDoc(ref)).data().stock,1);
  }finally{delete globalThis.__sheetsFail;delete globalThis.__failedSheetType;}
 });
+
+test('duplicate lookup uses current owner cloud data and excludes the product being edited',async()=>{
+ await store.setDoc(store.doc(store.db,'products','duplicate-a'),{ownerId:'owner',name:'Café Teste',barcode:'00123',type:'comum',stock:3,initialStock:4,unitCost:1,basePrice:2});
+ await store.setDoc(store.doc(store.db,'products','duplicate-b'),{ownerId:'owner',name:'CAFE  teste',barcode:'00123',type:'comum',stock:7,initialStock:8,unitCost:5,basePrice:9});
+ const matches=await api.getProductDuplicates({name:'cafe teste'},'duplicate-a');
+ assert.deepEqual(matches.map(product=>product.id),['duplicate-b']);
+});
+
+test('merge retries atomically, preserves history and redirects old purchase stock adjustments',async()=>{
+ forcedConflicts=2;
+ await api.mergeProducts('duplicate-a','duplicate-b');
+ const target=await store.getDoc(store.doc(store.db,'products','duplicate-a'));
+ const source=await store.getDoc(store.doc(store.db,'products','duplicate-b'));
+ assert.equal(target.data().stock,10);assert.equal(target.data().unitCost,1);assert.equal(target.data().basePrice,2);
+ assert.ok(source.exists());assert.equal(source.data().stock,0);assert.equal(source.data().mergedIntoId,'duplicate-a');
+ assert.equal((await api.getProductDuplicates({name:'cafe teste'},'duplicate-a')).length,0);
+ await assert.rejects(api.adjustProductStock('duplicate-b',1),/mesclado/);
+ const purchase=await api.recordPurchase({productId:'duplicate-b',productName:'Café',quantity:2,unitCost:1,totalCost:2,date:Date.now()});
+ assert.equal((await store.getDoc(target.ref)).data().stock,12);
+ await api.deletePurchase(purchase,{productId:'duplicate-b',quantityToSubtract:2});
+ assert.equal((await store.getDoc(target.ref)).data().stock,10);
+ assert.equal((await store.getDoc(source.ref)).data().stock,0);
+});
+
+test('different stock units cannot be merged even with an identical barcode',async()=>{
+ await store.setDoc(store.doc(store.db,'products','cigarette-copy'),{ownerId:'owner',name:'Café Teste',barcode:'00123',type:'cigarro',stockUnit:'carteira',stock:1,unitCost:2,basePrice:5});
+ await assert.rejects(api.mergeProducts('duplicate-a','cigarette-copy'),/carteiras/);
+ assert.equal((await store.getDoc(store.doc(store.db,'products','duplicate-a'))).data().stock,10);
+});
