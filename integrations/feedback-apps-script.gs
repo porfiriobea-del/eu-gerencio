@@ -12,11 +12,11 @@ function doPost(e) {
       name = 'Feedback';
       headings = ['ID', 'Data UTC', 'Loja anônima', 'Usuário anônimo', 'Nota', 'Tipo', 'Mensagem', 'Contato'];
       if (!/^feedback_[a-f0-9]{64}$/.test(data.id || '')) return reportJson({ok: false});
-      row = [data.id, new Date().toISOString(), data.loja, data.usuario, data.nota, data.tipo, data.mensagem, data.contato || ''];
+      row = [data.id, new Date(), data.loja, data.usuario, data.nota == null || data.nota === '' ? '' : Number(data.nota), data.tipo, data.mensagem, data.contato || ''];
     } else if (data.categoria === 'uso' && ['venda','produto_cadastrado','foto_ia','fiado_lancado','compra_registrada'].indexOf(data.evento) >= 0) {
       name = 'Uso';
       headings = ['Data UTC', 'Loja anônima', 'Usuário anônimo', 'Evento', 'Valor'];
-      row = [new Date().toISOString(), data.loja, data.usuario, data.evento, data.valor || 0];
+      row = [new Date(), data.loja, data.usuario, data.evento, Number(data.valor || 0)];
     } else return reportJson({ok: false});
     lock.waitLock(20000);
     const book = SpreadsheetApp.getActiveSpreadsheet();
@@ -24,8 +24,15 @@ function doPost(e) {
     const sheet = book.getSheetByName(name) || book.insertSheet(name);
     if (sheet.getLastRow() === 0) { sheet.appendRow(headings); sheet.setFrozenRows(1); }
     if (data.categoria === 'feedback' && sheet.getLastRow() > 1 && sheet.getRange(2,1,sheet.getLastRow()-1,1).createTextFinder(data.id).matchEntireCell(true).findNext()) return reportJson({ok: true, duplicate: true});
-    row = row.map(function(value) { const text = String(value == null ? '' : value); return /^[=+@-]/.test(text) ? "'" + text : text; });
+    row = row.map(function(value) {
+      if (value instanceof Date) return value;
+      if (typeof value === 'number') {
+        if (!isFinite(value)) throw new Error('Valor numérico inválido.');
+        return value;
+      }
+      const text = String(value == null ? '' : value); return /^[=+@-]/.test(text) ? "'" + text : text; });
     sheet.appendRow(row);
+    sheet.getRange(sheet.getLastRow(), name === 'Feedback' ? 2 : 1).setNumberFormat('yyyy-mm-dd hh:mm:ss');
     SpreadsheetApp.flush();
     return reportJson({ok: true});
   } catch (error) { return reportJson({ok: false}); }

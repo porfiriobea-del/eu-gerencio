@@ -20,3 +20,9 @@ Para confirmar produção, envie um feedback real pelo app após o deploy e conf
 O Apps Script confirma a gravação com JSON `{ "ok": true }` (o formato anterior `{ "success": true }` também é aceito). Sem confirmação, o servidor registra `EXPORT_NOT_CONFIRMED`, status HTTP, tipo de conteúdo e os primeiros 320 caracteres da resposta, com segredo e valores pessoais conhecidos removidos. O app não exibe erro nem perde o feedback salvo.
 
 O handler compartilhado fica em `server/relatorio.ts`, fora das funções da Vercel. As duas rotas importam `server/relatorio.js`, preservando os caminhos do JavaScript ESM emitido. O frontend mantém o tsconfig de Vite; `tsconfig.server.json` usa `NodeNext`, emite em `build/server` e reescreve imports TypeScript restantes para `.js`. `package.json` permanece com `type: module`. `npm run build` compila frontend e servidor; `npm start` executa o servidor JavaScript compilado, sem resolução especial de arquivos TypeScript.
+
+## Validação dos cálculos do Resumo
+
+Datas são gravadas como datas nativas do Sheets (a exibição depende do fuso horário da planilha); notas e valores são números, não texto. Atualize a implantação do Apps Script com a versão corrigida para aplicar essa regra a novos envios. A alteração não converte linhas antigas automaticamente.
+
+A aba Feedback recebe Nota na coluna E e Tipo na F; os tipos enviados são `suggestion`, `praise`, `bug`, `question` e `other`. A aba Uso recebe Evento na D e Valor na E. Para contar dias de uso, agrupe a parte inteira da data da coluna A, pois horários distintos do mesmo dia representam um único dia. Fórmulas mostrando zero numa planilha vazia não comprovam recebimento: confirme linhas reais nas duas abas e os resultados correspondentes no Resumo.
