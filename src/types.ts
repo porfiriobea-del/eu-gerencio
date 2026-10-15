@@ -10,6 +10,7 @@ export interface Product {
   mergedAt?: number;
   purchaseForm: 'pacote' | 'fardo' | 'unidade';
   unitsPerPackage: number;
+  supplierPackageUnits?: 5 | 10; // Cigarette purchase packaging; sale pack remains 10 carteiras.
   unitCost: number; // Per stock unit: carteira for cigarettes, individual unit otherwise.
   stock: number;
   safetyStock: number;

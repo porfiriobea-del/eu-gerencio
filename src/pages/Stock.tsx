@@ -1,7 +1,8 @@
+import { CigarettePurchaseOptions } from '../components/CigarettePurchaseOptions';
 import { StockLevelSuggestion } from '../components/StockLevelSuggestion';
 import { getReorderPoint } from '../lib/stockSuggestions';
 import { showToast, showActionError, ConfirmationTimeoutError } from '../lib/actionFeedback';
-import { getPackageUnits, getCigaretteFormats, CIGARETTE_UNITS, isValidStockQuantity } from '../lib/productUnits';
+import { getPackageUnits, getPurchasePackageUnits, getCigaretteFormats, CIGARETTE_UNITS, isValidStockQuantity } from '../lib/productUnits';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteField } from '../lib/cloudStore';
@@ -116,7 +117,7 @@ export default function Stock() {
     promoNotes: ''
   });
 
-  const formUnitsPerPackage = getPackageUnits(formData);
+  const formUnitsPerPackage = getPurchasePackageUnits(formData);
   const formCostPerUnit = Number(formData.unitCost) / (formData.type === 'cigarro' ? 20 : 1);
 
   const [isReadingLabel, setIsReadingLabel] = useState(false);
@@ -208,6 +209,7 @@ export default function Stock() {
           ...prev,
           category: cat,
           type: 'cigarro',
+          supplierPackageUnits: wasCigarette && prev.supplierPackageUnits === 5 ? 5 : 10,
           purchaseForm: 'pacote',
           unitsPerPackage: CIGARETTE_UNITS.pack,
           stockUnit: 'carteira', // 1 maço = 10 carteiras; 1 carteira = 20 avulsos.
@@ -246,8 +248,8 @@ export default function Stock() {
   const openModal = (product?: Product) => {
     if (product) {
       const unitsPkg = getPackageUnits(product);
-      const calculatedPkgCost = product.unitCost && unitsPkg > 1 
-        ? Number((product.unitCost * unitsPkg).toFixed(2)) 
+      const calculatedPkgCost = product.unitCost && getPurchasePackageUnits(product) > 1
+        ? Number((product.unitCost * getPurchasePackageUnits(product)).toFixed(2))
         : product.unitCost;
       setFormData({
         ...product,
@@ -317,6 +319,7 @@ export default function Stock() {
       ...formData,
       stockUnit: formData.type === 'cigarro' ? 'carteira' : 'unidade',
       unitsPerPackage: unitsPkg,
+      supplierPackageUnits: formData.type === 'cigarro' ? (formData.supplierPackageUnits === 5 ? 5 : 10) : undefined,
       purchaseForm: formData.type === 'cigarro' ? 'pacote' : formData.purchaseForm,
       unitCost: Number(formData.unitCost) || 0,
       stock: stockNum,
@@ -1914,14 +1917,19 @@ export default function Stock() {
                 <div className="col-span-1 sm:col-span-2 p-4 rounded-xl bg-palette-1/50 border border-primary/20 space-y-4">
                   <div className="flex items-center justify-between border-b border-primary/20 pb-2">
                     <span className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                      <Package className="w-4 h-4" /> Forma de Compra & Cálculo Automático de Custos
+                      <Package className="w-4 h-4" /> {v('purchase.title')}
                     </span>
                     <span className="text-[11px] text-muted-foreground">
-                      {formData.purchaseForm === 'fardo' ? 'Ex: Fardo de bebidas' : formData.purchaseForm === 'pacote' ? 'Ex: Pacote fechado' : 'Compra direta em avulso'}
+                      {formData.type === 'cigarro' ? v(formUnitsPerPackage === 5 ? 'purchase.half' : 'purchase.full') : formData.purchaseForm === 'fardo' ? 'Ex: Fardo de bebidas' : formData.purchaseForm === 'pacote' ? 'Ex: Pacote fechado' : 'Compra direta em avulso'}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {formData.type === 'cigarro' ? <CigarettePurchaseOptions value={formData.supplierPackageUnits === 5 ? 5 : 10} onChange={size => setFormData((previous: any) => ({
+                      ...previous, supplierPackageUnits: size, purchaseForm: 'pacote', unitsPerPackage: 10,
+                      unitCost: Number(previous.purchaseTotalCost) > 0 ? Number((Number(previous.purchaseTotalCost) / size).toFixed(2)) : previous.unitCost,
+                    }))} /> : <>
+
                     <div>
                       <label className="block text-xs font-bold text-foreground mb-1">
                         Forma como você compra do Fornecedor *
@@ -1988,7 +1996,8 @@ export default function Stock() {
                       <span className="text-[11px] text-muted-foreground mt-0.5 block">
                         {formData.purchaseForm === 'fardo' ? 'Ex: Fardo de Guaraná/Coca = 6 unidades' : 'Ex: Pacote de salgadinho = 10 unidades'}
                       </span>
-                    </div>
+                    </div>                    </>}
+
                   </div>
 
                   {isBeverageCategory(formData.category) && (
@@ -2024,7 +2033,7 @@ export default function Stock() {
                       <div className="p-3 bg-surface rounded-xl border border-border">
                         <div className="flex items-center justify-between mb-1">
                           <label className="block text-xs font-bold text-foreground">
-                            Valor de Compra do {formData.purchaseForm === 'fardo' ? 'Fardo' : 'Pacote'} (R$)
+                            {formData.type === 'cigarro' ? v('purchase.cost') : `Valor de Compra do ${formData.purchaseForm === 'fardo' ? 'Fardo' : 'Pacote'} (R$)`}
                           </label>
                           <span className="text-[10px] text-primary font-semibold">Valor da NF/Fornecedor</span>
                         </div>
@@ -2054,7 +2063,7 @@ export default function Stock() {
                           />
                         </div>
                         <span className="text-[11px] text-muted-foreground mt-1 block">
-                          Informe quanto você pagou no {formData.purchaseForm === 'fardo' ? 'fardo' : 'pacote'} fechado.
+                          {formData.type === 'cigarro' ? v('purchase.costHelp') : `Informe quanto você pagou no ${formData.purchaseForm === 'fardo' ? 'fardo' : 'pacote'} fechado.`}
                         </span>
                       </div>
                     )}
@@ -2898,7 +2907,7 @@ export default function Stock() {
                 product={{type: formData.type, stock: Number(formData.stock), dailyAverageSales: Number(formData.dailyAverageSales), replacementDays: Number(formData.replacementDays)}}
                 coverageDays={Number(formData.stockCoverageDays) || 7}
                 onCoverageChange={days => setFormData((previous: any) => ({...previous, stockCoverageDays: days}))}
-                onApply={values => { setFormData((previous: any) => ({...previous, ...values})); showToast('Limites preenchidos. Salve o produto para confirmar.'); }}
+                onApply={values => { setFormData((previous: any) => ({...previous, ...values})); showToast(v('suggestion.applied')); }}
               />
 
               <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3 mt-8 pt-4 border-t border-border">

@@ -211,3 +211,23 @@ test('stock duplicate review deduplicates name/barcode pairs and provides an exp
  await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Mesclar neste produto'}));});
  assert.deepEqual(merged,{target:'a',source:'b'});
 });
+
+test('supplier half-pack choice recalculates cost, persists five carteiras and preserves the ten-carteira sale pack',async()=>{
+ api();
+ let product={id:'cig',name:'Cigarro teste',category:'Cigarros',type:'cigarro',stockUnit:'carteira',stock:20,initialStock:20,basePrice:1,pricePack:100,priceCart:12,priceHalfCart:6,priceUnit:1,unitCost:4,unitsPerPackage:10,purchaseForm:'pacote',safetyStock:2,maxStock:30,dailyAverageSales:1,replacementDays:3};
+ globalThis.__uiApi.subscribeProducts=cb=>{cb([product]);return()=>{};};
+ let saved;
+ globalThis.__uiApi.updateProduct=async(id,payload)=>{saved={id,payload};product={...product,...payload};for(const key of Object.keys(product))if(product[key]?.__eu_delete_field)delete product[key];};
+ let ui=render(React.createElement(MemoryRouter,null,React.createElement(Stock)));
+ fireEvent.click(ui.getByTitle('Editar Produto e Estoque'));
+ let selector=ui.getByRole('combobox',{name:'purchase.size'});
+ assert.equal(selector.value,'10');
+ fireEvent.change(selector,{target:{value:'5'}});
+ await act(async()=>{fireEvent.submit(ui.getByRole('button',{name:'Salvar Produto'}).closest('form'));});
+ assert.equal(saved.id,'cig');assert.equal(saved.payload.supplierPackageUnits,5);
+ assert.equal(saved.payload.unitsPerPackage,10);assert.equal(saved.payload.unitCost,8);assert.equal(saved.payload.stock,20);
+ ui.unmount();ui=render(React.createElement(MemoryRouter,null,React.createElement(Stock)));
+ fireEvent.click(ui.getByTitle('Editar Produto e Estoque'));
+ assert.equal(ui.getByRole('combobox',{name:'purchase.size'}).value,'5');
+ assert.ok(ui.getByDisplayValue('40'));
+});

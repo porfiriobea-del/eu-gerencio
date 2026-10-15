@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getPackageUnits, getCigaretteFormats, calculateStockUpdates, normalizeCigaretteStock, isValidStockQuantity } from '../src/lib/productUnits.ts';
+import { getPackageUnits, getPurchasePackageUnits, getCigaretteFormats, calculateStockUpdates, normalizeCigaretteStock, isValidStockQuantity } from '../src/lib/productUnits.ts';
 
 test('cigarette package always contains 10 carteiras, including legacy metadata', () => {
   assert.equal(getPackageUnits({ type: 'cigarro', unitsPerPackage: 1 }), 10);
@@ -78,4 +78,15 @@ test('clearing an avulso price does not change other prices or stock conversion 
   const disabled = { ...product, priceUnit: 0 };
   assert.deepEqual(getCigaretteFormats(disabled).map(format => [format.units, format.price]), [[10, 100], [1, 11], [0.5, 6]]);
   assert.equal(getCigaretteFormats({ ...disabled, priceCart: 0 }).length, 2);
+});
+
+test('supplier half pack is five carteiras without redefining the ten-carteira sale pack',()=>{
+ const product={type:'cigarro',stockUnit:'carteira',unitsPerPackage:10,supplierPackageUnits:5,stock:20};
+ assert.equal(getPurchasePackageUnits(product),5);
+ assert.equal(getPackageUnits(product),10);
+ const normalized=normalizeCigaretteStock(product);
+ assert.equal(normalized.supplierPackageUnits,5);assert.equal(normalized.stock,20);
+ assert.equal(getPurchasePackageUnits({...product,supplierPackageUnits:undefined}),10);
+ assert.equal(getPurchasePackageUnits({...product,supplierPackageUnits:7}),10);
+ assert.equal(getPurchasePackageUnits({type:'comum',unitsPerPackage:6}),6);
 });

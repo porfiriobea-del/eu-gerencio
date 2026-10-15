@@ -17,3 +17,9 @@ O campo legado safetyStock armazena apenas a reserva, pois as telas somam a dema
 Produtos comuns usam unidades inteiras. Cigarros usam carteiras e incrementos de 0,05 carteira, mantendo 1 maço = 10 carteiras e 1 cigarro = 0,05 carteira. Fardos não alteram a unidade base de contagem.
 
 Exemplo: média de 4 unidades/dia, entrega em 3 dias e cobertura de 7 dias resulta em reserva de 3, mínimo de 15 e máximo de 43. Se há 5 unidades, a cobertura atual é 1,25 dia e faltam 38 para atingir o máximo.
+
+## Linguagem e embalagem de cigarros
+
+Todos os textos do painel de sugestão usam o vocabulário central nos modos técnico, neutro e simples. No simples, use Quando comprar mais, Quanto manter na loja e Preencher para mim; a explicação de 25% fica recolhida em Como fizemos a conta?. Mensagens de estoque zerado, excedente, reposição, confirmação e falta de média também seguem o modo selecionado.
+
+Para cigarros, o cadastro oferece exclusivamente maço inteiro (10 carteiras, padrão) e meio maço (5 carteiras). A preferência é persistida no campo opcional supplierPackageUnits. O campo unitsPerPackage e as conversões do Caixa continuam com maço de venda igual a 10 carteiras. O custo por carteira, a conversão de embalagens no formulário de estoque e as entradas na tela Compras usam getPurchasePackageUnits; a opção de meio maço não transforma uma venda de maço em cinco carteiras. Ao mudar a embalagem, o total de compra informado é dividido pela quantidade escolhida; confira o valor pago antes de salvar.

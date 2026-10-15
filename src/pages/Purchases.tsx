@@ -1,3 +1,4 @@
+import { getPurchasePackageUnits } from '../lib/productUnits';
 import { getReorderPoint } from '../lib/stockSuggestions';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import { useState, useEffect, useMemo } from 'react';
@@ -100,7 +101,7 @@ export default function Purchases() {
         
         const maxStock = p.maxStock || Math.max(p.stock, p.safetyStock * 2, 10);
         const suggestedBuyUnits = Math.max(0, maxStock - p.stock);
-        const unitsPerPkg = p.unitsPerPackage || 1;
+        const unitsPerPkg = getPurchasePackageUnits(p);
         const suggestedPackages = unitsPerPkg > 1 ? Math.ceil(suggestedBuyUnits / unitsPerPkg) : suggestedBuyUnits;
         const estimatedCost = suggestedBuyUnits * p.unitCost;
 
@@ -225,7 +226,7 @@ export default function Purchases() {
   // Open register purchase modal
   const handleOpenPurchaseModal = (product: Product, suggestedUnits?: number) => {
     setSelectedProduct(product);
-    const unitsPerPkg = product.unitsPerPackage || 1;
+    const unitsPerPkg = getPurchasePackageUnits(product);
     const isPackaged = unitsPerPkg > 1;
 
     const qtyToUse = suggestedUnits !== undefined 
@@ -268,7 +269,7 @@ export default function Purchases() {
     const pQty = Math.max(1, pkgs);
     setPackageQty(pQty);
     if (selectedProduct) {
-      const unitsPerPkg = selectedProduct.unitsPerPackage || 1;
+      const unitsPerPkg = getPurchasePackageUnits(selectedProduct);
       const totalUnits = pQty * unitsPerPkg;
       setLooseUnitsQty(totalUnits);
       setTotalCost(Number((totalUnits * unitCost).toFixed(2)));
@@ -302,7 +303,7 @@ export default function Purchases() {
 
     setIsSubmitting(true);
     try {
-      const unitsPerPkg = selectedProduct.unitsPerPackage || 1;
+      const unitsPerPkg = getPurchasePackageUnits(selectedProduct);
       const finalUnits = purchaseType === 'package' && unitsPerPkg > 1 
         ? packageQty * unitsPerPkg 
         : looseUnitsQty;
@@ -610,7 +611,7 @@ export default function Purchases() {
                   <tbody className="divide-y divide-border">
                     {filteredReplenish.map(item => {
                       const p = item.product;
-                      const unitsPerPkg = p.unitsPerPackage || 1;
+                      const unitsPerPkg = getPurchasePackageUnits(p);
                       const isPkg = unitsPerPkg > 1;
 
                       return (
@@ -740,7 +741,7 @@ export default function Purchases() {
               {replenishList.map(item => {
                 const p = item.product;
                 const isChecked = Boolean(checkedItems[p.id!]);
-                const unitsPerPkg = p.unitsPerPackage || 1;
+                const unitsPerPkg = getPurchasePackageUnits(p);
                 const isPkg = unitsPerPkg > 1;
 
                 return (
@@ -1016,15 +1017,15 @@ export default function Purchases() {
                     Categoria: {selectedProduct.category} • Estoque atual: <strong>{selectedProduct.stock} un.</strong>
                   </span>
                 </div>
-                {selectedProduct.unitsPerPackage && selectedProduct.unitsPerPackage > 1 && (
+                {getPurchasePackageUnits(selectedProduct) > 1 && (
                   <div className="bg-palette-1 text-primary px-2.5 py-1 rounded-lg font-semibold">
-                    1 {selectedProduct.purchaseForm || 'fardo'} = {selectedProduct.unitsPerPackage} un.
+                    1 {selectedProduct.type === 'cigarro' ? getPurchasePackageUnits(selectedProduct) === 5 ? 'meio maço' : 'maço' : selectedProduct.purchaseForm || 'fardo'} = {getPurchasePackageUnits(selectedProduct)} {selectedProduct.type === 'cigarro' ? 'carteiras' : 'un.'}
                   </div>
                 )}
               </div>
 
               {/* Package or Unit Toggle (if packaged product) */}
-              {selectedProduct.unitsPerPackage && selectedProduct.unitsPerPackage > 1 && (
+              {getPurchasePackageUnits(selectedProduct) > 1 && (
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
                     Como você comprou este item?
@@ -1055,14 +1056,14 @@ export default function Purchases() {
                           : 'bg-surface border-border text-muted-foreground hover:bg-muted'
                       }`}
                     >
-                      🥫 Em Unidades Avulsas
+                      {selectedProduct.type === 'cigarro' ? 'Em carteiras' : 'Em Unidades Avulsas'}
                     </button>
                   </div>
                 </div>
               )}
 
               {/* Quantity Inputs */}
-              {purchaseType === 'package' && selectedProduct.unitsPerPackage && selectedProduct.unitsPerPackage > 1 ? (
+              {purchaseType === 'package' && getPurchasePackageUnits(selectedProduct) > 1 ? (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-muted-foreground mb-1">

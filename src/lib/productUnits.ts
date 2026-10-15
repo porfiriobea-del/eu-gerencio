@@ -6,6 +6,11 @@ export function getPackageUnits(product: Pick<Product, 'type' | 'unitsPerPackage
   return product.type === 'cigarro' ? CIGARETTE_UNITS.pack : Math.max(1, Number(product.unitsPerPackage) || 1);
 }
 
+/** Supplier half packs do not redefine the POS sale pack. */
+export function getPurchasePackageUnits(product: Pick<Product, 'type' | 'unitsPerPackage' | 'supplierPackageUnits'>): number {
+  return product.type === 'cigarro' ? product.supplierPackageUnits === 5 ? 5 : 10 : getPackageUnits(product);
+}
+
 export function getCigaretteFormats(product: Pick<Product, 'basePrice' | 'priceUnit' | 'priceHalfCart' | 'priceCart' | 'pricePack'>) {
   // Missing/zero prices disable a format; never infer prices from basePrice.
   return [
