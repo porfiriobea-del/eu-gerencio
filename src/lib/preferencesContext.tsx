@@ -39,9 +39,9 @@ export const LANGUAGE_MODE_INFOS: LanguageModeInfo[] = [
       { concept: 'Entidade do Catálogo', term: 'Mercadoria', explanation: 'Itens inventariáveis do ativo circulante destinados à revenda' },
       { concept: 'Alerta de Reposição', term: 'Ponto de Pedido (Estoque Mínimo)', explanation: 'Nível de estoque de segurança que dispara o pedido de compra para mitigar risco de ruptura' },
       { concept: 'Capacidade Limite', term: 'Estoque Máximo (Capacidade)', explanation: 'Teto de armazenagem para evitar custo de estocagem e depreciação de mercadoria' },
-      { concept: 'Ganho na Venda', term: 'Margem Operacional Bruta', explanation: 'Percentual retido sobre o faturamento após dedução do custo unitário de aquisição' },
+      { concept: 'Ganho na Venda', term: 'Margem Bruta de Venda', explanation: 'Percentual retido sobre o faturamento após dedução do custo unitário de aquisição' },
       { concept: 'Prazo do Fornecedor', term: 'Lead Time de Ressuprimento', explanation: 'Tempo decorrido entre a emissão do pedido ao fornecedor e a disponibilização física' },
-      { concept: 'Relatório Financeiro', term: 'Demonstrativo Consolidado (Entradas e Saídas)', explanation: 'Apuração formal de receitas faturadas, desembolsos de aquisição e resultado líquido' },
+      { concept: 'Relatório Financeiro', term: 'Demonstrativo Consolidado (Entradas e Saídas)', explanation: 'Comparação de vendas faturadas e aquisições, sem confundir a diferença com lucro líquido' },
     ],
   },
   {
@@ -62,18 +62,18 @@ export const LANGUAGE_MODE_INFOS: LanguageModeInfo[] = [
   },
   {
     id: 'basic',
-    name: 'Básico / Descomplicado',
+    name: 'Simples / Descomplicado',
     badge: 'Simples & Amigável',
     badgeColor: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800',
     tagline: 'A mesma informação completa, explicada com palavras do dia a dia',
-    description: 'Explica a mesma informação da forma mais simples possível (ex.: "quando pedir mais", "quanto sobra de lucro"), para quem tem pouca ou nenhuma familiaridade com tecnologia ou termos de gestão — igualmente completo, nunca uma versão resumida.',
+    description: 'Palavras simples e ações diretas. Os detalhes ficam recolhidos e podem ser abertos quando você precisar. Nenhuma função é removida.',
     examples: [
       { concept: 'Entidade do Catálogo', term: 'Item', explanation: 'Cada item vendido e cuidado na sua loja' },
       { concept: 'Alerta de Reposição', term: 'Quando Pedir Mais (Mínimo)', explanation: 'Quando a quantidade chegar aqui, já é hora de ligar pro fornecedor para não ficar na mão' },
       { concept: 'Capacidade Limite', term: 'Limite para Não Sobrar (Máximo)', explanation: 'O limite recomendado para não comprar além da conta e ficar com produto encalhado' },
-      { concept: 'Ganho na Venda', term: 'Quanto Sobra de Lucro', explanation: 'A fatia do valor da venda que sobra limpa no seu bolso depois de pagar o custo' },
+      { concept: 'Ganho na Venda', term: 'Quanto Sobra de Lucro', explanation: 'Parte do preço de venda que resta após descontar o custo do item, antes de taxas e despesas' },
       { concept: 'Prazo do Fornecedor', term: 'Quantos Dias Demora pra Chegar', explanation: 'Quantos dias o pedido leva para bater na sua porta após ser feito' },
-      { concept: 'Relatório Financeiro', term: 'Resumo do Dia (Dinheiro que entrou / Dinheiro que saiu)', explanation: 'Troca termos difíceis por frases diretas: dinheiro que entrou, dinheiro que saiu e o que sobrou no seu bolso' },
+      { concept: 'Relatório Financeiro', term: 'Resumo de vendas e compras', explanation: 'Mostra vendas, compras e a diferença entre elas. Fiado vendido ainda pode não ter sido recebido.' },
     ],
   },
 ];
@@ -81,6 +81,17 @@ export const LANGUAGE_MODE_INFOS: LanguageModeInfo[] = [
 // Unified, consistent dictionary per language mode
 export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   technical: {
+    'nav.movements': 'Registro de operações',
+    'movements.title': 'Registro de Operações e Equipe',
+    'movements.description': 'Consulte operações, responsáveis e ajustes manuais do período.',
+    'movements.history': 'Registro de operações',
+    'movements.manual': 'Registrar ajuste operacional',
+    'debt.description': 'Acompanhe os saldos devedores e registre recebimentos dos clientes.',
+    'reports.note': 'Vendas faturadas, incluindo crédito a receber, menos aquisições. Esta diferença não representa lucro líquido nem saldo disponível.',
+    'settings.languageMode': 'Linguagem da interface',
+    'help.title': 'Central de Ajuda e Feedback',
+    'settings.advanced': 'Integrações e segurança',
+    'settings.reportDescription': 'Vendas faturadas, aquisições e crédito a receber do período selecionado.',
     // Entities (Strictly 'Mercadoria' / 'Mercadorias')
     'entity.item': 'Mercadoria',
     'entity.items': 'Mercadorias',
@@ -128,12 +139,12 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'pricing.title': 'Demonstrativo de Preços e Resultados',
     'pricing.cost': 'Custo Unitário de Aquisição',
     'pricing.selling': 'Preço de Venda Praticado',
-    'pricing.margin': 'Margem Operacional Bruta',
+    'pricing.margin': 'Margem Bruta de Venda',
     'pricing.markup': 'Fator Markup Aplicado',
     'pricing.grossRevenue': 'Receita Operacional Bruta',
     'pricing.cogs': 'Custo das Mercadorias Vendidas (CMV)',
     'pricing.grossProfit': 'Lucro Operacional Bruto',
-    'pricing.netProfit': 'Lucro Líquido Real Apurado',
+    'pricing.netProfit': 'Resultado líquido estimado',
     'pricing.avgTicket': 'Ticket Médio por Atendimento',
     'pricing.totalPurchases': 'Desembolso em Aquisições do Mês',
 
@@ -142,7 +153,7 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'reports.summary': 'Demonstrativo Consolidado do Período',
     'reports.inflow': 'Receita Operacional Bruta (Entradas)',
     'reports.outflow': 'Desembolsos com Aquisições (Saídas)',
-    'reports.balance': 'Resultado Operacional Líquido',
+    'reports.balance': 'Diferença entre vendas e aquisições',
     'reports.pending': 'Valores a Receber (Crédito Rotativo)',
 
     // POS & Sales
@@ -165,6 +176,17 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Frente de Caixa',
   },
   neutral: {
+    'nav.movements': 'Movimentações',
+    'movements.title': 'Movimentações e Equipe',
+    'movements.description': 'Veja o que aconteceu na loja e quem fez cada registro.',
+    'movements.history': 'Histórico de movimentações',
+    'movements.manual': 'Registrar movimentação',
+    'debt.description': 'Confira as dívidas dos clientes e registre os pagamentos.',
+    'reports.note': 'O total vendido inclui fiado. Vendas menos compras não é o lucro nem o dinheiro disponível no caixa.',
+    'settings.languageMode': 'Modo de linguagem',
+    'help.title': 'Ajuda e Feedback',
+    'settings.advanced': 'Integrações e segurança',
+    'settings.reportDescription': 'Confira vendas, compras e fiado no período escolhido.',
     // Entities (Strictly 'Produto' / 'Produtos')
     'entity.item': 'Produto',
     'entity.items': 'Produtos',
@@ -249,6 +271,17 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Caixa',
   },
   basic: {
+    'nav.movements': 'Histórico da loja',
+    'movements.title': 'O que aconteceu na loja',
+    'movements.description': 'Confira quem vendeu, recebeu ou mudou o estoque.',
+    'movements.history': 'Registros da loja',
+    'movements.manual': 'Anotar ajuste',
+    'debt.description': 'Veja quem está devendo e anote quando receber.',
+    'reports.note': 'O total vendido inclui fiado. Esta conta não mostra o lucro nem quanto há no caixa.',
+    'settings.languageMode': 'Como o app fala com você',
+    'help.title': 'Ajuda e sugestões',
+    'settings.advanced': 'Mais opções: planilhas e cópias de segurança',
+    'settings.reportDescription': 'Veja quanto vendeu, quanto comprou e o que foi vendido fiado.',
     // Entities (Strictly 'Item' / 'Itens')
     'entity.item': 'Item',
     'entity.items': 'Itens',
@@ -298,19 +331,19 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'pricing.selling': 'Preço Cobrado do Cliente',
     'pricing.margin': 'Quanto Sobra de Lucro',
     'pricing.markup': 'Aumento sobre o Custo',
-    'pricing.grossRevenue': 'Dinheiro que Entrou (Vendas)',
+    'pricing.grossRevenue': 'Total vendido',
     'pricing.cogs': 'Gasto com o que Você Vendeu',
     'pricing.grossProfit': 'O que Sobrou das Vendas',
-    'pricing.netProfit': 'Dinheiro Limpo no Seu Bolso',
+    'pricing.netProfit': 'Resultado estimado',
     'pricing.avgTicket': 'Média Gasta por Cliente',
     'pricing.totalPurchases': 'Dinheiro que Saiu em Compras',
 
     // Reports & Statements (Simples / Descomplicado)
     'reports.title': 'Relatório Simples do Seu Comércio',
     'reports.summary': 'Resumo do Dia',
-    'reports.inflow': 'Dinheiro que entrou',
-    'reports.outflow': 'Dinheiro que saiu',
-    'reports.balance': 'O que sobrou para você',
+    'reports.inflow': 'Total vendido',
+    'reports.outflow': 'Total em compras',
+    'reports.balance': 'Vendas menos compras',
     'reports.pending': 'Vendido pra receber depois',
 
     // POS & Sales
@@ -322,8 +355,8 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     // Debt & Receivables
     'debt.title': 'Caderneta (Vendido pra Pagar Depois)',
     'debt.customer': 'Nome do Cliente',
-    'debt.balance': 'Conta a Pagar',
-    'debt.pay': 'Receber Dinheiro da Conta',
+    'debt.balance': 'Quanto falta receber',
+    'debt.pay': 'Anotar pagamento',
 
     // Nav
     'nav.stock': 'O Que Tem na Loja',
@@ -456,45 +489,64 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
   },
 };
 
+function cachedPreference(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function cachePreference(key: string, value: string): void {
+  try { localStorage.setItem(key, value); } catch {}
+}
+
 const PreferencesContext = createContext<PreferencesContextType | undefined>(undefined);
 
 export function PreferencesProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<Language>(() => {
-    return (localStorage.getItem('app_lang') as Language) || 'pt';
+    return (cachedPreference('app_lang') as Language) || 'pt';
   });
 
   const [languageMode, setLanguageModeState] = useState<LanguageMode>(() => {
-    return (localStorage.getItem('app_lang_mode') as LanguageMode) || 'neutral';
+    const mode = cachedPreference('app_lang_mode');
+    return mode === 'basic' || mode === 'technical' ? mode : 'neutral';
   });
 
   const [fontSize, setFontSizeState] = useState<FontSize>(() => {
-    return (localStorage.getItem('app_fontsize') as FontSize) || 'normal';
+    return (cachedPreference('app_fontsize') as FontSize) || 'normal';
   });
 
   const [themePreset, setThemePresetState] = useState<ThemePreset>(() => {
-    return normalizeThemePreset(localStorage.getItem('app_theme_preset'));
+    return normalizeThemePreset(cachedPreference('app_theme_preset'));
   });
 
   const [darkMode, setDarkModeState] = useState<boolean>(() => {
-    return localStorage.getItem('app_dark_mode') === 'true';
+    return cachedPreference('app_dark_mode') === 'true';
   });
 
   const [simpleViewMode, setSimpleViewModeState] = useState<boolean>(() => {
-    const saved = localStorage.getItem('app_simple_view_mode');
+    const saved = cachedPreference('app_simple_view_mode');
     if (saved !== null) return saved === 'true';
-    const currentMode = localStorage.getItem('app_lang_mode');
+    const currentMode = cachedPreference('app_lang_mode');
     return currentMode === 'basic';
   });
 
   useEffect(() => {
     const receive = (event: Event) => {
       const data = (event as CustomEvent).detail;
+      if (!data || typeof data !== 'object') return;
       if (data.theme) setThemePresetState(normalizeThemePreset(data.theme));
       if (typeof data.darkMode === 'boolean') setDarkModeState(data.darkMode);
-      if (['technical','neutral','basic'].includes(data.languageMode)) setLanguageModeState(data.languageMode);
+      if (['technical','neutral','basic'].includes(data.languageMode)) {
+        setLanguageModeState(data.languageMode);
+        cachePreference('app_lang_mode', data.languageMode);
+        if (typeof data.simpleViewMode !== 'boolean') {
+          setSimpleViewModeState(data.languageMode === 'basic');
+          cachePreference('app_simple_view_mode', String(data.languageMode === 'basic'));
+        }
+      }
       if (['pt','en','es'].includes(data.language)) setLanguageState(data.language);
       if (['normal','large','xlarge'].includes(data.fontSize)) setFontSizeState(data.fontSize);
-      if (typeof data.simpleViewMode === 'boolean') setSimpleViewModeState(data.simpleViewMode);
+      if (typeof data.simpleViewMode === 'boolean') {
+        setSimpleViewModeState(data.simpleViewMode);
+        cachePreference('app_simple_view_mode', String(data.simpleViewMode));
+      }
     };
     window.addEventListener('cloud-preferences', receive);
     return () => window.removeEventListener('cloud-preferences', receive);
@@ -511,7 +563,7 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
     } else {
       root.classList.remove('dark');
     }
-    localStorage.setItem('app_dark_mode', String(darkMode));
+    cachePreference('app_dark_mode', String(darkMode));
   }, [darkMode]);
 
   // Apply Font Size class to <html> root
@@ -537,23 +589,22 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
-    localStorage.setItem('app_lang', lang);
+    cachePreference('app_lang', lang);
     persistPreference({ language: lang });
   };
 
   const setLanguageMode = (mode: LanguageMode) => {
     setLanguageModeState(mode);
-    localStorage.setItem('app_lang_mode', mode);
-    persistPreference({ languageMode: mode, ...(mode === 'basic' ? { simpleViewMode: true } : {}) });
-    if (mode === 'basic') {
-      setSimpleViewModeState(true);
-      localStorage.setItem('app_simple_view_mode', 'true');
-    }
+    cachePreference('app_lang_mode', mode);
+    const simple = mode === 'basic';
+    setSimpleViewModeState(simple);
+    cachePreference('app_simple_view_mode', String(simple));
+    persistPreference({ languageMode: mode, simpleViewMode: simple });
   };
 
   const setSimpleViewMode = (simple: boolean) => {
     setSimpleViewModeState(simple);
-    localStorage.setItem('app_simple_view_mode', String(simple));
+    cachePreference('app_simple_view_mode', String(simple));
     persistPreference({ simpleViewMode: simple });
   };
 
@@ -561,19 +612,19 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
 
   const setFontSize = (size: FontSize) => {
     setFontSizeState(size);
-    localStorage.setItem('app_fontsize', size);
+    cachePreference('app_fontsize', size);
     persistPreference({ fontSize: size });
   };
 
   const setThemePreset = (preset: ThemePreset) => {
     setThemePresetState(preset);
-    localStorage.setItem('app_theme_preset', preset);
+    cachePreference('app_theme_preset', preset);
     persistPreference({ theme: preset });
   };
 
   const setDarkMode = (enabled: boolean) => {
     setDarkModeState(enabled);
-    localStorage.setItem('app_dark_mode', String(enabled));
+    cachePreference('app_dark_mode', String(enabled));
     persistPreference({ darkMode: enabled });
   };
 

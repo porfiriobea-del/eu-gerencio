@@ -20,7 +20,7 @@ await mkdir(cache, { recursive: true });
 const dir = await mkdtemp(new URL('modal-ui-', cache));
 const entry = `${dir}/Debt.mjs`;
 await build({
-  entryPoints: [new URL('../src/pages/Debt.tsx', import.meta.url).pathname],
+  stdin: {contents: "export { default } from './src/pages/Debt'; export { PreferencesProvider } from './src/lib/preferencesContext';",resolveDir:new URL('..',import.meta.url).pathname,loader:'tsx'},
   bundle: true, packages: 'external', format: 'esm', platform: 'node', jsx: 'automatic', outfile: entry,
   plugins: [{
     name: 'mock-bank-and-session',
@@ -34,7 +34,7 @@ await build({
     }
   }]
 });
-const { default: Debt } = await import(pathToFileURL(entry).href);
+const { default: Debt, PreferencesProvider } = await import(pathToFileURL(entry).href);
 
 function setup(operation, promise) {
   globalThis.__modalUiApi = {
@@ -46,7 +46,7 @@ function setup(operation, promise) {
     subscribeCustomerPayments(callbackId, callback) { callback([]); return () => {}; },
     [operation]: () => promise
   };
-  return render(React.createElement(React.Fragment, null, React.createElement(Debt), React.createElement(AppToast)));
+  return render(React.createElement(React.Fragment, null, React.createElement(PreferencesProvider, null, React.createElement(Debt)), React.createElement(AppToast)));
 }
 function deferred() {
   let resolve, reject;

@@ -15,6 +15,7 @@ export default function Pricing() {
   const [loadingFinancials, setLoadingFinancials] = useState(true);
   const [selectedMonthOffset, setSelectedMonthOffset] = useState<number>(0); // 0 = atual, -1 = anterior
   const [isDeductionsExpanded, setIsDeductionsExpanded] = useState(() => !(simpleViewMode || isBasicMode));
+  useEffect(() => { setIsDeductionsExpanded(!simpleViewMode); }, [simpleViewMode]);
 
   const loadFinancials = async (offset: number) => {
     setLoadingFinancials(true);
@@ -77,7 +78,7 @@ export default function Pricing() {
               </h2>
               <p className="text-xs text-muted-foreground">
                 {languageMode === 'basic' 
-                  ? 'Veja de um jeito bem simples e claro quanto dinheiro entrou, quanto você gastou e o que sobrou limpo no seu bolso.' 
+                  ? 'Confira o total vendido, o custo dos itens vendidos e o resultado estimado.'
                   : 'Apuração financeira do faturamento, custos de mercadoria (CMV), lucro bruto e líquido.'}
               </p>
             </div>
@@ -145,7 +146,7 @@ export default function Pricing() {
               </div>
               {languageMode === 'basic' && (
                 <p className="text-[11px] text-muted-foreground/80 mt-1 border-t border-border/40 pt-1">
-                  Dinheiro somado de todas as vendas
+                  Total vendido, incluindo fiado
                 </p>
               )}
             </div>
@@ -203,7 +204,7 @@ export default function Pricing() {
             <div className="flex items-center justify-between text-primary text-xs font-bold mb-2">
               <span>{v('pricing.netProfit', 'Lucro Líquido Real')}</span>
               <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[10px]">
-                {(financials?.netMargin || 0).toFixed(1)}% {languageMode === 'basic' ? 'no bolso' : 'Líquido'}
+                {(financials?.netMargin || 0).toFixed(1)}% {languageMode === 'basic' ? 'estimado' : 'Estimado'}
               </span>
             </div>
             <div>
@@ -212,7 +213,7 @@ export default function Pricing() {
               </div>
               <div className="text-[11px] text-muted-foreground mt-1">
                 {languageMode === 'basic' 
-                  ? 'O lucro limpo que sobra de verdade pra você'
+                  ? 'Estimativa após custos, taxas e retiradas registradas'
                   : 'Lucro final após taxas de cartão e retiradas'}
               </div>
             </div>
@@ -254,7 +255,7 @@ export default function Pricing() {
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                 <Info className="w-3.5 h-3.5 text-primary" /> 
-                {languageMode === 'basic' ? 'Como calculamos o dinheiro do seu bolso' : 'Como é apurado o Lucro Líquido'}
+                {languageMode === 'basic' ? 'Como calculamos o resultado estimado' : 'Como é apurado o Lucro Líquido'}
               </h3>
               <span className="text-xs font-semibold text-foreground">{financials?.monthName}</span>
             </div>

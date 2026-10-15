@@ -45,6 +45,7 @@ export default function Stock() {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryVersion, setCategoryVersion] = useState(0);
   const [displayMode, setDisplayMode] = useState<'cards' | 'table'>(() => (simpleViewMode || isBasicMode) ? 'cards' : 'table');
+  useEffect(() => { setDisplayMode(simpleViewMode ? 'cards' : 'table'); }, [simpleViewMode]);
   const [expandedProductIds, setExpandedProductIds] = useState<Record<string, boolean>>({});
 
   const toggleProductExpand = (id: string) => {
@@ -681,7 +682,7 @@ export default function Stock() {
           <button type="button" onClick={() => setIsCameraModalOpen(true)}
             className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-emerald-700">📸 Cadastrar por Foto (IA)</button>
           <button type="button" onClick={() => openModal()}
-            className="flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-sm font-semibold hover:bg-muted"><Plus className="h-4 w-4" />Novo Produto</button>
+            className="flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-sm font-semibold hover:bg-muted"><Plus className="h-4 w-4" />{v('entity.new', 'Novo Produto')}</button>
           <button type="button" onClick={() => setIsCatalogImportOpen(true)}
             className="rounded-xl border border-border bg-surface px-4 py-3 text-sm font-semibold hover:bg-muted">📁 Importar Catálogo (PDF ou Foto da Galeria)</button>
         </div>
@@ -1661,7 +1662,7 @@ export default function Stock() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-2xl font-bold mb-2 text-foreground">
-              {editingId ? 'Editar Produto e Parâmetros de Reposição' : 'Novo Produto'}
+              {editingId ? v('entity.edit', 'Editar Produto') : v('entity.new', 'Novo Produto')}
             </h2>
             <p className="text-xs text-muted-foreground mb-6">
               Configure o estoque inicial na data base e defina o estoque máximo para abastecimento automático.

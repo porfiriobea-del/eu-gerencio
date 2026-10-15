@@ -216,7 +216,7 @@ function doPost(e) {
       const payload: Partial<Settings> = {
         businessSector: overrides?.businessSector ?? businessSector,
         customCategories: overrides?.customCategories ?? categoriesList,
-        language, fontSize, simpleViewMode,
+        language: overrides?.language ?? language, fontSize: overrides?.fontSize ?? fontSize, simpleViewMode: overrides?.simpleViewMode ?? simpleViewMode,
         googleSheetsWebhookUrl: sheetsWebhookUrl, googleSheetsWebhookEnabled: sheetsEnabled,
         storeName: overrides?.storeName !== undefined ? overrides.storeName : (storeName.trim() || settings?.storeName || 'Meu Comércio'),
         cnpj: overrides?.cnpj !== undefined ? overrides.cnpj : (cnpj.trim() || settings?.cnpj || ''),
@@ -298,9 +298,8 @@ function doPost(e) {
 
   const handleSelectLanguageMode = async (mode: LanguageMode) => {
     setLanguageMode(mode);
-    await triggerImmediateSave({ languageMode: mode });
     const modeName = LANGUAGE_MODE_INFOS.find(m => m.id === mode)?.name || mode;
-    setCustomizationFeedback({ type: 'success', text: `Sistema de linguagem atualizado para "${modeName}" (salvo automaticamente)!` });
+    setCustomizationFeedback({ type: 'success', text: `Sistema de linguagem atualizado para "${modeName}"! O salvamento é automático.` });
     setTimeout(() => setCustomizationFeedback(null), 4000);
   };
 
@@ -842,7 +841,7 @@ function doPost(e) {
                   <Sparkles className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-foreground">Sistema Personalizado de Linguagem</h3>
+                  <h3 className="text-sm font-bold text-foreground">{v('settings.languageMode')}</h3>
                   <p className="text-xs text-muted-foreground">
                     Escolha como o sistema expressa os conceitos de estoque, compras, preços e caixa.
                   </p>
@@ -859,6 +858,7 @@ function doPost(e) {
                 return (
                   <button
                     key={mode.id}
+                    aria-pressed={isSelected}
                     type="button"
                     onClick={() => handleSelectLanguageMode(mode.id)}
                     className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
@@ -879,7 +879,7 @@ function doPost(e) {
                         )}
                       </div>
                       <h4 className="text-sm font-bold text-foreground mb-1">{mode.name}</h4>
-                      <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{mode.description}</p>
+                      <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{simpleViewMode ? mode.tagline : mode.description}</p>
                     </div>
 
                     <div className="pt-2.5 border-t border-border/60 text-[11px] space-y-1.5">
@@ -1549,24 +1549,22 @@ function doPost(e) {
       </div>
 
       {/* Relatórios Personalizados & Resumo do Dia */}
-      <div className="bg-[#12131c] p-6 md:p-8 rounded-2xl shadow-xl border border-[#2d2e40] mt-8 text-gray-100">
-        <div className="flex justify-between items-start md:items-center mb-6 border-b border-[#2d2e40] pb-4 flex-col md:flex-row gap-4">
+      <div className="bg-surface p-6 md:p-8 rounded-2xl shadow-xl border border-border mt-8 text-foreground">
+        <div className="flex justify-between items-start md:items-center mb-6 border-b border-border pb-4 flex-col md:flex-row gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-white tracking-wide flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
-                {languageMode === 'basic' ? 'Relatório Simples do Seu Comércio' : v('reports.title', 'Relatórios & Exportações de Gestão')}
+              <h2 className="text-xl font-bold text-foreground tracking-wide flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-emerald-700 dark:text-emerald-400" />
+                {v('reports.title')}
               </h2>
               {languageMode === 'basic' && (
-                <span className="text-[11px] font-bold uppercase bg-amber-500/20 text-amber-300 px-2.5 py-0.5 rounded-full border border-amber-500/30 flex items-center gap-1">
+                <span className="text-[11px] font-bold uppercase bg-amber-500/20 text-amber-700 dark:text-amber-300 px-2.5 py-0.5 rounded-full border border-amber-500/30 flex items-center gap-1">
                   <Sparkles className="w-3 h-3" /> Modo Descomplicado
                 </span>
               )}
             </div>
-            <p className="text-sm text-gray-400 mt-1">
-              {languageMode === 'basic'
-                ? 'Informações direto ao ponto: quanto dinheiro entrou, quanto saiu e o que sobrou no seu bolso.'
-                : 'Acompanhe as entradas e saídas e exporte seus dados consolidados.'}
+            <p className="text-sm text-muted-foreground mt-1">
+              {v('settings.reportDescription')}
             </p>
           </div>
 
@@ -1574,7 +1572,7 @@ function doPost(e) {
             <button 
               type="button"
               onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              className="flex items-center gap-2 text-xs font-semibold text-gray-300 hover:text-white transition-colors bg-[#191a26] border border-[#2d2e40] px-3 py-2 rounded-lg hover:bg-[#202230]"
+              className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors bg-muted/40 border border-border px-3 py-2 rounded-lg hover:bg-muted"
             >
               <Filter className="w-3.5 h-3.5 text-purple-400" />
               {showAdvancedFilters ? 'Ocultar Filtros Detalhados' : 'Filtros de Data & Pagamento'}
@@ -1583,7 +1581,7 @@ function doPost(e) {
             <button 
               type="button"
               onClick={resetFilters}
-              className="flex items-center gap-2 text-xs font-medium text-gray-400 hover:text-gray-200 transition-colors bg-[#191a26] border border-[#2d2e40] px-3 py-2 rounded-lg hover:bg-[#202230]"
+              className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-muted-foreground transition-colors bg-muted/40 border border-border px-3 py-2 rounded-lg hover:bg-muted"
               title="Restaurar sugestões"
             >
               <RefreshCcw className="w-3.5 h-3.5"/>
@@ -1592,24 +1590,24 @@ function doPost(e) {
         </div>
 
         {/* CARD PRINCIPAL DE 'RESUMO DO DIA' / PERÍODO */}
-        <div className="mb-6 bg-gradient-to-br from-[#161824] to-[#12131d] border-2 border-emerald-500/30 rounded-2xl p-5 md:p-6 shadow-2xl relative overflow-hidden">
+        <div className="mb-6 bg-gradient-to-br from-muted/50 to-surface border-2 border-emerald-500/30 rounded-2xl p-5 md:p-6 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-72 h-72 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-[#2d2e40]">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-border">
             <div>
               <div className="flex items-center gap-3">
-                <span className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                <span className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
                   <Wallet className="w-5 h-5" />
                 </span>
                 <div>
-                  <h3 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
+                  <h3 className="text-lg md:text-xl font-bold text-foreground flex items-center gap-2">
                     {languageMode === 'basic' ? (
                       period === 'hoje' ? 'Resumo do Dia' : period === 'semana' ? 'Resumo da Semana' : period === 'mes' ? 'Resumo do Mês' : 'Resumo do Período'
                     ) : (
                       v('reports.summary', 'Demonstrativo Consolidado do Período')
                     )}
                   </h3>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-muted-foreground">
                     {languageMode === 'basic' 
                       ? 'Veja exatamente quanto dinheiro entrou e quanto dinheiro saiu do seu comércio de forma muito clara e direta.'
                       : `Apuração operacional calculada para: ${getPeriodTimestamps().periodLabel}`}
@@ -1619,32 +1617,32 @@ function doPost(e) {
             </div>
 
             {/* Seletor Rápido de Período */}
-            <div className="flex items-center bg-[#191a26] p-1 rounded-xl border border-[#2d2e40] shrink-0 self-start sm:self-auto flex-wrap gap-1">
+            <div className="flex items-center bg-muted/40 p-1 rounded-xl border border-border shrink-0 self-start sm:self-auto flex-wrap gap-1">
               <button
                 type="button"
                 onClick={() => setPeriod('hoje')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${period === 'hoje' ? 'bg-emerald-600 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${period === 'hoje' ? 'bg-emerald-600 text-white shadow-md' : 'text-muted-foreground hover:text-foreground'}`}
               >
                 Hoje
               </button>
               <button
                 type="button"
                 onClick={() => setPeriod('semana')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${period === 'semana' ? 'bg-emerald-600 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${period === 'semana' ? 'bg-emerald-600 text-white shadow-md' : 'text-muted-foreground hover:text-foreground'}`}
               >
                 Esta Semana
               </button>
               <button
                 type="button"
                 onClick={() => setPeriod('mes')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${period === 'mes' ? 'bg-emerald-600 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${period === 'mes' ? 'bg-emerald-600 text-white shadow-md' : 'text-muted-foreground hover:text-foreground'}`}
               >
                 Este Mês
               </button>
               <button
                 type="button"
                 onClick={() => setPeriod('personalizado')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${period === 'personalizado' ? 'bg-purple-600 text-white shadow-md' : 'text-purple-300 hover:text-white'}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${period === 'personalizado' ? 'bg-purple-600 text-white shadow-md' : 'text-purple-700 dark:text-purple-300 hover:text-foreground'}`}
               >
                 <Calendar className="w-3.5 h-3.5" />
                 <span>Personalizado</span>
@@ -1654,10 +1652,10 @@ function doPost(e) {
 
           {/* BARRA DE SELEÇÃO DE PERÍODO PERSONALIZADO */}
           {period === 'personalizado' && (
-            <div className="mb-6 p-4 rounded-xl bg-[#191a26] border border-purple-500/40 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 animate-in fade-in duration-200">
+            <div className="mb-6 p-4 rounded-xl bg-muted/40 border border-purple-500/40 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 animate-in fade-in duration-200">
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-purple-300 flex items-center gap-1">
+                  <span className="text-xs font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5 text-purple-400" />
                     De:
                   </span>
@@ -1665,31 +1663,31 @@ function doPost(e) {
                     type="date"
                     value={startDate}
                     onChange={e => setStartDate(e.target.value)}
-                    className="bg-[#12131c] border border-[#2d2e40] text-white text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:border-purple-500 outline-none [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert cursor-pointer"
+                    className="bg-surface border border-border text-foreground text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:border-purple-500 outline-none [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert cursor-pointer"
                   />
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-purple-300">Até:</span>
+                  <span className="text-xs font-bold text-purple-700 dark:text-purple-300">Até:</span>
                   <input
                     type="date"
                     value={endDate}
                     onChange={e => setEndDate(e.target.value)}
-                    className="bg-[#12131c] border border-[#2d2e40] text-white text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:border-purple-500 outline-none [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert cursor-pointer"
+                    className="bg-surface border border-border text-foreground text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:border-purple-500 outline-none [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert cursor-pointer"
                   />
                 </div>
               </div>
 
               {/* Atalhos Rápidos de Datas */}
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] text-gray-400 mr-1">Atalhos:</span>
+                <span className="text-[11px] text-muted-foreground mr-1">Atalhos:</span>
                 <button
                   type="button"
                   onClick={() => {
                     setStartDate(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
                     setEndDate(format(new Date(), 'yyyy-MM-dd'));
                   }}
-                  className="text-[11px] font-semibold px-2 py-1 bg-[#12131c] hover:bg-purple-900/40 text-purple-200 rounded-lg border border-[#2d2e40] transition-colors cursor-pointer"
+                  className="text-[11px] font-semibold px-2 py-1 bg-surface hover:bg-purple-900/40 text-purple-700 dark:text-purple-200 rounded-lg border border-border transition-colors cursor-pointer"
                 >
                   Últimos 7 dias
                 </button>
@@ -1699,7 +1697,7 @@ function doPost(e) {
                     setStartDate(format(subDays(new Date(), 15), 'yyyy-MM-dd'));
                     setEndDate(format(new Date(), 'yyyy-MM-dd'));
                   }}
-                  className="text-[11px] font-semibold px-2 py-1 bg-[#12131c] hover:bg-purple-900/40 text-purple-200 rounded-lg border border-[#2d2e40] transition-colors cursor-pointer"
+                  className="text-[11px] font-semibold px-2 py-1 bg-surface hover:bg-purple-900/40 text-purple-700 dark:text-purple-200 rounded-lg border border-border transition-colors cursor-pointer"
                 >
                   Últimos 15 dias
                 </button>
@@ -1709,7 +1707,7 @@ function doPost(e) {
                     setStartDate(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
                     setEndDate(format(new Date(), 'yyyy-MM-dd'));
                   }}
-                  className="text-[11px] font-semibold px-2 py-1 bg-[#12131c] hover:bg-purple-900/40 text-purple-200 rounded-lg border border-[#2d2e40] transition-colors cursor-pointer"
+                  className="text-[11px] font-semibold px-2 py-1 bg-surface hover:bg-purple-900/40 text-purple-700 dark:text-purple-200 rounded-lg border border-border transition-colors cursor-pointer"
                 >
                   Últimos 30 dias
                 </button>
@@ -1719,7 +1717,7 @@ function doPost(e) {
                     setStartDate(format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'));
                     setEndDate(format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'));
                   }}
-                  className="text-[11px] font-semibold px-2 py-1 bg-[#12131c] hover:bg-purple-900/40 text-purple-200 rounded-lg border border-[#2d2e40] transition-colors cursor-pointer"
+                  className="text-[11px] font-semibold px-2 py-1 bg-surface hover:bg-purple-900/40 text-purple-700 dark:text-purple-200 rounded-lg border border-border transition-colors cursor-pointer"
                 >
                   Mês Passado
                 </button>
@@ -1730,52 +1728,52 @@ function doPost(e) {
           {/* 4 CARDS DE MÉTRICAS COM TRADUÇÃO DESCOMPLICADA */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             {/* Card 1: Dinheiro que entrou */}
-            <div className="bg-[#191a26]/90 border border-emerald-500/30 hover:border-emerald-500/50 transition-colors rounded-xl p-4 flex flex-col justify-between">
+            <div className="bg-muted/40 border border-emerald-500/30 hover:border-emerald-500/50 transition-colors rounded-xl p-4 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                    {languageMode === 'basic' ? 'Dinheiro que entrou' : v('reports.inflow', 'Receita Operacional')}
+                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+                    {v('reports.inflow')}
                   </span>
-                  <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
+                  <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-700 dark:text-emerald-400">
                     <ArrowDownLeft className="w-4 h-4" />
                   </div>
                 </div>
-                <div className="text-2xl font-black text-white tracking-tight">
+                <div className="text-2xl font-black text-foreground tracking-tight">
                   {reportMetrics.loading ? '...' : `R$ ${reportMetrics.inflow.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </div>
-                <p className="text-xs text-emerald-300/80 mt-1">
-                  {languageMode === 'basic' ? 'Tudo o que os clientes pagaram' : 'Faturamento total em vendas'}
+                <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
+                  Total das vendas, incluindo fiado
                 </p>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-[#2d2e40] space-y-1 text-[11px] text-gray-400">
+              <div className={`${simpleViewMode ? 'hidden' : ''} mt-4 pt-3 border-t border-border space-y-1 text-[11px] text-muted-foreground`}>
                 <div className="flex justify-between">
                   <span>💵 Em dinheiro vivo:</span>
-                  <strong className="text-gray-200">R$ {reportMetrics.cashInflow.toFixed(2)}</strong>
+                  <strong className="text-muted-foreground">R$ {reportMetrics.cashInflow.toFixed(2)}</strong>
                 </div>
                 <div className="flex justify-between">
                   <span>💳 No cartão / máq.:</span>
-                  <strong className="text-gray-200">R$ {reportMetrics.cardInflow.toFixed(2)}</strong>
+                  <strong className="text-muted-foreground">R$ {reportMetrics.cardInflow.toFixed(2)}</strong>
                 </div>
-                <div className="flex justify-between text-gray-400">
+                <div className="flex justify-between text-muted-foreground">
                   <span>🛒 Total de vendas:</span>
-                  <strong className="text-emerald-400 font-semibold">{reportMetrics.salesCount} {reportMetrics.salesCount === 1 ? 'venda' : 'vendas'}</strong>
+                  <strong className="text-emerald-700 dark:text-emerald-400 font-semibold">{reportMetrics.salesCount} {reportMetrics.salesCount === 1 ? 'venda' : 'vendas'}</strong>
                 </div>
               </div>
             </div>
 
             {/* Card 2: Dinheiro que saiu */}
-            <div className="bg-[#191a26]/90 border border-rose-500/30 hover:border-rose-500/50 transition-colors rounded-xl p-4 flex flex-col justify-between">
+            <div className="bg-muted/40 border border-rose-500/30 hover:border-rose-500/50 transition-colors rounded-xl p-4 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-rose-400 uppercase tracking-wider">
-                    {languageMode === 'basic' ? 'Dinheiro que saiu' : v('reports.outflow', 'Desembolsos com Aquisições')}
+                  <span className="text-xs font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wider">
+                    {v('reports.outflow')}
                   </span>
-                  <div className="p-1.5 rounded-lg bg-rose-500/20 text-rose-400">
+                  <div className="p-1.5 rounded-lg bg-rose-500/20 text-rose-700 dark:text-rose-400">
                     <ArrowUpRight className="w-4 h-4" />
                   </div>
                 </div>
-                <div className="text-2xl font-black text-white tracking-tight">
+                <div className="text-2xl font-black text-foreground tracking-tight">
                   {reportMetrics.loading ? '...' : `R$ ${reportMetrics.outflow.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </div>
                 <p className="text-xs text-rose-300/80 mt-1">
@@ -1783,57 +1781,55 @@ function doPost(e) {
                 </p>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-[#2d2e40] space-y-1 text-[11px] text-gray-400">
+              <div className={`${simpleViewMode ? 'hidden' : ''} mt-4 pt-3 border-t border-border space-y-1 text-[11px] text-muted-foreground`}>
                 <div className="flex justify-between">
                   <span>📦 Reposições anotadas:</span>
-                  <strong className="text-gray-200">{reportMetrics.purchasesCount} {reportMetrics.purchasesCount === 1 ? 'compra' : 'compras'}</strong>
+                  <strong className="text-muted-foreground">{reportMetrics.purchasesCount} {reportMetrics.purchasesCount === 1 ? 'compra' : 'compras'}</strong>
                 </div>
                 <div className="flex justify-between">
                   <span>🚚 Pagos a fornecedores:</span>
                   <strong className="text-rose-300">R$ {reportMetrics.outflow.toFixed(2)}</strong>
                 </div>
-                <div className="flex justify-between text-gray-400">
+                <div className="flex justify-between text-muted-foreground">
                   <span>🏷️ Custo do estoque:</span>
-                  <span className="text-gray-300">Reposição direta</span>
+                  <span className="text-muted-foreground">Reposição direta</span>
                 </div>
               </div>
             </div>
 
             {/* Card 3: O que sobrou para você */}
-            <div className={`bg-[#191a26]/90 border ${reportMetrics.balance >= 0 ? 'border-emerald-500/40 hover:border-emerald-500/60' : 'border-amber-500/40 hover:border-amber-500/60'} transition-colors rounded-xl p-4 flex flex-col justify-between`}>
+            <div className={`bg-muted/40 border ${reportMetrics.balance >= 0 ? 'border-emerald-500/40 hover:border-emerald-500/60' : 'border-amber-500/40 hover:border-amber-500/60'} transition-colors rounded-xl p-4 flex flex-col justify-between`}>
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className={`text-xs font-bold uppercase tracking-wider ${reportMetrics.balance >= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                    {languageMode === 'basic' ? 'O que sobrou para você' : v('reports.balance', 'Resultado Operacional')}
+                  <span className={`text-xs font-bold uppercase tracking-wider ${reportMetrics.balance >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-400'}`}>
+                    {v('reports.balance')}
                   </span>
-                  <div className={`p-1.5 rounded-lg ${reportMetrics.balance >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                  <div className={`p-1.5 rounded-lg ${reportMetrics.balance >= 0 ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
                     <Wallet className="w-4 h-4" />
                   </div>
                 </div>
-                <div className={`text-2xl font-black tracking-tight ${reportMetrics.balance >= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                <div className={`text-2xl font-black tracking-tight ${reportMetrics.balance >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-400'}`}>
                   {reportMetrics.loading ? '...' : `R$ ${reportMetrics.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </div>
-                <p className="text-xs text-gray-300 mt-1">
-                  {languageMode === 'basic'
-                    ? (reportMetrics.balance >= 0 ? 'Sobra livre das vendas após pagar as compras!' : 'Comprou mais estoque do que vendeu (vai virar lucro depois)')
-                    : (reportMetrics.balance >= 0 ? 'Superávit operacional apurado' : 'Déficit no fluxo momentâneo')}
+                <p className="text-xs text-muted-foreground mt-1">
+                  Diferença entre o total vendido e as compras registradas.
                 </p>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-[#2d2e40] space-y-1 text-[11px] text-gray-400">
+              <div className={`${simpleViewMode ? 'hidden' : ''} mt-4 pt-3 border-t border-border space-y-1 text-[11px] text-muted-foreground`}>
                 <div className="flex justify-between">
                   <span>Conta rápida:</span>
-                  <strong className="text-gray-300">Entrou − Saiu</strong>
+                  <strong className="text-muted-foreground">Vendas − Compras</strong>
                 </div>
                 <div className="flex justify-between">
                   <span>Status do caixa:</span>
-                  <strong className={reportMetrics.balance >= 0 ? 'text-emerald-400' : 'text-amber-400'}>
+                  <strong className={reportMetrics.balance >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-400'}>
                     {reportMetrics.balance >= 0 ? 'Positivo (Sobra)' : 'Estoque reforçado'}
                   </strong>
                 </div>
-                <div className="flex justify-between text-gray-400">
+                <div className="flex justify-between text-muted-foreground">
                   <span>Margem no bolso:</span>
-                  <span className="text-gray-300">
+                  <span className="text-muted-foreground">
                     {reportMetrics.inflow > 0 ? `${((reportMetrics.balance / reportMetrics.inflow) * 100).toFixed(0)}% retido` : '0%'}
                   </span>
                 </div>
@@ -1841,7 +1837,7 @@ function doPost(e) {
             </div>
 
             {/* Card 4: Vendido pra receber depois (Caderneta / Fiado) */}
-            <div className="bg-[#191a26]/90 border border-purple-500/30 hover:border-purple-500/50 transition-colors rounded-xl p-4 flex flex-col justify-between">
+            <div className="bg-muted/40 border border-purple-500/30 hover:border-purple-500/50 transition-colors rounded-xl p-4 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-purple-400 uppercase tracking-wider">
@@ -1851,63 +1847,36 @@ function doPost(e) {
                     <Users className="w-4 h-4" />
                   </div>
                 </div>
-                <div className="text-2xl font-black text-white tracking-tight">
+                <div className="text-2xl font-black text-foreground tracking-tight">
                   {reportMetrics.loading ? '...' : `R$ ${reportMetrics.fiadoInflow.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </div>
-                <p className="text-xs text-purple-300/80 mt-1">
+                <p className="text-xs text-purple-700 dark:text-purple-300/80 mt-1">
                   {languageMode === 'basic' ? 'Compras anotadas na caderneta' : 'Vendas faturadas a prazo'}
                 </p>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-[#2d2e40] space-y-1 text-[11px] text-gray-400">
+              <div className={`${simpleViewMode ? 'hidden' : ''} mt-4 pt-3 border-t border-border space-y-1 text-[11px] text-muted-foreground`}>
                 <div className="flex justify-between">
                   <span>📋 Caderneta ativa:</span>
-                  <strong className="text-purple-300">Registrado no Fiado</strong>
+                  <strong className="text-purple-700 dark:text-purple-300">Registrado no Fiado</strong>
                 </div>
                 <div className="flex justify-between">
                   <span>Quando entra:</span>
-                  <strong className="text-gray-300">Ao receber do cliente</strong>
+                  <strong className="text-muted-foreground">Ao receber do cliente</strong>
                 </div>
-                <div className="flex justify-between text-gray-400">
+                <div className="flex justify-between text-muted-foreground">
                   <span>Acertos no Caixa:</span>
-                  <span className="text-gray-300">Vira dinheiro na entrada</span>
+                  <span className="text-muted-foreground">Vira dinheiro na entrada</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* EXPLICAÇÃO CLARA E DIRETA ("EM POUCAS PALAVRAS") */}
-          <div className="bg-[#191a26] border border-[#2d2e40] p-4 rounded-xl flex items-center gap-3 mb-6">
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div className="text-sm">
-              <span className="font-bold text-white block mb-0.5">
-                {languageMode === 'basic' ? 'Em poucas palavras, o resumo do seu dia:' : 'Síntese Operacional do Período:'}
-              </span>
-              <span className="text-gray-300 leading-relaxed">
-                {reportMetrics.inflow > 0 || reportMetrics.outflow > 0 ? (
-                  <>
-                    {period === 'hoje' ? 'Hoje' : period === 'semana' ? 'Nesta semana' : period === 'mes' ? 'Neste mês' : 'Neste período'}, entraram <strong className="text-emerald-400">R$ {reportMetrics.inflow.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> de compras feitas pelos clientes e saíram <strong className="text-rose-400">R$ {reportMetrics.outflow.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> para pagar mercadorias.
-                    {reportMetrics.balance >= 0 ? (
-                      <> Com isso, sobraram <strong className="text-emerald-400 font-bold">R$ {reportMetrics.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> livres para você no caixa!</>
-                    ) : (
-                      <> Você investiu <strong className="text-amber-300 font-bold">R$ {Math.abs(reportMetrics.balance).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> a mais em mercadorias do que faturou (que vão virar lucro nas próximas vendas).</>
-                    )}
-                    {reportMetrics.fiadoInflow > 0 && (
-                      <> Além disso, você tem <strong className="text-purple-300">R$ {reportMetrics.fiadoInflow.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> marcados na caderneta para receber mais adiante.</>
-                    )}
-                  </>
-                ) : (
-                  'Nenhuma movimentação de vendas ou compras registrada ainda para este período selecionado.'
-                )}
-              </span>
-            </div>
-          </div>
+          <p className="mb-5 rounded-xl border border-border bg-muted/40 p-3 text-sm text-muted-foreground">{v('reports.note')}</p>
 
           {/* AÇÕES DIRETAS DO RELATÓRIO */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-[#2d2e40]">
-            <div className="text-xs text-gray-400 flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border">
+            <div className="text-xs text-muted-foreground flex items-center gap-2 w-full sm:w-auto">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
               <span>Dados atualizados com Vendas, Compras e Caderneta</span>
             </div>
@@ -1916,7 +1885,7 @@ function doPost(e) {
               <button 
                 type="button"
                 onClick={() => setIsExportPeriodModalOpen(true)}
-                className="w-full sm:w-auto px-4 py-2.5 bg-purple-600/20 text-purple-300 border border-purple-500/40 rounded-xl flex items-center justify-center gap-2 hover:bg-purple-600/30 hover:text-white font-bold text-xs transition-colors shadow cursor-pointer"
+                className="w-full sm:w-auto px-4 py-2.5 bg-purple-600/20 text-purple-700 dark:text-purple-300 border border-purple-500/40 rounded-xl flex items-center justify-center gap-2 hover:bg-purple-600/30 hover:text-foreground font-bold text-xs transition-colors shadow cursor-pointer"
                 title="Abrir janela de exportação por intervalo personalizado de datas"
               >
                 <Calendar className="w-4 h-4 text-purple-400" />
@@ -1926,10 +1895,10 @@ function doPost(e) {
               <button 
                 type="button"
                 onClick={handleExportDailySalesAndSafety}
-                className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-600/30 hover:text-white font-bold text-xs transition-colors shadow cursor-pointer"
+                className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-600/30 hover:text-foreground font-bold text-xs transition-colors shadow cursor-pointer"
                 title="Exportar planilha de consumo diário médio de cada produto e sugestão de estoque de segurança"
               >
-                <Package className="w-4 h-4 text-emerald-400" />
+                <Package className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                 <span>Venda Diária & Estoque Segurança (.csv)</span>
               </button>
 
@@ -1937,10 +1906,10 @@ function doPost(e) {
                 type="button"
                 onClick={handleExportCSV}
                 disabled={isExporting}
-                className="w-full sm:w-auto px-4 py-2.5 bg-[#191a26] text-gray-200 border border-[#2d2e40] rounded-xl flex items-center justify-center gap-2 hover:bg-[#202230] hover:text-white font-bold text-sm disabled:opacity-50 transition-colors shadow cursor-pointer"
+                className="w-full sm:w-auto px-4 py-2.5 bg-muted/40 text-muted-foreground border border-border rounded-xl flex items-center justify-center gap-2 hover:bg-muted hover:text-foreground font-bold text-sm disabled:opacity-50 transition-colors shadow cursor-pointer"
                 title="Baixar planilha Excel (.csv) com abas de Compras, Vendas, Fiado e Estoque de Segurança"
               >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                <FileSpreadsheet className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                 {period === 'personalizado'
                   ? `Baixar Planilha (${format(parseISO(startDate), 'dd/MM')} a ${format(parseISO(endDate), 'dd/MM')})`
                   : (languageMode === 'basic' ? 'Baixar Planilha (Excel / CSV)' : 'Baixar Planilha Excel/CSV Completa')}
@@ -1960,28 +1929,28 @@ function doPost(e) {
 
         {/* FILTROS DETALHADOS (Expandíveis com toggle) */}
         {showAdvancedFilters && (
-          <div className="mb-6 p-5 rounded-xl bg-[#191a26]/80 border border-[#2d2e40] animate-in fade-in duration-200">
+          <div className="mb-6 p-5 rounded-xl bg-muted/40/80 border border-border animate-in fade-in duration-200">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Filter className="w-4 h-4 text-purple-400" />
-                <h4 className="text-sm font-bold text-white">Filtros Detalhados de Consulta e Exportação</h4>
+                <h4 className="text-sm font-bold text-foreground">Filtros Detalhados de Consulta e Exportação</h4>
               </div>
-              <span className="text-xs text-gray-400">Ajuste os parâmetros conforme sua necessidade</span>
+              <span className="text-xs text-muted-foreground">Ajuste os parâmetros conforme sua necessidade</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Card 1: Período */}
-              <div className="bg-[#12131c] border border-[#2d2e40] rounded-xl p-3.5 flex flex-col">
+              <div className="bg-surface border border-border rounded-xl p-3.5 flex flex-col">
                 <div className="flex items-center gap-2 mb-1">
                   <Calendar className="w-4 h-4 text-purple-400" />
-                  <h3 className="text-xs font-bold text-white">Período de Análise</h3>
+                  <h3 className="text-xs font-bold text-foreground">Período de Análise</h3>
                 </div>
-                <p className="text-[11px] text-gray-400 mb-3">Escolha o recorte de tempo</p>
+                <p className="text-[11px] text-muted-foreground mb-3">Escolha o recorte de tempo</p>
                 <div className="mt-auto">
                    <select 
                      value={period} 
                      onChange={e => setPeriod(e.target.value as any)}
-                     className="w-full bg-[#191a26] border border-[#2d2e40] text-gray-200 text-xs rounded-lg p-2 focus:border-purple-500 outline-none"
+                     className="w-full bg-muted/40 border border-border text-muted-foreground text-xs rounded-lg p-2 focus:border-purple-500 outline-none"
                    >
                      <option value="hoje">Hoje</option>
                      <option value="semana">Esta Semana</option>
@@ -1992,51 +1961,51 @@ function doPost(e) {
               </div>
 
               {/* Card 2: Data Inicial */}
-              <div className={`bg-[#12131c] border border-[#2d2e40] rounded-xl p-3.5 flex flex-col transition-opacity ${period === 'personalizado' ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+              <div className={`bg-surface border border-border rounded-xl p-3.5 flex flex-col transition-opacity ${period === 'personalizado' ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
                 <div className="flex items-center gap-2 mb-1">
                   <Calendar className="w-4 h-4 text-blue-400" />
-                  <h3 className="text-xs font-bold text-white">Data Inicial</h3>
+                  <h3 className="text-xs font-bold text-foreground">Data Inicial</h3>
                 </div>
-                 <p className="text-[11px] text-gray-400 mb-3">A partir de</p>
+                 <p className="text-[11px] text-muted-foreground mb-3">A partir de</p>
                  <div className="mt-auto">
                    <input 
                      type="date"
                      value={startDate}
                      onChange={e => setStartDate(e.target.value)}
-                     className="w-full bg-[#191a26] border border-[#2d2e40] text-gray-200 text-xs rounded-lg p-2 focus:border-blue-500 outline-none [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
+                     className="w-full bg-muted/40 border border-border text-muted-foreground text-xs rounded-lg p-2 focus:border-blue-500 outline-none [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
                    />
                  </div>
               </div>
 
               {/* Card 3: Data Final */}
-              <div className={`bg-[#12131c] border border-[#2d2e40] rounded-xl p-3.5 flex flex-col transition-opacity ${period === 'personalizado' ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+              <div className={`bg-surface border border-border rounded-xl p-3.5 flex flex-col transition-opacity ${period === 'personalizado' ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
                 <div className="flex items-center gap-2 mb-1">
                   <Calendar className="w-4 h-4 text-blue-400" />
-                  <h3 className="text-xs font-bold text-white">Data Final</h3>
+                  <h3 className="text-xs font-bold text-foreground">Data Final</h3>
                 </div>
-                 <p className="text-[11px] text-gray-400 mb-3">Até</p>
+                 <p className="text-[11px] text-muted-foreground mb-3">Até</p>
                  <div className="mt-auto">
                    <input 
                      type="date"
                      value={endDate}
                      onChange={e => setEndDate(e.target.value)}
-                     className="w-full bg-[#191a26] border border-[#2d2e40] text-gray-200 text-xs rounded-lg p-2 focus:border-blue-500 outline-none [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
+                     className="w-full bg-muted/40 border border-border text-muted-foreground text-xs rounded-lg p-2 focus:border-blue-500 outline-none [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
                    />
                  </div>
               </div>
               
               {/* Card 4: Tipo de Venda */}
-              <div className="bg-[#12131c] border border-[#2d2e40] rounded-xl p-3.5 flex flex-col">
+              <div className="bg-surface border border-border rounded-xl p-3.5 flex flex-col">
                 <div className="flex items-center gap-2 mb-1">
-                  <CreditCard className="w-4 h-4 text-emerald-400" />
-                  <h3 className="text-xs font-bold text-white">Forma de Pagamento</h3>
+                  <CreditCard className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                  <h3 className="text-xs font-bold text-foreground">Forma de Pagamento</h3>
                 </div>
-                <p className="text-[11px] text-gray-400 mb-3">Filtrar por meio de recebimento</p>
+                <p className="text-[11px] text-muted-foreground mb-3">Filtrar por meio de recebimento</p>
                 <div className="mt-auto">
                    <select 
                      value={saleType} 
                      onChange={e => setSaleType(e.target.value as any)}
-                     className="w-full bg-[#191a26] border border-[#2d2e40] text-gray-200 text-xs rounded-lg p-2 focus:border-emerald-500 outline-none"
+                     className="w-full bg-muted/40 border border-border text-muted-foreground text-xs rounded-lg p-2 focus:border-emerald-500 outline-none"
                    >
                      <option value="todas">Todas as Formas</option>
                      <option value="cash">Apenas Dinheiro Vivo</option>
@@ -2052,15 +2021,15 @@ function doPost(e) {
         {/* Banner do Módulo de Compras no Relatório */}
         <div className="mb-6 p-4 rounded-xl bg-purple-950/30 border border-purple-800/40 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-900/60 text-purple-300">
+            <div className="p-2 rounded-lg bg-purple-900/60 text-purple-700 dark:text-purple-300">
               <ShoppingBag className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-white">Módulo de Compras integrado ao Relatório</span>
+                <span className="text-sm font-bold text-foreground">Módulo de Compras integrado ao Relatório</span>
                 <span className="text-[10px] font-bold uppercase bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-800/60">Novo</span>
               </div>
-              <p className="text-xs text-gray-400 mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 {languageMode === 'basic' 
                   ? 'Tudo o que você gasta reabastecendo os produtos da loja é somado automaticamente no relatório.'
                   : 'Todas as reposições de estoque e despesas com fornecedores são extraídas automaticamente junto com as Vendas e Fiado.'}
@@ -2070,13 +2039,16 @@ function doPost(e) {
         </div>
 
         {exportMessage && (
-          <div className={`mt-6 p-4 rounded-xl flex gap-3 text-sm border ${exportMessage.includes('Erro') ? 'bg-red-900/20 text-red-400 border-red-900/50' : 'bg-emerald-900/20 text-emerald-400 border-emerald-900/50'}`}>
+          <div className={`mt-6 p-4 rounded-xl flex gap-3 text-sm border ${exportMessage.includes('Erro') ? 'bg-red-900/20 text-red-400 border-red-900/50' : 'bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-900/50'}`}>
             <AlertCircle className="w-5 h-5 shrink-0" />
             <span>{exportMessage}</span>
           </div>
         )}
       </div>
 
+      <details key={`advanced-${simpleViewMode}`} open={!simpleViewMode} className="rounded-2xl border border-border bg-surface p-4">
+        <summary className="cursor-pointer py-2 font-semibold text-foreground">{v('settings.advanced')}</summary>
+        <div className="mt-4 space-y-5">
       {/* Rotina de Backup Diário e Segurança dos Dados */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
@@ -2375,6 +2347,9 @@ function doPost(e) {
           </div>
         )}
       </div>
+
+        </div>
+      </details>
 
       {/* Seção de Feedback e Sugestões do Usuário */}
       <div className="mb-6">

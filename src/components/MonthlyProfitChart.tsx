@@ -47,13 +47,14 @@ export interface MonthlyProfitData {
 }
 
 export function MonthlyProfitChart() {
-  const { languageMode, isBasicMode, simpleViewMode } = usePreferences();
+  const { v, languageMode, isBasicMode, simpleViewMode } = usePreferences();
   const [loading, setLoading] = useState(true);
   const [periodMonths, setPeriodMonths] = useState<6 | 12>(6);
   const [chartView, setChartView] = useState<'profitOnly' | 'comparison'>('profitOnly');
   const [monthlyData, setMonthlyData] = useState<MonthlyProfitData[]>([]);
   // No modo simples/descomplicado, permite recolher/expandir mantendo o objetivo de interface limpa
   const [isExpanded, setIsExpanded] = useState<boolean>(!simpleViewMode);
+  useEffect(() => { setIsExpanded(!simpleViewMode); }, [simpleViewMode]);
 
   const loadProfitData = async () => {
     setLoading(true);
@@ -93,7 +94,7 @@ export function MonthlyProfitChart() {
         const mPurchases = purchases.filter(p => p.createdAt >= mStart && p.createdAt <= mEnd);
         const purchasesTotal = mPurchases.reduce((acc, p) => acc + (p.totalCost || 0), 0);
 
-        // Diferença = Vendas - Compras (Lucro Líquido Real das Mercadorias)
+        // Diferença = Vendas - Compras (Diferença entre vendas e compras Real das Mercadorias)
         const profit = salesTotal - purchasesTotal;
 
         monthsList.push({
@@ -205,7 +206,7 @@ export function MonthlyProfitChart() {
           <div className="border-t border-border pt-1.5 flex items-center justify-between gap-3">
             <span className="font-bold text-foreground flex items-center gap-1">
               <DollarSign className="w-3.5 h-3.5 text-primary" />
-              {languageMode === 'basic' ? 'Sobrou limpo:' : 'Lucro do Mês:'}
+              {languageMode === 'basic' ? 'Vendas menos compras:' : 'Diferença no mês:'}
             </span>
             <span className={`font-black font-mono text-sm ${isProfitPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
               {isProfitPositive ? '+' : ''}{formatCurrency(data.profit)}
@@ -216,7 +217,7 @@ export function MonthlyProfitChart() {
         {languageMode === 'basic' && (
           <div className="text-[10px] text-muted-foreground bg-muted/50 p-1.5 rounded-lg border border-border/50">
             {isProfitPositive ? (
-              <span>✨ Esse dinheiro foi o que realmente sobrou livre para você!</span>
+              <span>O total vendido inclui fiado. Essa diferença não é o lucro nem o saldo do caixa.</span>
             ) : (
               <span>📦 Neste mês você investiu mais na compra de mercadorias para vender depois.</span>
             )}
@@ -243,8 +244,8 @@ export function MonthlyProfitChart() {
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-bold text-base md:text-lg text-foreground">
                 {languageMode === 'basic'
-                  ? 'Lucro Mensal (Quanto Sobrou em Cada Mês)'
-                  : 'Demonstrativo de Lucro Mensal (Vendas − Custos de Compra)'}
+                  ? 'Vendas e compras por mês'
+                  : 'Comparativo Mensal de Vendas e Aquisições'}
               </h3>
               {languageMode === 'basic' && (
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 flex items-center gap-1 border border-emerald-200 dark:border-emerald-800/50">
@@ -318,7 +319,7 @@ export function MonthlyProfitChart() {
             {/* Card 1: Total que sobrou no período */}
             <div className="bg-card border border-border rounded-xl p-3.5 flex flex-col justify-between shadow-2xs">
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
-                {languageMode === 'basic' ? 'Total que sobrou no bolso' : 'Resultado Acumulado'}
+                {languageMode === 'basic' ? 'Vendas menos compras no período' : 'Resultado Acumulado'}
               </span>
               <div className="my-1.5">
                 <span className={`text-xl sm:text-2xl font-black ${stats.totalProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
@@ -328,7 +329,7 @@ export function MonthlyProfitChart() {
               <p className="text-[11px] text-muted-foreground">
                 {languageMode === 'basic'
                   ? `Soma dos últimos ${periodMonths} meses`
-                  : `Lucro líquido apurado no período de ${periodMonths} meses`}
+                  : `Diferença de vendas e compras no período de ${periodMonths} meses`}
               </p>
             </div>
 
@@ -372,7 +373,7 @@ export function MonthlyProfitChart() {
               <p className="text-[11px] text-muted-foreground">
                 {languageMode === 'basic'
                   ? `${stats.positiveMonthsCount} de ${periodMonths} meses no positivo`
-                  : `${stats.positiveMonthsCount} meses com margem positiva`}
+                  : `${stats.positiveMonthsCount} meses com vendas maiores que compras`}
               </p>
             </div>
           </div>
@@ -384,7 +385,7 @@ export function MonthlyProfitChart() {
               <span>
                 {languageMode === 'basic' ? (
                   <>
-                    <strong>Conta simples:</strong> [Dinheiro das Vendas] − [Gasto com Compras] = <strong className="text-foreground">O que sobra limpo pra você</strong>.
+                    <strong>Conta simples:</strong> [Total vendido] − [Compras registradas] = <strong className="text-foreground">Diferença entre vendas e compras</strong>.
                   </>
                 ) : (
                   <>
@@ -406,7 +407,7 @@ export function MonthlyProfitChart() {
                 }`}
               >
                 <TrendingUp className="w-3 h-3" />
-                <span>{languageMode === 'basic' ? 'Só a Sobra (Simples)' : 'Apenas Lucro'}</span>
+                <span>{languageMode === 'basic' ? 'Só a diferença' : 'Diferença de vendas e compras'}</span>
               </button>
 
               <button
@@ -428,7 +429,7 @@ export function MonthlyProfitChart() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
               <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
-              <span className="text-xs font-medium">Calculando lucro mensal com base em vendas e compras...</span>
+              <span className="text-xs font-medium">Carregando vendas e compras por mês...</span>
             </div>
           ) : !hasAnyData ? (
             <div className="py-12 px-4 text-center border-2 border-dashed border-border rounded-xl bg-muted/20">
@@ -440,7 +441,7 @@ export function MonthlyProfitChart() {
               </h4>
               <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1">
                 {languageMode === 'basic'
-                  ? 'Assim que você registrar vendas no Caixa e anotar compras de reposição, as barrinhas de lucro mensal vão aparecer aqui automaticamente!'
+                  ? 'Assim que você registrar vendas no Caixa e anotar compras de reposição, as barras de vendas e compras vão aparecer aqui automaticamente!'
                   : 'Ao registrar vendas e compras de reposição de estoque, o gráfico comparativo de rentabilidade será atualizado dinamicamente.'}
               </p>
             </div>
@@ -473,7 +474,7 @@ export function MonthlyProfitChart() {
                       <ReferenceLine y={0} stroke="currentColor" opacity={0.4} strokeWidth={1.5} />
                       <Bar
                         dataKey="profit"
-                        name={languageMode === 'basic' ? 'Sobra no Bolso' : 'Lucro Líquido'}
+                        name={languageMode === 'basic' ? 'Vendas menos compras' : 'Diferença entre vendas e compras'}
                         radius={[6, 6, 0, 0]}
                         maxBarSize={48}
                       >
@@ -532,7 +533,7 @@ export function MonthlyProfitChart() {
                       <Line
                         type="monotone"
                         dataKey="profit"
-                        name={languageMode === 'basic' ? '💰 Sobrou (Lucro)' : 'Lucro Líquido'}
+                        name={languageMode === 'basic' ? 'Vendas menos compras' : 'Diferença entre vendas e compras'}
                         stroke="#10B981"
                         strokeWidth={3}
                         dot={{ r: 4, fill: '#10B981', strokeWidth: 2, stroke: '#FFFFFF' }}
@@ -548,7 +549,7 @@ export function MonthlyProfitChart() {
                 <div className="flex items-center gap-4 flex-wrap">
                   <span className="flex items-center gap-1.5 font-medium">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
-                    {languageMode === 'basic' ? 'Verde: Sobrou dinheiro no bolso (Lucro positivo)' : 'Lucro Líquido Positivo'}
+                    {languageMode === 'basic' ? 'Verde: vendeu mais do que comprou' : 'Vendas maiores que compras'}
                   </span>
                   <span className="flex items-center gap-1.5 font-medium">
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />

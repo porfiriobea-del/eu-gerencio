@@ -1,3 +1,4 @@
+import { usePreferences } from '../lib/preferencesContext';
 import { TutorialGuide } from '../components/TutorialGuide';
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -6,6 +7,7 @@ import { FeedbackSection } from '../components/FeedbackSection';
 import { subscribeSettings } from '../lib/api';
 
 export default function Tutorial() {
+  const { v } = usePreferences();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') === 'feedback' ? 'feedback' : searchParams.get('tab') === 'faq' ? 'faq' : 'guide';
@@ -43,7 +45,7 @@ export default function Tutorial() {
               <HelpCircle className="w-5 h-5" />
             </span>
             <h1 className="text-2xl font-bold font-heading text-foreground">
-              Central de Ajuda & Feedback
+              {v('help.title')}
             </h1>
           </div>
           <p className="text-sm text-muted-foreground">

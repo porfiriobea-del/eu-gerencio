@@ -105,7 +105,7 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
     { to: '/compras', icon: ShoppingBag, label: v('nav.purchases', t('nav.purchases')), id: 'nav-item-compras' },
     { to: '/precos', icon: DollarSign, label: v('nav.pricing', t('nav.pricing')), id: 'nav-item-precos' },
     { to: '/fiado', icon: Users, label: v('nav.debt', t('nav.debt')), id: 'nav-item-fiado' },
-    { to: '/movimentacoes', icon: Activity, label: 'Movimentações', id: 'nav-item-movimentacoes' },
+    { to: '/movimentacoes', icon: Activity, label: v('nav.movements', 'Movimentações'), id: 'nav-item-movimentacoes' },
     { to: '/ajustes', icon: SettingsIcon, label: t('nav.settings'), id: 'nav-item-ajustes' },
     { to: '/tutorial', icon: HelpCircle, label: t('nav.tutorial'), id: 'nav-item-tutorial' },
   ];

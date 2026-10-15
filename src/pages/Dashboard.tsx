@@ -22,6 +22,10 @@ export default function Dashboard() {
   const [isExportPeriodModalOpen, setIsExportPeriodModalOpen] = useState(false);
   const [isVisualReportsOpen, setIsVisualReportsOpen] = useState(!simpleViewMode);
   const [isSalesDetailedTableOpen, setIsSalesDetailedTableOpen] = useState(!simpleViewMode);
+  useEffect(() => {
+    setIsVisualReportsOpen(!simpleViewMode);
+    setIsSalesDetailedTableOpen(!simpleViewMode);
+  }, [simpleViewMode]);
 
   // Tour guiado interativo
   const [isTourOpen, setIsTourOpen] = useState(false);
@@ -174,7 +178,7 @@ export default function Dashboard() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
-                  {languageMode === 'basic' ? 'Dinheiro que entrou' : v('reports.inflow', 'Receita Operacional')}
+                  {v('reports.inflow')}
                 </span>
                 <div className="p-1.5 rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">
                   <ArrowDownLeft className="w-4 h-4" />
@@ -184,7 +188,7 @@ export default function Dashboard() {
                 R$ {totalSales.toFixed(2)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {languageMode === 'basic' ? 'Tudo o que os clientes pagaram hoje' : 'Total de faturamento em vendas'}
+                Total vendido hoje, incluindo fiado
               </p>
             </div>
 
@@ -209,7 +213,7 @@ export default function Dashboard() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wide">
-                  {languageMode === 'basic' ? 'Dinheiro que saiu' : v('reports.outflow', 'Desembolsos do Dia')}
+                  {v('reports.outflow')}
                 </span>
                 <div className="p-1.5 rounded-lg bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400">
                   <ArrowUpRight className="w-4 h-4" />
@@ -236,7 +240,7 @@ export default function Dashboard() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className={`text-xs font-bold uppercase tracking-wide ${totalSales - todayPurchasesSpent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                  {languageMode === 'basic' ? 'O que sobrou para você' : v('reports.balance', 'Resultado Operacional')}
+                  {v('reports.balance')}
                 </span>
                 <div className={`p-1.5 rounded-lg ${totalSales - todayPurchasesSpent >= 0 ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400'}`}>
                   <Wallet className="w-4 h-4" />
@@ -246,15 +250,13 @@ export default function Dashboard() {
                 R$ {(totalSales - todayPurchasesSpent).toFixed(2)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {languageMode === 'basic'
-                  ? (totalSales - todayPurchasesSpent >= 0 ? 'Sobra livre no caixa após pagar as compras!' : 'Comprou mais estoque para lucrar depois')
-                  : (totalSales - todayPurchasesSpent >= 0 ? 'Saldo líquido positivo hoje' : 'Déficit no fluxo (reabastecimento)')}
+                Diferença entre o total vendido e as compras registradas.
               </p>
             </div>
 
             <div className="mt-3 pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
               <span>Conta rápida:</span>
-              <strong className="text-foreground">Entrou − Saiu</strong>
+              <strong className="text-foreground">Vendas − Compras</strong>
             </div>
           </div>
 
@@ -292,19 +294,7 @@ export default function Dashboard() {
             <Sparkles className="w-4 h-4" />
           </div>
           <p className="text-foreground leading-relaxed">
-            {languageMode === 'basic' ? (
-              <>
-                <strong>Em poucas palavras:</strong> Hoje entraram <strong className="text-emerald-600 dark:text-emerald-400">R$ {totalSales.toFixed(2)}</strong> e saíram <strong className="text-rose-600 dark:text-rose-400">R$ {todayPurchasesSpent.toFixed(2)}</strong>. {totalSales - todayPurchasesSpent >= 0 ? (
-                  <>Sobraram <strong className="text-emerald-600 dark:text-emerald-400 font-bold">R$ {(totalSales - todayPurchasesSpent).toFixed(2)}</strong> livres no caixa para você!</>
-                ) : (
-                  <>Você comprou <strong className="text-amber-600 dark:text-amber-400 font-bold">R$ {Math.abs(totalSales - todayPurchasesSpent).toFixed(2)}</strong> a mais em mercadorias para a loja (que vão virar lucro nas próximas vendas).</>
-                )}
-              </>
-            ) : (
-              <>
-                <strong>Balanço do dia:</strong> Receita operacional de <strong className="text-emerald-600 dark:text-emerald-400">R$ {totalSales.toFixed(2)}</strong> contra desembolsos em compras de <strong className="text-rose-600 dark:text-rose-400">R$ {todayPurchasesSpent.toFixed(2)}</strong>. Resultado líquido do caixa: <strong className={totalSales - todayPurchasesSpent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>R$ {(totalSales - todayPurchasesSpent).toFixed(2)}</strong>.
-              </>
-            )}
+            {v('reports.note')}
           </p>
         </div>
       </div>

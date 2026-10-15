@@ -149,6 +149,7 @@ export const updateSettings = withActionDeadline(async (data: Partial<Settings>)
       await updateDoc(settingsRef, { ...cleanData, updatedAt: now });
     } else {
       const initial: Settings = {
+        ...cleanData,
         storeName: cleanData.storeName || 'Eu Gerencio!',
         cnpj: cleanData.cnpj || '',
         phone: cleanData.phone || '',

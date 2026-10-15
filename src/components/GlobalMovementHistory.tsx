@@ -1,3 +1,4 @@
+import { usePreferences } from '../lib/preferencesContext';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Activity, ShoppingCart, Users, DollarSign, Package, 
@@ -10,13 +11,14 @@ import { Movement } from '../types';
 import { Link } from 'react-router-dom';
 
 export function GlobalMovementHistory() {
+  const { v, simpleViewMode } = usePreferences();
   const [movements, setMovements] = useState<Movement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   // Modo suspenso: inicia recolhido para manter a interface 100% limpa, ou lembra a preferência
   const [isOpen, setIsOpen] = useState(() => {
     try {
-      return localStorage.getItem('suspended_movement_history_open') === 'true';
+      return !simpleViewMode && localStorage.getItem('suspended_movement_history_open') === 'true';
     } catch {
       return false;
     }
@@ -28,18 +30,22 @@ export function GlobalMovementHistory() {
   const [visibleLimit, setVisibleLimit] = useState(6);
   const prevCountRef = useRef<number>(0);
 
+  useEffect(() => { if (simpleViewMode) setIsOpen(false); }, [simpleViewMode]);
+
   useEffect(() => {
+    let alertTimer: ReturnType<typeof setTimeout> | undefined;
     const unsub = subscribeMovements((list) => {
       if (prevCountRef.current > 0 && list.length > prevCountRef.current && !isOpen) {
         setHasNewMovementAlert(true);
-        const timer = setTimeout(() => setHasNewMovementAlert(false), 8000);
-        return () => clearTimeout(timer);
+        clearTimeout(alertTimer);
+        alertTimer = setTimeout(() => setHasNewMovementAlert(false), 8000);
       }
+      // Always receive fresh records, including while collapsed.
       prevCountRef.current = list.length;
       setMovements(list);
       setIsLoading(false);
     });
-    return () => unsub();
+    return () => { unsub(); clearTimeout(alertTimer); };
   }, [isOpen]);
 
   const toggleOpen = () => {
@@ -162,7 +168,7 @@ export function GlobalMovementHistory() {
   return (
     <section 
       id="fixed-suspended-movement-history"
-      aria-label="Histórico de Movimentação no fim da página"
+      aria-label={v('movements.history')}
       className="mt-14 mb-8 pt-4 border-t border-border/50"
     >
       {/* Container Suspenso Clean */}
@@ -175,6 +181,10 @@ export function GlobalMovementHistory() {
         {/* Barra Suspensa Principal (Sempre visível no fim da página, limpa e discreta) */}
         <div 
           onClick={toggleOpen}
+          role="button"
+          tabIndex={0}
+          aria-expanded={isOpen}
+          onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); toggleOpen(); } }}
           className="p-3.5 sm:p-4.5 flex flex-wrap items-center justify-between gap-3 cursor-pointer select-none group"
         >
           {/* Lado Esquerdo: Identificação e Status em Tempo Real */}
@@ -190,10 +200,10 @@ export function GlobalMovementHistory() {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm sm:text-base font-bold font-heading text-foreground tracking-tight truncate">
-                  Histórico de Movimentações
+                  {v('movements.history')}
                 </h3>
 
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold shrink-0">
+                <span className={`${simpleViewMode ? 'hidden' : 'inline-flex'} items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold shrink-0`}>
                   <span className="relative flex h-1.5 w-1.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
@@ -216,7 +226,7 @@ export function GlobalMovementHistory() {
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Modo suspenso: clique para expandir o histórico de ações da loja
+                  Toque para ver os registros da loja
                 </p>
               )}
             </div>
@@ -418,7 +428,7 @@ export function GlobalMovementHistory() {
                   to="/movimentacoes"
                   className="text-xs font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer"
                 >
-                  <span>Auditoria completa</span>
+                  <span>{v('nav.movements')}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
 

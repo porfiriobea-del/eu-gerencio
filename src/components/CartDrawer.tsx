@@ -1,3 +1,4 @@
+import { usePreferences } from '../lib/preferencesContext';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ShoppingCart, Pin, PinOff, X, Plus, Minus, Trash2 } from 'lucide-react';
@@ -9,6 +10,7 @@ const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currenc
 const storageKey = 'eu_gerencio_pos_cart_pinned';
 
 export function CartDrawer({ items, total, busy = false, onQuantity, onRemove, onCheckout, onFiado }: Props) {
+  const { v } = usePreferences();
   const [pinned, setPinned] = useState(() => { try { return localStorage.getItem(storageKey) !== 'false'; } catch { return true; } });
   const [desktop, setDesktop] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1024px)').matches);
   const [open, setOpen] = useState(false);
@@ -47,14 +49,14 @@ export function CartDrawer({ items, total, busy = false, onQuantity, onRemove, o
   const content = <div ref={panel} id={panelId} role={expanded ? 'complementary' : 'dialog'} aria-modal={expanded ? undefined : true} aria-labelledby={titleId}
     className={`flex min-h-0 flex-col overflow-hidden border border-border bg-surface text-foreground shadow-xl ${expanded ? 'sticky self-start top-20 h-[calc(100dvh-7rem)] w-80 shrink-0 rounded-2xl xl:w-96' : 'h-full w-full max-w-md rounded-l-2xl'}`}>
     <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border p-4">
-      <h2 id={titleId} className="flex items-center gap-2 text-lg font-bold"><ShoppingCart className="h-5 w-5 text-primary" />Carrinho <span className="rounded-full bg-fuchsia-600 px-2 text-xs text-white" aria-live="polite">{count}</span></h2>
+      <h2 id={titleId} className="flex items-center gap-2 text-lg font-bold"><ShoppingCart className="h-5 w-5 text-primary" />{v('pos.cart', 'Carrinho')} <span className="rounded-full bg-fuchsia-600 px-2 text-xs text-white" aria-live="polite">{count}</span></h2>
       <div className="flex gap-1">
         {desktop && <button type="button" aria-label={pinned ? 'Desfixar carrinho' : 'Fixar carrinho'} aria-pressed={pinned} title={pinned ? 'Carrinho suspenso/flutuante' : 'Fixar carrinho'} onClick={() => { setPinned(value => !value); setOpen(false); }} className="rounded-lg p-2 hover:bg-muted">{pinned ? <PinOff className="h-5 w-5" /> : <Pin className="h-5 w-5" />}</button>}
         {!expanded && <button type="button" aria-label="Fechar carrinho" onClick={() => setOpen(false)} className="rounded-lg p-2 hover:bg-muted"><X className="h-5 w-5" /></button>}
       </div>
     </header>
     <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-      {!items.length && <p className="py-12 text-center text-muted-foreground">Carrinho vazio</p>}
+      {!items.length && <p className="py-12 text-center text-muted-foreground">{v('pos.emptyCart', 'Carrinho vazio')}</p>}
       {items.map((item, index) => <article key={`${item.product.id}:${item.format}`} className="rounded-xl border border-border p-3">
         <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words font-semibold">{item.product.name}</h3><p className="text-xs text-muted-foreground">{item.format}</p><p className="mt-1 text-xs">{item.quantity} × {money(item.price)}</p></div><strong className="shrink-0 text-primary">{money(item.price * item.quantity)}</strong></div>
         <p className="mt-2 text-xs text-muted-foreground">Baixa: {Number((item.quantity * item.stockDeduction).toFixed(2))} {item.product.type === 'cigarro' ? 'carteiras' : 'unidades'}</p>

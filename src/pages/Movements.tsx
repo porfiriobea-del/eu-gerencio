@@ -1,3 +1,4 @@
+import { usePreferences } from '../lib/preferencesContext';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
@@ -17,6 +18,7 @@ import {
 import { Movement, MovementType, Employee, Product } from '../types';
 
 export default function Movements() {
+  const { v, simpleViewMode } = usePreferences();
   const { 
     currentEmployee, 
     employees, 
@@ -450,11 +452,11 @@ export default function Movements() {
               <Activity className="w-5 h-5" />
             </div>
             <h1 className="text-2xl font-bold font-heading text-foreground">
-              Histórico de Movimentações & Equipe
+              {v('movements.title')}
             </h1>
           </div>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            Rastreabilidade total: saiba quem entrou, quem saiu e qual funcionário realizou cada venda, reposição ou baixa de estoque.
+            {v('movements.description')}
           </p>
         </div>
 
@@ -506,7 +508,7 @@ export default function Movements() {
           }`}
         >
           <Activity className="w-4 h-4" />
-          <span>Histórico de Movimentações ({filteredMovements.length})</span>
+          <span>{v('movements.history')} ({filteredMovements.length})</span>
         </button>
 
         <button
@@ -518,7 +520,7 @@ export default function Movements() {
           }`}
         >
           <Users className="w-4 h-4" />
-          <span>Gestão da Equipe & Turnos ({employees.length})</span>
+          <span>{simpleViewMode ? 'Equipe' : 'Equipe e Turnos'} ({employees.length})</span>
         </button>
       </div>
 
@@ -605,7 +607,7 @@ export default function Movements() {
                   title="Registrar baixa manual por avaria, quebra, validade ou reposição rápida"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Baixa / Movimentação Manual</span>
+                  <span>{v('movements.manual')}</span>
                 </button>
 
                 <button
@@ -621,6 +623,8 @@ export default function Movements() {
             </div>
 
             {/* Filter Pills / Dropdowns */}
+            <details key={`filters-${simpleViewMode}`} open={!simpleViewMode}>
+            <summary className="cursor-pointer py-2 text-sm font-semibold text-foreground">Filtrar registros</summary>
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/60">
               {/* Period Filter */}
               <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border text-xs">
@@ -670,6 +674,7 @@ export default function Movements() {
                 <option value="closure">Fechamentos de Caixa</option>
               </select>
             </div>
+            </details>
           </div>
 
           {/* Timeline / Movements List */}
@@ -939,7 +944,7 @@ export default function Movements() {
               </div>
               <div>
                 <h3 className="text-lg font-bold font-heading text-foreground">
-                  Registrar Movimentação Manual
+                  {v('movements.manual')}
                 </h3>
                 <p className="text-xs text-muted-foreground">
                   Dê baixa em produtos danificados, quebras ou registre reposição manual.

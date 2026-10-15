@@ -1,3 +1,4 @@
+import { usePreferences } from '../lib/preferencesContext';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
@@ -29,6 +30,7 @@ interface LedgerItem {
 }
 
 export default function Debt() {
+  const { v } = usePreferences();
   const { currentEmployee } = useEmployee();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -265,9 +267,9 @@ export default function Debt() {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold font-heading text-foreground">Caderno de Fiado</h1>
+          <h1 className="text-2xl font-bold font-heading text-foreground">{v('debt.title')}</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Total na rua a receber: <span className="font-bold text-red-600 dark:text-red-400">R$ {totalDebt.toFixed(2)}</span> ({customers.length} cliente{customers.length !== 1 ? 's' : ''})
+            {v('debt.balance')}: <span className="font-bold text-red-600 dark:text-red-400">R$ {totalDebt.toFixed(2)}</span> ({customers.length} cliente{customers.length !== 1 ? 's' : ''})
           </p>
         </div>
 
@@ -801,7 +803,7 @@ export default function Debt() {
       {isPayModalOpen && selectedCustomer && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
           <div className="bg-surface rounded-2xl w-full max-w-md p-6 border border-border shadow-xl">
-            <h2 className="text-xl font-bold font-heading text-foreground mb-1">Receber Pagamento</h2>
+            <h2 className="text-xl font-bold font-heading text-foreground mb-1">{v('debt.pay')}</h2>
             <p className="text-muted-foreground text-xs mb-5">
               Cliente: <span className="font-semibold text-foreground">{selectedCustomer.name}</span> (Dívida total pendente: <span className="font-bold text-red-600">R$ {selectedCustomer.totalDebt.toFixed(2)}</span>)
             </p>
