@@ -1,3 +1,4 @@
+import { usePreferences } from '../lib/preferencesContext';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, FileText, Image, Loader2, Plus, Trash2, X } from 'lucide-react';
@@ -11,6 +12,9 @@ import { showActionError, showToast } from '../lib/actionFeedback';
 interface Props { isOpen: boolean; onClose: () => void; availableCategories: string[]; existingProductNames: string[]; existingProducts?: Product[]; onBeforeSave?: (product: Pick<Product, 'name' | 'barcode' | 'stock' | 'type'>) => Promise<boolean>; onOpenExisting?: (product: Product) => void }
 
 export function CatalogImportModal({ isOpen, onClose, availableCategories, existingProductNames, existingProducts = [], onBeforeSave, onOpenExisting }: Props) {
+  const { v } = usePreferences();
+  const copy = (key: string, fallback: string) => v(key, fallback);
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [drafts, setDrafts] = useState<SupplierDraft[]>([]);
   const [isReading, setIsReading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -65,7 +69,10 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
 
   if (!isOpen) return null;
 
-  const update = (id: string, patch: Partial<SupplierDraft>) => setDrafts(previous => previous.map((row, index) => {
+  const update = (id: string, patch: Partial<SupplierDraft>) => {
+    setError('');
+    setRowErrors(previous => { const next = {...previous}; delete next[id]; return next; });
+    setDrafts(previous => previous.map((row, index) => {
     if (row.id !== id) return row;
     const next = { ...row, ...patch };
     if ('name' in patch || 'barcode' in patch) {
@@ -74,6 +81,7 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
     }
     return next;
   }));
+  };
   const readFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     event.target.value = '';
@@ -113,24 +121,49 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
   };
   const save = async () => {
     if (savingRef.current || readingRef.current) return;
-    let products;
-    try { products = buildSupplierProducts(drafts.filter((row, index) => !duplicated(row, index) || row.allowDuplicate), existingProductNames); }
-    catch (error) { setError(error instanceof Error ? error.message : 'Confira os produtos selecionados.'); return; }
-    if (!products.length) { setError('Os produtos selecionados já estão no estoque. Nenhum item foi duplicado.'); return; }
+    const selected = drafts.filter(row => row.selected);
+    if (!selected.length || selected.length > 200) {
+      setError(selected.length ? copy('catalog.tooMany', 'Selecione até 200 produtos por importação.') : copy('catalog.noSelection', 'Selecione pelo menos um produto.')); return;
+    }
+    const errors: Record<string, string> = {};
+    const candidates: { row: SupplierDraft; product: ReturnType<typeof buildSupplierProducts>[number] }[] = [];
+    for (const row of selected) {
+      const index = drafts.findIndex(item => item.id === row.id);
+      if (duplicated(row, index) && !row.allowDuplicate) { errors[row.id] = copy('catalog.duplicate', 'Revise o produto duplicado.'); continue; }
+      try { candidates.push({ row, product: buildSupplierProducts([row])[0] }); }
+      catch (error) { errors[row.id] = error instanceof Error ? error.message : copy('catalog.fix', 'Confira os dados deste produto.'); }
+    }
+    setRowErrors(errors);
+    if (Object.keys(errors).length) {
+      setError(`${copy('catalog.validation', 'Confira os dados selecionados.')} ${Object.values(errors)[0]}`);
+      const first = document.getElementById(`catalog-row-${Object.keys(errors)[0]}`);
+      first?.focus(); first?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+      return;
+    }
     savingRef.current = true; setIsSaving(true); setError('');
+    setStatus(copy('catalog.checking', 'Conferindo os produtos selecionados...'));
+    const generation = generationRef.current;
     try {
-      const accepted: ReturnType<typeof buildSupplierProducts> = [];
-      for (const product of products) {
-        const approved = drafts.some(row => row.selected && row.allowDuplicate && row.name.trim() === product.name && (row.barcode || '').trim() === (product.barcode || ''));
-        if (approved || !onBeforeSave || await onBeforeSave(product)) accepted.push(product);
+      for (const {row, product} of candidates) {
+        if (!row.allowDuplicate && onBeforeSave && !await onBeforeSave(product)) {
+          setStatus(copy('catalog.cancelled', 'Cadastro não confirmado. Revise os produtos.')); return;
+        }
       }
-      const count = accepted.length ? await importSupplierCatalog(accepted, { allowDuplicates: true }) : 0;
-      showToast(count ? `✓ ${count} produtos do seu catálogo adicionados ao estoque com sucesso!` : 'Nenhum novo cadastro. Os produtos continuam no estoque.');
-      setDrafts(previous => previous.filter(row => !accepted.some(product => product.name === row.name.trim() && (product.barcode || '') === (row.barcode || '').trim()))); setStatus('');
+      if (generation !== generationRef.current) return;
+      const count = await importSupplierCatalog(candidates.map(item => item.product), { allowDuplicates: true, draftIds: candidates.map(item => item.row.id) });
+      const message = count === 0 ? copy('catalog.alreadySaved', 'Os selecionados já foram cadastrados.')
+        : count === 1 ? copy('catalog.successOne', '1 produto do seu catálogo adicionado ao estoque com sucesso!')
+        : copy('catalog.success', '{count} produtos do seu catálogo adicionados ao estoque com sucesso!').replace('{count}', String(count));
+      showToast(`✓ ${message}`);
+      const confirmed = new Set(candidates.map(item => item.row.id));
+      setDrafts(previous => previous.filter(row => !confirmed.has(row.id))); setStatus('');
+      onClose();
     } catch (error) {
-      showActionError(error, 'Não foi possível confirmar a importação. Confira o estoque e a conexão antes de repetir.');
-    } finally { savingRef.current = false; setIsSaving(false); onClose(); }
+      const message = copy('catalog.failed', 'Não foi possível confirmar a importação. A revisão foi mantida. Confira o estoque e a conexão antes de repetir.');
+      setError(message); setStatus(''); showActionError(error, message);
+    } finally { savingRef.current = false; setIsSaving(false); }
   };
+
   const numberField = (row: SupplierDraft, field: 'purchaseCost' | 'unitsPerPackage' | 'basePrice' | 'pricePack' | 'priceCart' | 'priceHalfCart' | 'priceUnit', label: string) => (
     <label className="block text-xs font-medium">{label}
       <input type="number" min="0" step={field === 'unitsPerPackage' ? '1' : '0.01'} value={row[field]} onChange={event => update(row.id, { [field]: event.target.value === '' ? '' : Number(event.target.value) })}
@@ -141,7 +174,7 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-2 sm:p-4">
       <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={headingId} className="flex max-h-[95dvh] w-full max-w-5xl flex-col rounded-2xl border border-border bg-surface text-foreground shadow-xl">
         <header className="flex items-start justify-between gap-3 border-b border-border p-4">
-          <div><h2 ref={headingRef} tabIndex={-1} id={headingId} className="text-lg font-bold">Importar catálogo do fornecedor</h2><p className="mt-1 text-xs text-muted-foreground">PDF ou fotos da sua lista de preços. A IA extrai vários produtos para você revisar.</p></div>
+          <div><h2 ref={headingRef} tabIndex={-1} id={headingId} className="text-lg font-bold">{copy('catalog.title', 'Importar catálogo do fornecedor')}</h2><p className="mt-1 text-xs text-muted-foreground">PDF ou fotos da sua lista de preços. A IA extrai vários produtos para você revisar.</p></div>
           <button type="button" disabled={isSaving} onClick={onClose} aria-label="Fechar importação" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg hover:bg-muted disabled:opacity-50"><X className="h-5 w-5" /></button>
         </header>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
@@ -154,12 +187,13 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
             <button type="button" disabled={isReading || isSaving} onClick={() => pdfRef.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-border p-3 text-sm hover:bg-muted disabled:opacity-50"><FileText className="h-5 w-5" />Enviar PDF</button>
           </div>
           <p className="text-xs text-muted-foreground">PDF: até 3 MB por arquivo. Fotos: JPEG, PNG ou WebP. Cadastre até 200 itens por lote, com estoque zerado. Preços que não constarem no arquivo ficam em branco.</p>
-          {(status || isReading) && <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-xl bg-muted p-3 text-sm">{isReading && <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}{status}{isReading && <button type="button" onClick={cancelReading} className="ml-auto shrink-0 font-semibold text-primary">Interromper</button>}</div>}
+          {(status || isReading) && <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-xl bg-muted p-3 text-sm">{(isReading || isSaving) && <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}{status}{isReading && <button type="button" onClick={cancelReading} className="ml-auto shrink-0 font-semibold text-primary">Interromper</button>}</div>}
           {error && <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950 dark:text-amber-100">{error}</p>}
           <datalist id={categoriesId}>{availableCategories.map(category => <option key={category} value={category} />)}</datalist>
           <fieldset disabled={isReading || isSaving} className="space-y-3 disabled:opacity-70">
             {drafts.map((row, index) => (
-              <article key={row.id} className="rounded-2xl border border-border p-3">
+              <article key={row.id} id={`catalog-row-${row.id}`} tabIndex={-1} aria-describedby={rowErrors[row.id] ? `catalog-error-${row.id}` : undefined} className={`rounded-2xl border p-3 ${rowErrors[row.id] ? 'border-red-500 ring-1 ring-red-500' : 'border-border'}`}>
+                {rowErrors[row.id] && <p id={`catalog-error-${row.id}`} className="mb-3 text-sm font-semibold text-red-700 dark:text-red-300">{rowErrors[row.id]}</p>}
                 <div className="mb-3 flex items-center justify-between gap-2"><label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={row.selected} onChange={event => update(row.id, { selected: event.target.checked && (!duplicated(row, index) || !!row.allowDuplicate) })} />Produto {index + 1}</label><button type="button" aria-label={`Remover produto ${index + 1}`} onClick={() => setDrafts(previous => previous.filter(item => item.id !== row.id))} className="rounded-lg p-2 text-red-600 hover:bg-muted"><Trash2 className="h-4 w-4" /></button></div>
                 {duplicated(row, index) && <div className="mb-3 rounded-lg border border-amber-500 p-3 text-xs">
                   <p className="font-semibold">Duplicado suspeito: {match(row)?.name || row.name}. Desmarcado por padrão.</p>
@@ -193,8 +227,9 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
           </fieldset>
         </div>
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-4">
+          {error && <p className="w-full text-sm font-semibold text-amber-800 dark:text-amber-300">{Object.keys(rowErrors).length ? copy('catalog.fix', 'Confira os dados antes de repetir.') : error}</p>}
           <div><p className="text-xs text-muted-foreground">{drafts.filter(row => row.selected).length} selecionados. Confira os valores antes de salvar.</p><div className="mt-1 flex gap-3 text-xs"><button type="button" disabled={isReading || isSaving} onClick={() => setDrafts(previous => previous.map((row, index) => ({ ...row, selected: !duplicated(row, index) || !!row.allowDuplicate })))} className="text-primary hover:underline">Selecionar todos</button><button type="button" disabled={isReading || isSaving} onClick={() => setDrafts(previous => previous.map(row => ({ ...row, selected: false })))} className="text-primary hover:underline">Desmarcar todos</button></div></div>
-          <button type="button" onClick={save} disabled={isReading || isSaving || !drafts.some(row => row.selected)} className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">{isSaving ? 'Salvando produtos...' : 'Cadastrar selecionados'}</button>
+          <button type="button" onClick={save} disabled={isReading || isSaving || !drafts.some(row => row.selected)} className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">{isSaving ? copy('catalog.saving', 'Salvando produtos...') : copy('catalog.save', 'Cadastrar selecionados')}</button>
         </footer>
       </div>
     </div>, document.body

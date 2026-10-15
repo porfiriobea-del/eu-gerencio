@@ -127,7 +127,7 @@ test('supplier import offers camera/gallery/PDF and requires reviewed prices bef
   await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Cadastrar selecionados'}));});
   assert.equal(submitted.length,1);assert.equal(submitted[0].unitCost,5);assert.equal(submitted[0].stock,0);
   assert.equal(ui.queryByRole('dialog'),null);
-  assert.match(ui.getByRole('status').textContent,/1 produtos do seu catálogo/);
+  assert.match(ui.getByRole('status').textContent,/1 produto do seu catálogo/);
 });
 
 test('catalogue reading failure preserves the modal and manual entry',async()=>{
@@ -230,4 +230,53 @@ test('supplier half-pack choice recalculates cost, persists five carteiras and p
  fireEvent.click(ui.getByTitle('Editar Produto e Estoque'));
  assert.equal(ui.getByRole('combobox',{name:'purchase.size'}).value,'5');
  assert.ok(ui.getByDisplayValue('40'));
+});
+
+test('catalog validation highlights the invalid row and a failed save preserves reviewed values for retry',async()=>{
+ const ui=importer();await upload(ui);
+ fireEvent.click(ui.getByRole('button',{name:'Cadastrar selecionados'}));
+ assert.ok(ui.getByRole('alert'));
+ assert.ok(document.querySelector('article[aria-describedby]'));
+ fireEvent.change(ui.getByLabelText('Preço de venda (R$)'),{target:{value:'9'}});
+ let attempts=0,firstIds;
+ globalThis.__uiApi.importSupplierCatalog=async(products,options)=>{
+  attempts++;assert.equal(products[0].basePrice,9);
+  if(attempts===1){firstIds=options.draftIds;throw new Error('Network failure');}
+  assert.deepEqual(options.draftIds,firstIds);return 1;
+ };
+ await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Cadastrar selecionados'}));});
+ assert.ok(ui.getByRole('dialog'));assert.ok(ui.getByDisplayValue(draft.name));
+ assert.equal(ui.getByLabelText('Preço de venda (R$)').value,'9');
+ assert.equal(ui.getByRole('button',{name:'Cadastrar selecionados'}).disabled,false);
+ await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Cadastrar selecionados'}));});
+ assert.equal(attempts,2);assert.equal(ui.queryByRole('dialog'),null);
+});
+
+test('rapid repeated clicks dispatch only one selected catalogue save',async()=>{
+ const ui=importer();await upload(ui);fireEvent.change(ui.getByLabelText('Preço de venda (R$)'),{target:{value:'9'}});
+ let resolve,calls=0;
+ globalThis.__uiApi.importSupplierCatalog=()=>{calls++;return new Promise(done=>{resolve=done;});};
+ await act(async()=>{const button=ui.getByRole('button',{name:'Cadastrar selecionados'});fireEvent.click(button);fireEvent.click(button);});
+ assert.equal(calls,1);assert.equal(ui.getByRole('button',{name:'Salvando produtos...'}).disabled,true);
+ await act(async()=>{resolve(1);});assert.equal(ui.queryByRole('dialog'),null);
+});
+
+test('cancelled duplicate review does not write other selected products or close the importer',async()=>{
+ const ui=importer({onBeforeSave:async()=>false});await upload(ui);fireEvent.change(ui.getByLabelText('Preço de venda (R$)'),{target:{value:'9'}});
+ globalThis.__uiApi.importSupplierCatalog=()=>assert.fail('Cancelled review must not insert');
+ await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Cadastrar selecionados'}));});
+ assert.ok(ui.getByRole('dialog'));assert.equal(ui.getByRole('button',{name:'Cadastrar selecionados'}).disabled,false);
+});
+
+test('catalogue saves only checked rows and retains unchecked drafts after reopening',async()=>{
+ const ui=importer();
+ globalThis.__recognizeCatalog=async()=>({products:[{...draft,id:'chosen',basePrice:8},{...draft,id:'leftover',name:'Outro produto',basePrice:9}],truncated:false});
+ await upload(ui);
+ fireEvent.click(ui.getByRole('checkbox',{name:'Produto 2'}));
+ let saved;
+ globalThis.__uiApi.importSupplierCatalog=async(products,options)=>{saved={products,options};return products.length;};
+ await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Cadastrar selecionados'}));});
+ assert.equal(saved.products.length,1);assert.equal(saved.products[0].name,draft.name);assert.deepEqual(saved.options.draftIds,['chosen']);
+ fireEvent.click(ui.getByRole('button',{name:'Abrir importação'}));
+ assert.ok(ui.getByDisplayValue('Outro produto'));assert.equal(ui.queryByDisplayValue(draft.name),null);
 });

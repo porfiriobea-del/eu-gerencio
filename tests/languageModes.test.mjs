@@ -15,6 +15,7 @@ const mocks = {
  api: `export const subscribeMovements=cb=>{globalThis.__records=cb;cb(globalThis.__initialRecords||[]);return()=>{};};
  export const subscribeSettings=cb=>{cb(globalThis.__initialSettings||{storeName:'Loja Teste',theme:'standard',languageMode:'neutral',simpleViewMode:false});return()=>{};};
  export const subscribeCustomers=cb=>{cb([]);return()=>{};};export const subscribeProducts=subscribeCustomers;
+ export const importSupplierCatalog=async()=>0;export const adjustProductStock=async()=>{};
  export const updateSettings=async patch=>{globalThis.__settingsPatches.push(patch);};
  export const getSalesByDateRange=async()=>[];export const getPurchasesByDateRange=async()=>[];export const deleteEntireAccountData=async()=>{};`,
  auth: 'export const deleteUserAccountAuth=async()=>{};',
@@ -27,11 +28,11 @@ const mocks = {
  supabase:'export const GOOGLE_SHEETS_WEBHOOK_URL="";export const getGoogleSheetsWebhookUrl=()=>"";export const setGoogleSheetsWebhookUrl=()=>{};export const testGoogleSheetsWebhook=async()=>({});export const getGoogleSheetsLogs=()=>[];export const clearGoogleSheetsLogs=()=>{};export const isGoogleSheetsWebhookEnabled=()=>false;export const setGoogleSheetsWebhookEnabled=()=>{};'
 };
 for(const name of ['ExportPeriodModal','ThemeSelectorDropdown','CardFeeSettingsSection','FeedbackSection']) mocks[name]=`export const ${name}=()=>null;`;
-await build({stdin:{contents:"export * from './src/lib/preferencesContext'; export * from './src/components/GlobalMovementHistory'; export {default as SettingsView} from './src/pages/SettingsView';",resolveDir:new URL('..',import.meta.url).pathname,loader:'tsx'},bundle:true,packages:'external',platform:'node',format:'esm',jsx:'automatic',outfile:`${dir}/language.mjs`,plugins:[{name:'records',setup(b){
+await build({stdin:{contents:"export * from './src/lib/preferencesContext'; export * from './src/components/GlobalMovementHistory'; export {default as SettingsView} from './src/pages/SettingsView'; export {CatalogImportModal} from './src/components/CatalogImportModal';",resolveDir:new URL('..',import.meta.url).pathname,loader:'tsx'},bundle:true,packages:'external',platform:'node',format:'esm',jsx:'automatic',outfile:`${dir}/language.mjs`,plugins:[{name:'records',setup(b){
  b.onResolve({filter:/.*/},args=>{const name=args.path.split('/').at(-1);return mocks[name]?{path:name,namespace:'mock-records'}:undefined;});
  b.onLoad({filter:/.*/,namespace:'mock-records'},args=>({contents:mocks[args.path],loader:'js'}));
 }}]});
-const {PreferencesProvider,usePreferences,GlobalMovementHistory,VOCABULARY,SettingsView}=await import(pathToFileURL(`${dir}/language.mjs`));
+const {PreferencesProvider,usePreferences,GlobalMovementHistory,VOCABULARY,SettingsView,CatalogImportModal}=await import(pathToFileURL(`${dir}/language.mjs`));
 let prefs;
 function Controls(){prefs=usePreferences();return React.createElement('div',null,['technical','neutral','basic'].map(mode=>React.createElement('button',{key:mode,onClick:()=>prefs.setLanguageMode(mode)},mode)),React.createElement('output',null,`${prefs.languageMode}/${prefs.simpleViewMode}/${prefs.v('debt.balance')}`));}
 function setup(){return render(React.createElement(MemoryRouter,null,React.createElement(PreferencesProvider,null,React.createElement(Controls),React.createElement(GlobalMovementHistory))));}
@@ -96,4 +97,19 @@ test('Settings uses compact sections in simple mode and autosaves the current la
  assert.equal(globalThis.__settingsPatches.at(-1).languageMode,'basic');
  assert.equal(globalThis.__settingsPatches.at(-1).simpleViewMode,true);
  delete globalThis.__settingsPatches;delete globalThis.__initialSettings;
+});
+
+test('catalog save action and validation use the active language mode',()=>{
+ for(const [mode,action,prefix] of [
+  ['basic','Salvar produtos marcados','Falta preencher alguns dados.'],
+  ['neutral','Cadastrar selecionados','Revise os dados dos produtos selecionados.'],
+  ['technical','Confirmar cadastros selecionados','Corrija os dados inválidos antes de confirmar o lote.']
+ ]){
+  localStorage.setItem('app_lang_mode',mode);
+  const ui=render(React.createElement(PreferencesProvider,null,React.createElement(CatalogImportModal,{isOpen:true,onClose(){},availableCategories:['Diversos'],existingProductNames:[]})));
+  fireEvent.click(ui.getByRole('button',{name:'Adicionar produto manualmente'}));
+  fireEvent.click(ui.getByRole('button',{name:action}));
+  assert.ok(ui.getByRole('alert').textContent.startsWith(prefix));
+  assert.ok(ui.getByRole('dialog'));cleanup();
+ }
 });

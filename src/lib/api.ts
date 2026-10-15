@@ -390,7 +390,7 @@ function catalogStore(ownerId: string) {
 }
 
 /** Supplier drafts are reviewed by the merchant; never seed generic products or fictitious stock. */
-export const importSupplierCatalog = withActionDeadline(async (products: CatalogProduct[], options?: { allowDuplicates?: boolean }): Promise<number> => {
+export const importSupplierCatalog = withActionDeadline(async (products: CatalogProduct[], options?: { allowDuplicates?: boolean; draftIds?: string[] }): Promise<number> => {
   const ownerId = getEffectiveOwnerId();
   if (!ownerId) throw new Error('Entre na sua conta para importar o catálogo.');
   if (!products.length || products.length > 200) throw new Error('Importe entre 1 e 200 produtos por vez.');
@@ -402,15 +402,28 @@ export const importSupplierCatalog = withActionDeadline(async (products: Catalog
       throw new Error('Confira os nomes, custos, medidas e preços dos produtos antes de importar.');
     }
   }
+  if (options?.draftIds && (options.draftIds.length !== products.length || new Set(options.draftIds).size !== products.length || options.draftIds.some(id => !/^[a-zA-Z0-9_-]{1,160}$/.test(id)))) {
+    throw new Error('A revisão do catálogo está inválida. Reabra os produtos antes de cadastrar.');
+  }
   const count = options?.allowDuplicates ? await (async () => {
-    const refs = products.map(() => doc(collection(db, 'products')));
-    await runTransaction(db, async transaction => {
+    // Stable IDs make an uncertain confirmation safe to retry, even for allowed duplicates.
+    const refs = options.draftIds
+      ? await Promise.all(options.draftIds.map(async id => doc(db, 'products', await catalogDocumentId(ownerId, `supplier-draft:${id}`))))
+      : products.map(() => doc(collection(db, 'products')));
+    return await runTransaction(db, async transaction => {
+      const existing = options.draftIds ? await Promise.all(refs.map(ref => transaction.get(ref))) : [];
       const now = Date.now();
-      products.forEach((product, index) => transaction.set(refs[index], { ...product, ownerId, createdAt: now, updatedAt: now }));
+      let added = 0;
+      products.forEach((product, index) => {
+        if (existing[index]?.exists()) return;
+        transaction.set(refs[index], { ...product, ownerId, createdAt: now, updatedAt: now });
+        added++;
+      });
+      return added;
     });
-    return products.length;
   })() : await executeCatalogImport(ownerId, catalogStore(ownerId), products);
-  recordMovement({
+
+  if (count > 0) recordMovement({
       sourceOwnerId: ownerId, type: 'product_create', description: `Catálogo do fornecedor: ${count} produtos cadastrados.`, quantity: count }).catch(() => {});
   if (count > 0) reportUsage('produto_cadastrado', ownerId);
   return count;
