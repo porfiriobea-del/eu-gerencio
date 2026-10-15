@@ -17,6 +17,31 @@ export async function sendReport(data: Record<string, unknown>, storeId?: string
     return response.ok && result?.success === true;
   } catch { return false; }
 }
+type PendingUsage = { evento: UsageEvent; storeId: string; valor: number; userId: string };
+const pendingUsage: PendingUsage[] = [];
+let activeUsage = 0;
+const MAX_CONCURRENT_USAGE = 2;
+
+function flushUsageQueue(): void {
+  while (activeUsage < MAX_CONCURRENT_USAGE && pendingUsage.length) {
+    const job = pendingUsage.shift()!;
+    if (auth.currentUser?.uid !== job.userId) continue;
+    activeUsage++;
+    void Promise.resolve().then(() => {
+      if (auth.currentUser?.uid !== job.userId) return false;
+      return sendReport({ categoria: 'uso', evento: job.evento, valor: job.valor }, job.storeId);
+    }).catch(() => false).finally(() => {
+      activeUsage--;
+      flushUsageQueue();
+    });
+  }
+}
+
+/** Optional telemetry: never await this from a sale, purchase or product mutation. */
 export function reportUsage(evento: UsageEvent, storeId: string, valor = 0): void {
-  void sendReport({ categoria: 'uso', evento, valor }, storeId);
+  const userId = auth.currentUser?.uid;
+  if (!userId || !storeId || !Number.isFinite(valor) || valor < 0) return;
+  pendingUsage.push({ evento, storeId, valor, userId });
+  // No token, hash or network work on the business operation's call stack.
+  queueMicrotask(flushUsageQueue);
 }
