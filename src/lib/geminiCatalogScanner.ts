@@ -38,6 +38,7 @@ export async function recognizeCatalog(dataUrl: string, categories: string[], si
     if (!response.ok || !result) {
       console.error('[Gemini catalog scanner]', {
         code: typeof result?.code === 'string' ? result.code : 'HTTP_ERROR', status: response.status,
+        ...(typeof result?.providerReason === 'string' ? { providerReason: result.providerReason } : {}),
         providerStatus: typeof result?.providerStatus === 'number' ? result.providerStatus : null,
         requestId: response.headers.get('x-request-id'), mimeType: data[1].toLowerCase(), base64Length: data[2].length
       });
@@ -54,9 +55,9 @@ export async function recognizeCatalog(dataUrl: string, categories: string[], si
         INVALID_JSON_RESPONSE: 'A IA não conseguiu organizar os produtos desta imagem. Envie menos itens por foto ou preencha manualmente.',
         INVALID_CATALOG_RESPONSE: 'A IA não conseguiu organizar os produtos desta imagem. Envie menos itens por foto ou preencha manualmente.',
         TIMEOUT: 'A leitura demorou demais. Envie menos páginas ou uma foto com menos produtos.',
-        REQUEST_REJECTED: 'O serviço não conseguiu processar este arquivo. Exporte a foto novamente como JPEG ou tente um PDF menor; você também pode preencher manualmente.'
+        REQUEST_REJECTED: 'A IA recusou a leitura após as tentativas automáticas. Tente novamente mais tarde ou adicione os produtos manualmente.'
       };
-      throw new Error(messages[result?.code] || 'Não foi possível ler o catálogo agora. Tente outra foto ou PDF, ou preencha manualmente.');
+      throw Object.assign(new Error(messages[result?.code] || 'Não foi possível ler o catálogo agora. Tente outra foto ou PDF, ou preencha manualmente.'), { code: result?.code });
     }
     if (result.success !== true || !Array.isArray(result.products) || result.products.length === 0 || result.products.length > 200) throw new Error('A IA não identificou produtos. Tente um arquivo mais legível ou preencha manualmente.');
     const products: SupplierDraft[] = [];

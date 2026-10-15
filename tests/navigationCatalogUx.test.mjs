@@ -342,3 +342,15 @@ test('catalogue optional initial inventory is manually reviewed and sent with se
  assert.equal(submitted[0].stock,24);assert.equal(submitted[0].initialStock,24);
  assert.equal(ui.queryByRole('dialog'),null);
 });
+
+
+test('catalogue provider rejection appears once and keeps manual entry available',async()=>{
+ const ui=importer();
+ globalThis.__recognizeCatalog=async()=>{throw Object.assign(new Error('provider failure'),{code:'REQUEST_REJECTED'});};
+ await upload(ui);
+ const alert=ui.getByRole('alert');
+ assert.match(alert.textContent,/IA recusou/);
+ assert.equal(ui.getAllByText(alert.textContent).length,1);
+ assert.ok(ui.getByRole('button',{name:'Adicionar produto manualmente'}));
+ assert.ok(ui.getByRole('dialog'));
+});

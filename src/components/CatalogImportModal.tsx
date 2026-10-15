@@ -114,7 +114,7 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
     } catch (error) {
       if (generation === generationRef.current) {
         setStatus('A leitura não foi concluída. Os produtos já revisados foram mantidos.');
-        setError(error instanceof Error ? error.message : 'Não foi possível ler o catálogo. Preencha os produtos manualmente.');
+        setError((error as { code?: string })?.code === 'REQUEST_REJECTED' ? copy('catalog.rejected', 'A IA recusou a leitura. Tente mais tarde ou adicione os produtos manualmente.') : error instanceof Error ? error.message : 'Não foi possível ler o catálogo. Preencha os produtos manualmente.');
       }
     } finally {
       if (generation === generationRef.current) { setIsReading(false); readingRef.current = false; controllerRef.current = null; }
@@ -237,7 +237,7 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
         </div>
         <footer className="flex shrink-0 flex-col items-stretch justify-between gap-3 border-t border-border bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:flex-wrap sm:items-center sm:p-4">
           {drafts.length > 0 && !drafts.some(row => row.selected) && <p role="status" className="w-full text-sm font-semibold text-amber-800 dark:text-amber-300">{copy('catalog.unchecked', 'Nenhum produto selecionado. Marque os desejados e revise os avisos de duplicidade.')}</p>}
-          {error && <p className="w-full text-sm font-semibold text-amber-800 dark:text-amber-300">{Object.keys(rowErrors).length ? copy('catalog.fix', 'Confira os dados antes de repetir.') : error}</p>}
+          {error && Object.keys(rowErrors).length > 0 && <p className="w-full text-sm font-semibold text-amber-800 dark:text-amber-300">{copy('catalog.fix', 'Confira os dados antes de repetir.')}</p>}
           <div><p className="text-xs text-muted-foreground">{drafts.filter(row => row.selected).length} selecionados. Confira os valores antes de salvar.</p><div className="mt-1 flex gap-3 text-xs"><button type="button" disabled={isReading || isSaving} onClick={() => setDrafts(previous => previous.map((row, index) => ({ ...row, selected: !duplicated(row, index) || !!row.allowDuplicate })))} className="min-h-11 text-primary hover:underline">Selecionar todos</button><button type="button" disabled={isReading || isSaving} onClick={() => setDrafts(previous => previous.map(row => ({ ...row, selected: false })))} className="min-h-11 text-primary hover:underline">Desmarcar todos</button></div></div>
           <button type="button" onClick={save} disabled={isReading || isSaving || !drafts.length} className="min-h-11 w-full rounded-xl bg-primary px-4 py-3 sm:w-auto text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">{isSaving ? copy('catalog.saving', 'Salvando produtos...') : copy('catalog.save', 'Cadastrar selecionados')}</button>
         </footer>

@@ -97,14 +97,14 @@ for (const scenario of ['schema-rejected','fallback-schema-rejected','always-rej
   const calls=[],logs=[];t.mock.method(console,'error',(_label,data)=>logs.push(data));
   globalThis.__generateModel=async args=>{
    calls.push(args);
-   assert.equal(args.config.responseMimeType,'application/json');
+   if (args.config.responseJsonSchema) assert.equal(args.config.responseMimeType,'application/json');
    if(scenario==='fallback-schema-rejected'&&calls.length===1)throw {status:404};
    if(args.config.responseJsonSchema||scenario==='always-rejected')throw {status:400};
    return {text:scenario==='invalid-json-after-retry'?'{bad':JSON.stringify(catalog)};
   };
   const result=await invoke('catalog');
-  assert.equal(result.status,['always-rejected','invalid-json-after-retry'].includes(scenario)?502:200);
-  assert.equal(calls.length,scenario==='fallback-schema-rejected'?3:2);
+  assert.equal(result.status,scenario==='always-rejected'?503:scenario==='invalid-json-after-retry'?502:200);
+  assert.equal(calls.length,scenario==='always-rejected'?4:scenario==='fallback-schema-rejected'?3:2);
   assert.ok(!calls.at(-1).config.responseJsonSchema);
   assert.deepEqual(calls[0].contents,calls.at(-1).contents);
   assert.equal(logs.filter(log=>log.code==='JSON_MODE_RETRY').length,1);
@@ -133,4 +133,37 @@ for (const name of ['product','catalog']) {
    for(const call of calls)assert.ok(call.config.httpOptions.timeout<=20000);
   });
  }
+}
+
+
+for (const scenario of ['json-mode-rejected', 'token-limit-rejected', 'primary-model-rejected', 'all-configurations-rejected']) {
+ test(`catalogue recovers from incompatible provider options: ${scenario}`, async t => {
+  const key=process.env.GEMINI_API_KEY, model=process.env.GEMINI_MODEL;
+  process.env.GEMINI_API_KEY='mock-only';process.env.GEMINI_MODEL='gemini-3.5-flash';
+  t.after(()=>{for(const [name,value] of [['GEMINI_API_KEY',key],['GEMINI_MODEL',model]]){if(value===undefined)delete process.env[name];else process.env[name]=value;}delete globalThis.__generateModel;});
+  const calls=[], logs=[];
+  t.mock.method(console,'error',(_label,details)=>logs.push(details));
+  globalThis.__generateModel=async args=>{
+   calls.push(args);
+   assert.equal(args.contents[0].parts[1].inlineData.data,'aW1hZ2U=');
+   const rejected=scenario==='all-configurations-rejected'||scenario==='primary-model-rejected'&&args.model==='gemini-3.5-flash'||scenario==='json-mode-rejected'&&args.config.responseMimeType||scenario==='token-limit-rejected'&&args.config.maxOutputTokens;
+   if(rejected)throw Object.assign(new Error('responseMimeType unsupported; private-document-text; secret-key-value'),{status:400});
+   return {text:JSON.stringify(catalog)};
+  };
+  const result=await invoke('catalog');
+  assert.equal(result.status,scenario==='all-configurations-rejected'?503:200);
+  assert.equal(calls.length,['primary-model-rejected','all-configurations-rejected'].includes(scenario)?4:3);
+  assert.equal(calls.at(-1).config.responseMimeType,undefined);
+  assert.equal(calls.at(-1).config.responseJsonSchema,undefined);
+  assert.equal(calls.at(-1).config.maxOutputTokens,undefined);
+  assert.ok(calls.every(call=>call.config.httpOptions.timeout<=20000));
+  assert.ok(!JSON.stringify(logs).includes('private-document-text'));
+  assert.ok(!JSON.stringify(logs).includes('secret-key-value'));
+  if(scenario==='all-configurations-rejected'){
+   assert.equal(result.body.code,'REQUEST_REJECTED');
+   assert.equal(result.body.providerReason,'CONFIGURATION_REJECTED');
+   assert.match(result.body.error,/tentativas automáticas/);
+  }
+  if(scenario==='primary-model-rejected')assert.equal(calls.at(-1).model,'gemini-3.1-flash-lite');
+ });
 }
