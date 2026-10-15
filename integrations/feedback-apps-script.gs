@@ -68,22 +68,47 @@ function corrigirResumo(book) {
   if (!summary || !feedback) return;
   // Only update the known summary from the workbook reviewed; leave other layouts alone.
   if (summary.getRange('A3').getValue() !== 'Feedbacks recebidos') return;
-  const original = feedback.getRange('A1').getValue() === 'Data';
-  const rating = original ? 'D' : 'E', store = original ? 'B' : 'C', type = original ? 'E' : 'F';
-  const formulas = {
-    B3: '=COUNTA(Feedback!A2:A)',
-    B4: '=IFERROR(AVERAGE(Feedback!' + rating + '2:' + rating + '),0)',
-    B5: '=IFERROR(COUNTUNIQUE(FILTER(Feedback!' + store + '2:' + store + ',Feedback!' + store + '2:' + store + '<>"")),0)',
-    B7: '=COUNTA(Uso!A2:A)',
-    B8: '=IFERROR(COUNTUNIQUE(FILTER(Uso!B2:B,Uso!B2:B<>"")),0)',
-    B9: '=IFERROR(COUNTUNIQUE(FILTER(ARRAYFORMULA(INT(Uso!A2:A)),Uso!A2:A<>"")),0)',
-    B10: '=IFERROR(B7/B9,0)', B11: '=COUNTIF(Uso!D2:D,"venda")', B12: '=IFERROR(B11/B9,0)'
+  const usage = book.getSheetByName('Uso');
+  if (!usage) return;
+  const feedbackRows = feedback.getDataRange().getValues();
+  const usageRows = usage.getDataRange().getValues();
+  const original = feedbackRows[0][0] === 'Data';
+  const ratingColumn = original ? 3 : 4, storeColumn = original ? 1 : 2, typeColumn = original ? 4 : 5;
+  const feedbacks = feedbackRows.slice(1).filter(function(row) { return row[0] !== '' && row[0] != null; });
+  const events = usageRows.slice(1).filter(function(row) { return row[0] !== '' && row[0] != null; });
+  const unique = function(rows, column) {
+    return new Set(rows.map(function(row) { return String(row[column] || '').trim(); }).filter(Boolean)).size;
   };
-  [['suggestion','*Sugest*'],['praise','*Elogio*'],['bug','*Problema*'],['question','*vida*'],['other','*Outro*']].forEach(function(pair, index) {
-    formulas['B' + (15 + index)] = '=COUNTIF(Feedback!' + type + '2:' + type + ',"' + pair[0] + '")+COUNTIF(Feedback!' + type + '2:' + type + ',"' + pair[1] + '")';
+  const ratings = feedbacks.map(function(row) {
+    const value = row[ratingColumn];
+    return typeof value === 'number' ? value : Number(String(value == null ? '' : value).replace(',', '.'));
+  }).filter(function(value) { return isFinite(value) && value >= 1 && value <= 5; });
+  const timezone = book.getSpreadsheetTimeZone();
+  const days = new Set();
+  events.forEach(function(row) {
+    const raw = row[0];
+    // Native Sheets dates and legacy ISO timestamps; skip unsupported ambiguous strings.
+    const date = raw instanceof Date ? raw : typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(raw) ? new Date(raw) : null;
+    if (date && !isNaN(date.getTime())) days.add(Utilities.formatDate(date, timezone, 'yyyy-MM-dd'));
   });
-  Object.keys(formulas).forEach(function(cell) {
-    const range = summary.getRange(cell);
-    if (range.getFormula() !== formulas[cell]) range.setFormula(formulas[cell]);
+  const sales = events.filter(function(row) { return String(row[3]).trim() === 'venda'; }).length;
+  const values = {
+    B3: feedbacks.length,
+    B4: ratings.length ? ratings.reduce(function(total, value) { return total + value; }, 0) / ratings.length : 0,
+    B5: unique(feedbacks, storeColumn), B7: events.length, B8: unique(events, 1),
+    B9: days.size, B10: days.size ? events.length / days.size : 0,
+    B11: sales, B12: days.size ? sales / days.size : 0,
+    B15: 0, B16: 0, B17: 0, B18: 0, B19: 0
+  };
+  feedbacks.forEach(function(row) {
+    const type = String(row[typeColumn] || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    const cell = type === 'suggestion' || type.indexOf('sugest') >= 0 ? 'B15'
+      : type === 'praise' || type.indexOf('elogio') >= 0 ? 'B16'
+      : type === 'bug' || type.indexOf('problema') >= 0 || type === 'erro' ? 'B17'
+      : type === 'question' || type.indexOf('duvida') >= 0 ? 'B18'
+      : type === 'other' || type.indexOf('outro') >= 0 ? 'B19' : null;
+    if (cell) values[cell]++;
   });
+  // setValue replaces broken formulas with numeric results; no locale parsing involved.
+  Object.keys(values).forEach(function(cell) { summary.getRange(cell).setValue(values[cell]); });
 }

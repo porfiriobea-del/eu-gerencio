@@ -60,18 +60,35 @@ test('Apps Script writes original Feedback headers without relocating data or le
  assert.equal(JSON.stringify(rows).includes('test-secret'),false);
 });
 
-test('summary repairs original column references, excludes blank days and counts app category codes', () => {
- const formulas = {};
- const summary = { getRange: cell => ({ getValue: () => cell === 'A3' ? 'Feedbacks recebidos' : '', getFormula: () => '', setFormula: value => { formulas[cell] = value; } }) };
- const feedback = { getRange: () => ({ getValue: () => 'Data' }) };
- const context = vm.createContext({});
+test('summary replaces broken formulas with correct locale-independent numeric results', () => {
+ const values = {};
+ const summary = { getRange: cell => ({ getValue: () => cell === 'A3' ? 'Feedbacks recebidos' : '#ERROR!', setValue: value => { values[cell] = value; } }) };
+ const feedback = { getDataRange: () => ({ getValues: () => [
+  ['Data','Loja','Usuário','Nota','Tipo'],
+  [new Date(), 'loja_a','user',5,'praise'],
+  [new Date(), 'loja_a','user','','Sugestão'],
+  [new Date(), 'loja_b','user','3,0','bug'],
+  [new Date(), 'loja_b','user',0,'Dúvida de uso'],
+  [new Date(), 'loja_b','user',4,'other']
+ ] }) };
+ const usage = { getDataRange: () => ({ getValues: () => [
+  ['Data','Loja','Usuário','Evento','Valor'],
+  [new Date('2026-10-14T10:00:00Z'),'loja_a','user','venda',10],
+  [new Date('2026-10-14T15:00:00Z'),'loja_a','user','foto_ia',0],
+  ['2026-10-15T12:00:00Z','loja_b','user','venda',20],
+  ['', '', '', '', '']
+ ] }) };
+ const context = vm.createContext({ Date, Set, Utilities: { formatDate: date => date.toISOString().slice(0,10) } });
  vm.runInContext(source, context);
- context.corrigirResumo({ getSheetByName: name => name === 'Resumo' ? summary : name === 'Feedback' ? feedback : null });
- assert.equal(Object.keys(formulas).length, 14);
- assert.match(formulas.B4, /AVERAGE\(Feedback!D/);
- assert.match(formulas.B5, /FILTER\(Feedback!B/);
- assert.match(formulas.B9, /FILTER\(ARRAYFORMULA\(INT\(Uso!A2:A\)\)/);
- assert.equal(formulas.B9.includes('-1'), false);
- assert.match(formulas.B16, /Feedback!E2:E,"praise"/);
- assert.match(formulas.B16, /\*Elogio\*/);
+ context.corrigirResumo({ getSpreadsheetTimeZone: () => 'UTC', getSheetByName: name => ({Resumo:summary, Feedback:feedback, Uso:usage})[name] });
+ assert.deepEqual(values, {B3:5,B4:4,B5:2,B7:3,B8:2,B9:2,B10:1.5,B11:2,B12:1,B15:1,B16:1,B17:1,B18:1,B19:1});
+});
+test('empty summary writes zeros rather than formula errors', () => {
+ const values = {};
+ const summary = {getRange: cell => ({getValue: () => cell === 'A3' ? 'Feedbacks recebidos' : '',setValue: value => {values[cell] = value;}})};
+ const sheet = {getDataRange: () => ({getValues: () => [['Data']]})};
+ const context = vm.createContext({Date,Set});vm.runInContext(source,context);
+ context.corrigirResumo({getSpreadsheetTimeZone: () => 'America/Sao_Paulo', getSheetByName: name => name === 'Resumo' ? summary : sheet});
+ assert.equal(Object.keys(values).length,14);
+ assert.ok(Object.values(values).every(value => value === 0));
 });
