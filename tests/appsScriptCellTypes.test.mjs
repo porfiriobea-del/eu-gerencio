@@ -67,7 +67,7 @@ test('summary repairs original column references, excludes blank days and counts
  const context = vm.createContext({});
  vm.runInContext(source, context);
  context.corrigirResumo({ getSheetByName: name => name === 'Resumo' ? summary : name === 'Feedback' ? feedback : null });
- assert.equal(Object.keys(formulas).length, 15);
+ assert.equal(Object.keys(formulas).length, 14);
  assert.match(formulas.B4, /AVERAGE\(Feedback!D/);
  assert.match(formulas.B5, /FILTER\(Feedback!B/);
  assert.match(formulas.B9, /FILTER\(ARRAYFORMULA\(INT\(Uso!A2:A\)\)/);
