@@ -62,7 +62,7 @@ test('Apps Script writes original Feedback headers without relocating data or le
 
 test('summary replaces broken formulas with correct locale-independent numeric results', () => {
  const values = {};
- const summary = { getRange: cell => ({ getValue: () => cell === 'A3' ? 'Feedbacks recebidos' : '#ERROR!', setValue: value => { values[cell] = value; } }) };
+ const summary = { getRange: cell => ({ getValue: () => cell === 'A3' ? 'Feedbacks recebidos — título alterado' : '#ERROR!', setValue: value => { values[cell] = value; } }) };
  const feedback = { getDataRange: () => ({ getValues: () => [
   ['Data','Loja','Usuário','Nota','Tipo'],
   [new Date(), 'loja_a','user',5,'praise'],
@@ -91,4 +91,20 @@ test('empty summary writes zeros rather than formula errors', () => {
  context.corrigirResumo({getSpreadsheetTimeZone: () => 'America/Sao_Paulo', getSheetByName: name => name === 'Resumo' ? summary : sheet});
  assert.equal(Object.keys(values).length,14);
  assert.ok(Object.values(values).every(value => value === 0));
+});
+
+test('manual repair targets original workbook and explicitly verifies numeric cells', () => {
+ const values = {};
+ let target, destination, toast;
+ const summary = {getRange: cell => ({getValue: () => values[cell], getFormula: () => '', setValue: value => { values[cell] = value; }})};
+ const data = {getDataRange: () => ({getValues: () => [['Data']]})};
+ const book = {getSpreadsheetTimeZone: () => 'UTC',getSheetByName: name => name === 'Resumo' ? summary : data,toast: message => {toast=message;}};
+ const context=vm.createContext({Date,Set, console:{log(){}},SpreadsheetApp:{openById: id => {target=id;return book;},flush(){}},PropertiesService:{getScriptProperties:()=>({setProperty:(key,value)=>{destination=value;}})}});
+ vm.runInContext(source,context);
+ const result=context.corrigirPlanilhaOriginal();
+ assert.equal(result.updated,true);
+ assert.equal(target,'13oh-mdCTnX-8aBAd8oVdBarglzaMYTZXrd7FRqsX4Ck');
+ assert.equal(destination,target);
+ assert.match(toast,/14 indicadores/);
+ assert.equal(Object.keys(values).length,14);
 });

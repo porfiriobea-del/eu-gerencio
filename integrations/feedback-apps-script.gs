@@ -57,22 +57,36 @@ function reportJson(value) { return ContentService.createTextOutput(JSON.stringi
 
 // Run manually once after deploying, or let the first confirmed report refresh Resumo.
 function corrigirPlanilhaOriginal() {
-  const properties = PropertiesService.getScriptProperties();
-  const id = properties.getProperty('SPREADSHEET_ID') || '13oh-mdCTnX-8aBAd8oVdBarglzaMYTZXrd7FRqsX4Ck';
-  corrigirResumo(SpreadsheetApp.openById(id));
+  // This repair must target the original workbook, even if a stale property points elsewhere.
+  const id = '13oh-mdCTnX-8aBAd8oVdBarglzaMYTZXrd7FRqsX4Ck';
+  const book = SpreadsheetApp.openById(id);
+  const result = corrigirResumo(book);
+  if (!result || !result.updated) throw new Error('Resumo não atualizado: ' + (result ? result.reason : 'resultado ausente'));
   SpreadsheetApp.flush();
+  const summary = book.getSheetByName('Resumo');
+  Object.keys(result.values).forEach(function(cell) {
+    const range = summary.getRange(cell);
+    if (range.getFormula() || range.getValue() !== result.values[cell]) {
+      throw new Error('A correção não foi confirmada na célula ' + cell + '. Verifique proteção da aba e outros scripts.');
+    }
+  });
+  PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', id);
+  console.log(JSON.stringify({status: 'RESUMO_CORRIGIDO', spreadsheetId: id, cells: Object.keys(result.values).length, values: result.values}));
+  book.toast('Resumo corrigido: 14 indicadores atualizados, sem fórmulas.', 'Eu Gerencio', 10);
+  return result;
 }
+
 function corrigirResumo(book) {
   const summary = book.getSheetByName('Resumo');
   const feedback = book.getSheetByName('Feedback');
-  if (!summary || !feedback) return;
-  // Only update the known summary from the workbook reviewed; leave other layouts alone.
-  if (summary.getRange('A3').getValue() !== 'Feedbacks recebidos') return;
+  if (!summary || !feedback) return {updated: false, reason: 'Abas Resumo ou Feedback não encontradas.'};
   const usage = book.getSheetByName('Uso');
-  if (!usage) return;
+  if (!usage) return {updated: false, reason: 'Aba Uso não encontrada.'};
   const feedbackRows = feedback.getDataRange().getValues();
   const usageRows = usage.getDataRange().getValues();
-  const original = feedbackRows[0][0] === 'Data';
+  const firstHeading = String(feedbackRows[0][0] || '').trim();
+  if (firstHeading !== 'Data' && firstHeading !== 'ID') throw new Error('Cabeçalho Feedback desconhecido: esperado Data ou ID em A1.');
+  const original = firstHeading === 'Data';
   const ratingColumn = original ? 3 : 4, storeColumn = original ? 1 : 2, typeColumn = original ? 4 : 5;
   const feedbacks = feedbackRows.slice(1).filter(function(row) { return row[0] !== '' && row[0] != null; });
   const events = usageRows.slice(1).filter(function(row) { return row[0] !== '' && row[0] != null; });
@@ -111,4 +125,5 @@ function corrigirResumo(book) {
   });
   // setValue replaces broken formulas with numeric results; no locale parsing involved.
   Object.keys(values).forEach(function(cell) { summary.getRange(cell).setValue(values[cell]); });
+  return {updated: true, values: values};
 }
