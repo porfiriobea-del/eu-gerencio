@@ -57,7 +57,12 @@ export async function enviarParaPlanilha(req: Request, res: Response) {
       }
       preview = preview.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[REDACTED]')
         .replace(/\+?\d[\d ().-]{7,}\d/g, '[REDACTED]').replace(/\s+/g, ' ').slice(0, 320);
-      console.warn('[Apps Script report]', { code: 'EXPORT_NOT_CONFIRMED', status: response.status,
+      const htmlResponse = /text\/html/i.test(response.headers.get('content-type') || '');
+      const reason = (response.status === 401 || response.status === 403) && htmlResponse
+        ? 'APPS_SCRIPT_ACCESS_DENIED'
+        : result?.code === 'INVALID_SECRET' ? 'APPS_SCRIPT_SECRET_MISMATCH'
+        : result?.code === 'SHEET_SCHEMA_MISMATCH' ? 'SHEET_SCHEMA_MISMATCH' : 'UNCONFIRMED_RESPONSE';
+      console.warn('[Apps Script report]', { code: 'EXPORT_NOT_CONFIRMED', reason, status: response.status,
         contentType: response.headers.get('content-type'), responsePreview: preview });
       return skip();
     }

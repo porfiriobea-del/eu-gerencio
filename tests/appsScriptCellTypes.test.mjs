@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const source = readFileSync(new URL('../integrations/feedback-apps-script.gs', import.meta.url), 'utf8');
-function run(data, incompatible = false, original = false) {
+function run(data, incompatible = false, original = false, summaryFailure = false) {
   const rows = original ? [['Data','Loja (código)','Usuário (código)','Nota','Tipo','Mensagem','Contato (opcional)','Dados brutos']] : [];
   const sheet = {
     getLastRow: () => rows.length,
@@ -16,7 +16,7 @@ function run(data, incompatible = false, original = false) {
     Date, Number, isFinite,
     LockService: { getScriptLock: () => ({ waitLock() {}, hasLock: () => true, releaseLock() {} }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: key => key === 'APPS_SCRIPT_SECRET' ? 'test-secret' : null }) },
-    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: name => name === 'Resumo' ? null : sheet }), flush() {} },
+    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: name => { if (summaryFailure && name === 'Resumo') throw new Error('Protected summary'); return name === 'Resumo' ? null : sheet; } }), flush() {} },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: text => ({ setMimeType: () => JSON.parse(text) }) },
   });
   vm.runInContext(source, context);
@@ -107,4 +107,12 @@ test('manual repair targets original workbook and explicitly verifies numeric ce
  assert.equal(destination,target);
  assert.match(toast,/14 indicadores/);
  assert.equal(Object.keys(values).length,14);
+});
+
+test('a saved usage row stays confirmed even when summary cannot be updated', () => {
+ const {result,rows}=run({categoria:'uso',evento:'venda',valor:10},false,false,true);
+ assert.equal(result.ok,true);
+ assert.equal(result.summaryUpdated,false);
+ assert.equal(rows.length,2);
+ assert.equal(rows[1][4],10);
 });

@@ -5,7 +5,7 @@ function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     const expected = PropertiesService.getScriptProperties().getProperty('APPS_SCRIPT_SECRET');
-    if (!expected || data.secret !== expected) return reportJson({ok: false});
+    if (!expected || data.secret !== expected) return reportJson({ok: false, code: 'INVALID_SECRET'});
     if (!/^loja_[a-f0-9]{64}$/.test(data.loja || '') || !/^usuario_[a-f0-9]{64}$/.test(data.usuario || '')) return reportJson({ok: false});
     let name, headings, row;
     if (data.categoria === 'feedback') {
@@ -47,9 +47,15 @@ function doPost(e) {
       const text = String(value == null ? '' : value); return /^[=+@-]/.test(text) ? "'" + text : text; });
     sheet.appendRow(row);
     sheet.getRange(sheet.getLastRow(), dateColumn).setNumberFormat('yyyy-mm-dd hh:mm:ss');
-    corrigirResumo(book);
+    // Once the row is persisted, a summary failure must not invite duplicate usage writes.
     SpreadsheetApp.flush();
-    return reportJson({ok: true});
+    let summaryUpdated = false;
+    try {
+      const result = corrigirResumo(book);
+      SpreadsheetApp.flush();
+      summaryUpdated = !!(result && result.updated);
+    } catch (error) { console.warn('SUMMARY_UPDATE_FAILED'); }
+    return reportJson({ok: true, summaryUpdated: summaryUpdated});
   } catch (error) { return reportJson({ok: false}); }
   finally { if (lock.hasLock()) lock.releaseLock(); }
 }

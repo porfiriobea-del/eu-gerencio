@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 
 const feedback={ownerId:'owner',category:'suggestion',message:'Melhorar relatórios',storeName:'Private Store',userEmail:'private@test.invalid',rating:5,createdAt:Date.now(),contact:'Contato solicitado'};
 const code=(kind,id)=>`${kind}_${createHash('sha256').update(`${kind}:${id}`).digest('hex')}`;
-function setup(t,{ack=true,record=feedback}={}) {
+function setup(t,{ack=true,record=feedback,providerStatus=503}={}) {
  const previous={url:process.env.APPS_SCRIPT_URL,secret:process.env.APPS_SCRIPT_SECRET};
  process.env.APPS_SCRIPT_URL='https://script.google.com/macros/s/test/exec';process.env.APPS_SCRIPT_SECRET='test-only-secret';
  t.after(()=>{for(const [key,value] of [['APPS_SCRIPT_URL',previous.url],['APPS_SCRIPT_SECRET',previous.secret]]){if(value===undefined)delete process.env[key];else process.env[key]=value;}});
@@ -14,7 +14,7 @@ function setup(t,{ack=true,record=feedback}={}) {
   if(String(url).includes('/rpc/eu_user_id'))return Response.json('owner');
   if(String(url).includes('/eu_feedbacks?'))return Response.json([{id:'fb_test',data:record}]);
   assert.equal(init.headers['Content-Type'],'text/plain');assert.equal(init.headers.Authorization,undefined);
-  exports.push(JSON.parse(init.body));return ack?Response.json(typeof ack==='object'?ack:{ok:true}):new Response('Unavailable',{status:503});
+  exports.push(JSON.parse(init.body));return ack?Response.json(typeof ack==='object'?ack:{ok:true}):new Response(providerStatus === 401 ? '<html>Google sign-in</html>' : 'Unavailable',{status:providerStatus,headers:{'Content-Type':providerStatus === 401 ? 'text/html' : 'text/plain'}});
  });return exports;
 }
 async function invoke(body,authorization='Bearer mock-jwt') {
@@ -72,4 +72,18 @@ test('unconfirmed acknowledgements log a bounded redacted response preview and H
 test('legacy success acknowledgements remain compatible',async t=>{
  setup(t,{ack:{success:true}});
  assert.equal((await invoke({categoria:'feedback',feedbackId:'fb_test'})).body.success,true);
+});
+
+test('Google HTML 401 is diagnosed as deployment access denial, not a sheet formula error',async t=>{
+ setup(t,{ack:false,providerStatus:401});
+ const logs=[];t.mock.method(console,'warn',(_label,data)=>logs.push(data));
+ assert.equal((await invoke({categoria:'uso',evento:'venda'})).status,202);
+ assert.equal(logs[0].reason,'APPS_SCRIPT_ACCESS_DENIED');
+ assert.equal(logs[0].status,401);
+});
+test('a JSON secret rejection is distinguished from Google authentication',async t=>{
+ setup(t,{ack:{ok:false,code:'INVALID_SECRET'}});
+ const logs=[];t.mock.method(console,'warn',(_label,data)=>logs.push(data));
+ await invoke({categoria:'uso',evento:'venda'});
+ assert.equal(logs[0].reason,'APPS_SCRIPT_SECRET_MISMATCH');
 });
