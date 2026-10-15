@@ -16,7 +16,7 @@ const {AppToast}=await import('../src/components/AppToast.tsx');
 let desktop=false;const mediaListeners=new Set();
 window.matchMedia=()=>({get matches(){return desktop;},addEventListener(_event,fn){mediaListeners.add(fn);},removeEventListener(_event,fn){mediaListeners.delete(fn);}});
 const cache=new URL('../node_modules/.cache/',import.meta.url);await mkdir(cache,{recursive:true});const dir=await mkdtemp(new URL('pos-cart-',cache));
-const names=['subscribeProducts','subscribeCustomers','addCustomer','recordSale','subscribeTodaySales','saveCashClosure','subscribeCashClosures','subscribeSettings'];
+const names=['getProductSalesTotals','subscribeProducts','subscribeCustomers','addCustomer','recordSale','subscribeTodaySales','saveCashClosure','subscribeCashClosures','subscribeSettings'];
 await build({entryPoints:[new URL('../src/pages/POS.tsx',import.meta.url).pathname],bundle:true,packages:'external',format:'esm',platform:'node',jsx:'automatic',outfile:`${dir}/POS.mjs`,plugins:[{name:'mock-business',setup(b){
  b.onResolve({filter:/\/(api|preferencesContext|employeeContext|categories|PocketTip)$/},args=>({path:args.path.split('/').at(-1),namespace:'pos-test'}));
  b.onLoad({filter:/.*/,namespace:'pos-test'},args=>({loader:'js',contents:args.path==='api'?names.map(name=>`export const ${name}=(...args)=>globalThis.__posApi.${name}(...args);`).join('\n'):args.path==='preferencesContext'?"export const usePreferences=()=>({v:(k,f)=>f||k,entityName:()=> 'Produto',languageMode:'neutral',isBasicMode:false,simpleViewMode:false});":args.path==='employeeContext'?"export const useEmployee=()=>({currentEmployee:null,openSwitchModal(){}});":args.path==='categories'?"export const getAllCategories=()=>['Bebidas','Cigarros'];":"export const PocketTip=()=>null;"}));
@@ -26,10 +26,10 @@ const standard={id:'p1',name:'Suco',category:'Bebidas',type:'comum',stock:10,bas
 const cigarettes={...standard,id:'p2',name:'Cigarro',category:'Cigarros',type:'cigarro',stockUnit:'carteira',stock:20,unitsPerPackage:10,unitCost:10,basePrice:20,pricePack:180,priceCart:20,priceHalfCart:11,priceUnit:2};
 function setup(onSale=async()=>{},isDesktop=false){
  desktop=isDesktop;
- globalThis.__posApi={subscribeProducts(cb){cb([standard,cigarettes]);return()=>{};},subscribeCustomers(cb){cb([]);return()=>{};},subscribeTodaySales(cb){cb([]);return()=>{};},subscribeCashClosures(cb){cb([]);return()=>{};},subscribeSettings(cb){cb({enableCardFees:false});return()=>{};},recordSale:onSale};
+ globalThis.__posApi={getProductSalesTotals:async()=>globalThis.__posRanking||{},subscribeProducts(cb){cb([standard,cigarettes]);return()=>{};},subscribeCustomers(cb){cb([]);return()=>{};},subscribeTodaySales(cb){cb([]);return()=>{};},subscribeCashClosures(cb){cb([]);return()=>{};},subscribeSettings(cb){cb({enableCardFees:false});return()=>{};},recordSale:onSale};
  return render(React.createElement(React.Fragment,null,React.createElement(POS),React.createElement(AppToast)));
 }
-afterEach(()=>{cleanup();localStorage.clear();delete globalThis.__posApi;});
+afterEach(()=>{cleanup();localStorage.clear();delete globalThis.__posApi;delete globalThis.__posRanking;});
 after(async()=>{await rm(dir,{recursive:true,force:true});dom.window.close();for(const [name,value]of previous){if(value)Object.defineProperty(globalThis,name,value);else delete globalThis[name];}delete globalThis.IS_REACT_ACT_ENVIRONMENT;});
 const addStandard=ui=>fireEvent.click(ui.getByRole('button',{name:/Vender.*5\.00/}));
 const openCart=ui=>fireEvent.click(ui.getByRole('button',{name:/Abrir carrinho/}));
@@ -78,4 +78,16 @@ test('failed checkout keeps the cart available and releases payment loading',asy
  await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Confirmar'}));});
  assert.ok(ui.getByRole('button',{name:'Abrir carrinho, 1 item'}));assert.equal(ui.queryByRole('dialog',{name:'Finalizar venda'}),null);
  openCart(ui);assert.equal(ui.getByRole('button',{name:'Finalizar Compra / Receber'}).disabled,false);
+});
+
+test('POS shows the best seller first and preserves ranking while searching',async()=>{
+ globalThis.__posRanking={p1:2,p2:25};
+ let ui;
+ await act(async()=>{ui=setup();});
+ const names=()=>Array.from(ui.container.querySelectorAll('h3')).map(node=>node.textContent).filter(name=>['Suco','Cigarro'].includes(name));
+ assert.deepEqual(names(),['Cigarro','Suco']);
+ fireEvent.change(ui.getByPlaceholderText(/Buscar.*nome/),{target:{value:'Suco'}});
+ assert.deepEqual(names(),['Suco']);
+ fireEvent.change(ui.getByPlaceholderText(/Buscar.*nome/),{target:{value:''}});
+ assert.deepEqual(names(),['Cigarro','Suco']);
 });

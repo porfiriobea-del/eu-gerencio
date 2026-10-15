@@ -1,9 +1,10 @@
+import { rankProductsBySales } from '../lib/productSalesRanking';
 import { CartDrawer, type CartItem } from '../components/CartDrawer';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import { getCigaretteFormats, getPackageUnits, calculateStockUpdates } from '../lib/productUnits';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { 
-  subscribeProducts, 
+  subscribeProducts, getProductSalesTotals,
   subscribeCustomers, 
   addCustomer,
   recordSale, 
@@ -46,6 +47,7 @@ export default function POS() {
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
   const { currentEmployee, openSwitchModal } = useEmployee();
   const [products, setProducts] = useState<Product[]>([]);
+  const [salesTotals, setSalesTotals] = useState<Record<string, number>>({});
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [todaySales, setTodaySales] = useState<Sale[]>([]);
   const [cashClosures, setCashClosures] = useState<CashClosure[]>([]);
@@ -99,17 +101,27 @@ export default function POS() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!products.length) { setSalesTotals({}); return; }
+    const controller = new AbortController();
+    let active = true;
+    void getProductSalesTotals(products, controller.signal).then(totals => {
+      if (active) setSalesTotals(previous => Object.keys(previous).length === Object.keys(totals).length && Object.keys(totals).every(id => previous[id] === totals[id]) ? previous : totals);
+    }).catch(() => { /* Optional ordering must not interrupt sales. */ });
+    return () => { active = false; controller.abort(); };
+  }, [products, todaySales]);
+
   const categories = useMemo(() => {
     return ['Todas', ...getAllCategories(products.map(p => p.category))];
   }, [products]);
 
   const filteredProducts = useMemo(() => {
-    return products.filter(p => {
+    return rankProductsBySales(products.filter(p => {
       const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
       const matchCat = selectedCategory === 'Todas' || p.category === selectedCategory;
       return matchSearch && matchCat;
-    });
-  }, [products, search, selectedCategory]);
+    }), salesTotals);
+  }, [products, search, selectedCategory, salesTotals]);
 
   const addToCart = (product: Product, format: string, price: number, stockDeduction: number) => {
     if (checkoutInProgressRef.current) return;
@@ -508,6 +520,7 @@ export default function POS() {
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4 overflow-y-auto pb-24">
+          {Object.keys(salesTotals).length > 0 && <p className="col-span-full text-xs text-muted-foreground">{v('pos.salesOrder', 'Mais vendidos primeiro')}</p>}
           {filteredProducts.map(p => (
             <div key={p.id} className="bg-surface border border-border rounded-2xl p-3.5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group">
               <div>

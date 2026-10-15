@@ -81,6 +81,7 @@ export const LANGUAGE_MODE_INFOS: LanguageModeInfo[] = [
 // Unified, consistent dictionary per language mode
 export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   technical: {
+    'pos.salesOrder': 'Ordenação por volume vendido no histórico (unidade-base de estoque).',
     'suggestion.applied': 'Parâmetros preenchidos. Confirme o cadastro para persistir.',
     'suggestion.title': 'Parâmetros sugeridos de ressuprimento',
     'suggestion.description': 'Projeção baseada no estoque físico, consumo médio diário e prazo de reposição.',
@@ -201,6 +202,7 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Frente de Caixa',
   },
   neutral: {
+    'pos.salesOrder': 'Mais vendidos primeiro, pelo histórico da loja.',
     'suggestion.applied': 'Limites preenchidos. Salve o produto para confirmar.',
     'suggestion.title': 'Sugestão de estoque mínimo e máximo',
     'suggestion.description': 'Compara estoque, média diária cadastrada e prazo de entrega para orientar a reposição.',
@@ -321,6 +323,7 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Caixa',
   },
   basic: {
+    'pos.salesOrder': 'O que mais vende aparece primeiro.',
     'suggestion.applied': 'Preenchido! Agora toque em Salvar Produto.',
     'suggestion.title': 'Quanto manter na loja?',
     'suggestion.description': 'Veja quando comprar mais e quanto vale a pena ter na prateleira.',

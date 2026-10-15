@@ -39,8 +39,8 @@ before(async()=>{
     const path=url.searchParams.get('collection_path')?.replace(/^eq\./,'');
     const id=url.searchParams.get('id')?.replace(/^eq\./,'');
     const owner=url.searchParams.get('owner_id')?.replace(/^eq\./,'');
-    const rows=[...records.entries()].filter(([k,row])=>k.startsWith(table+'/')&&row.collection_path===path&&(!id||row.id===id)&&(!owner||row.owner_id===owner)).map(([,row])=>row);
-    if(id)res.end(JSON.stringify(rows[0]||null));else res.end(JSON.stringify(rows));
+    const rows=[...records.entries()].filter(([k,row])=>k.startsWith(table+'/')&&(!path||row.collection_path===path)&&(!id||row.id===id)&&(!owner||row.owner_id===owner)).map(([,row])=>row);
+    if(id)res.end(JSON.stringify(rows[0]||null));else { const offset=Number(url.searchParams.get('offset')||0);const limit=Number(url.searchParams.get('limit')||rows.length);res.end(JSON.stringify(rows.slice(offset,offset+limit))); }
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   client=createClient(`http://127.0.0.1:${server.address().port}`,'test-only-public-key',{accessToken:async()=> 'test-firebase-jwt',auth:{persistSession:false,autoRefreshToken:false}});
@@ -251,4 +251,15 @@ test('different stock units cannot be merged even with an identical barcode',asy
  await store.setDoc(store.doc(store.db,'products','cigarette-copy'),{ownerId:'owner',name:'Café Teste',barcode:'00123',type:'cigarro',stockUnit:'carteira',stock:1,unitCost:2,basePrice:5});
  await assert.rejects(api.mergeProducts('duplicate-a','cigarette-copy'),/carteiras/);
  assert.equal((await store.getDoc(store.doc(store.db,'products','duplicate-a'))).data().stock,10);
+});
+
+test('POS sales ranking reads actual owner-scoped history beyond the 1000-row limit',async()=>{
+ for(let index=0;index<1001;index++){
+  const id=`rank-${index}`;const path='sales/ranking/saleItems';
+  records.set(key('eu_sale_items',path,id),{id,collection_path:path,owner_id:'owner',revision:1,data:{ownerId:'owner',productId:'ranking-product',quantity:1,format:'Fardo (6 un.)',stockDeduction:6}});
+ }
+ records.set(key('eu_sale_items','sales/other/saleItems','other-rank'),{id:'other-rank',collection_path:'sales/other/saleItems',owner_id:'another-shop',revision:1,data:{ownerId:'another-shop',productId:'ranking-product',quantity:9999,stockDeduction:1}});
+ const result=await api.getProductSalesTotals([{id:'ranking-product',name:'Mais vendido',type:'comum',unitsPerPackage:6}]);
+ assert.equal(result['ranking-product'],6006);
+ assert.ok(calls.some(call=>call.url.includes('eu_sale_items?')&&call.url.includes('owner_id=eq.owner')&&call.url.includes('offset=1000')));
 });

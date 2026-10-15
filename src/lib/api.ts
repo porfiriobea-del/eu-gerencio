@@ -1,3 +1,4 @@
+import { soldBaseQuantity } from './productSalesRanking';
 import { findDuplicateProducts, isDuplicateProduct } from './duplicateDetector';
 import { supabase } from './supabase';
 import { reportUsage } from './usageReporting';
@@ -1614,3 +1615,25 @@ export const mergeProducts = withProductWriteQueue(async (targetId: string, sour
     transaction.update(sourceRef, { ...cigaretteStockFields(source), stock: 0, initialStock: 0, mergedIntoId: targetId, mergedAt: now, updatedAt: now });
   });
 });
+
+/** Owner-scoped history, paginated to avoid Supabase's default row limit. */
+export async function getProductSalesTotals(products: Product[], signal?: AbortSignal): Promise<Record<string, number>> {
+  const ownerId = getEffectiveOwnerId();
+  if (!ownerId) return {};
+  const byId = new Map(products.map(product => [product.id, product]));
+  const totals: Record<string, number> = Object.create(null);
+  for (let offset = 0; ; offset += 1000) {
+    const result = await supabase.from('eu_sale_items').select('id,collection_path,data')
+      .eq('owner_id', ownerId).order('collection_path').order('id').range(offset, offset + 999)
+      .abortSignal(signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000));
+    if (result.error) throw new Error('Não foi possível consultar os produtos mais vendidos.');
+    if (getEffectiveOwnerId() !== ownerId) throw new Error('A sessão da loja mudou.');
+    const rows = result.data || [];
+    for (const row of rows) {
+      const item = row.data as SaleItem;
+      if (!byId.has(item.productId)) continue;
+      totals[item.productId] = Math.round(((totals[item.productId] || 0) + soldBaseQuantity(item, byId.get(item.productId))) * 10000) / 10000;
+    }
+    if (rows.length < 1000) return totals;
+  }
+}
