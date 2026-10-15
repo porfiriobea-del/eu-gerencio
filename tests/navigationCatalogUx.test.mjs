@@ -297,3 +297,32 @@ test('empty extraction explains why there are no products to register',async()=>
  assert.equal(ui.getByRole('button',{name:'Cadastrar selecionados'}).disabled,true);
  assert.ok(ui.getByRole('button',{name:'Adicionar produto manualmente'}));
 });
+
+test('cigarette catalogue cost selector offers full pack, half pack and a carteira and saves the correct cost',async()=>{
+ const ui=importer();
+ globalThis.__recognizeCatalog=async()=>({products:[{...draft,name:'Cigarro catálogo',type:'cigarro',category:'Cigarros',costBasis:'',purchaseCost:40,basePrice:'',priceCart:12}],truncated:false});
+ await upload(ui);
+ const selector=ui.getByLabelText('Este custo corresponde a');
+ assert.deepEqual(Array.from(selector.options,option=>option.value),['','maco','meio_maco','carteira']);
+ fireEvent.change(selector,{target:{value:'meio_maco'}});
+ let saved;globalThis.__uiApi.importSupplierCatalog=async products=>{saved=products;return products.length;};
+ await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Cadastrar selecionados'}));});
+ assert.equal(saved[0].unitCost,8);assert.equal(saved[0].supplierPackageUnits,5);assert.equal(saved[0].unitsPerPackage,10);
+});
+
+test('catalog modal follows the visible mobile viewport when the keyboard opens and removes listeners',()=>{
+ const previous=Object.getOwnPropertyDescriptor(window,'visualViewport');
+ const handlers=new Map();
+ const visible={height:420,offsetTop:12,addEventListener:(name,listener)=>handlers.set(name,listener),removeEventListener:name=>handlers.delete(name)};
+ Object.defineProperty(window,'visualViewport',{value:visible,configurable:true});
+ try{
+  const ui=importer();const dialog=ui.getByRole('dialog');const overlay=dialog.parentElement;
+  assert.equal(overlay.style.height,'420px');assert.equal(overlay.style.top,'12px');
+  act(()=>{visible.height=290;visible.offsetTop=20;handlers.get('resize')();});
+  assert.equal(overlay.style.height,'290px');assert.equal(overlay.style.top,'20px');
+  assert.ok(dialog.className.includes('max-h-full'));
+  assert.ok(dialog.querySelector('footer').className.includes('shrink-0'));
+  assert.ok(ui.getByRole('button',{name:'Cadastrar selecionados'}).className.includes('w-full'));
+  ui.unmount();assert.equal(handlers.size,0);
+ }finally{if(previous)Object.defineProperty(window,'visualViewport',previous);else delete window.visualViewport;}
+});

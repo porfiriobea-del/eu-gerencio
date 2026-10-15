@@ -9,3 +9,11 @@ O app envia os IDs estáveis dos rascunhos ao importSupplierCatalog. Os document
 Títulos, botões, estados de espera, validação, cancelamento, falha e confirmação contemplam os três modos de linguagem no vocabulário central. A mudança não exige migração SQL. Testes locais usam transporte e serviços simulados.
 
 Quando há linhas importadas mas nenhuma marcada, o botão continua acionável para explicar a pendência, sem enviar uma gravação vazia. O rodapé mostra o aviso de seleção ou duplicidade e o clique mostra uma confirmação flutuante de atenção. Extrações vazias têm mensagem específica e mantêm a opção de cadastro manual. Validações de dados também mostram aviso flutuante, além das linhas destacadas, evitando a impressão de que o clique não respondeu quando o erro está fora da área visível.
+
+## Medida de custo de cigarros e uso no celular
+
+Quando a categoria ou o tipo for cigarro, a revisão oferece somente maço de 10 carteiras, meio maço de 5 ou carteira avulsa. Meio maço usa costBasis meio_maco no prompt, schema e resposta da API Gemini, no parser e na validação do cadastro. O custo informado é dividido por 10, 5 ou 1; stockUnit continua carteira e unitsPerPackage continua 10 para as vendas. A compra em meio maço persiste supplierPackageUnits 5. Medidas antigas de embalagem são mostradas como maço; custo por cigarro avulso exige nova confirmação na revisão, em vez de ficar oculto numa opção inexistente.
+
+O modal usa a área visível de visualViewport quando disponível, acompanhando abertura/fechamento do teclado, deslocamento e rotação. Há fallback para a altura da janela. Cabeçalho e rodapé não encolhem; a lista central tem rolagem contida. O botão principal ocupa a largura no celular e respeita a área segura inferior. Campos têm fonte de 16 px e altura mínima de 44 px para toque; campos de preço solicitam teclado decimal. Listeners são removidos ao fechar. Não se alteram saldos durante a revisão.
+
+Testes verificam as três opções e linguagens, conversão e persistência do meio maço, resposta da rota Gemini e simulação de teclado/viewport. A validação é local, não uma execução em aparelhos físicos.

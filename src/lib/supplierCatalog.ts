@@ -11,7 +11,7 @@ export interface SupplierDraft {
   category: string;
   type: 'comum' | 'cigarro';
   purchaseCost: number | '';
-  costBasis: 'unidade' | 'carteira' | 'maco' | 'embalagem' | '';
+  costBasis: 'unidade' | 'carteira' | 'maco' | 'meio_maco' | 'embalagem' | '';
   unitsPerPackage: number | '';
   purchaseForm: 'unidade' | 'fardo' | 'pacote';
   basePrice: number | '';
@@ -40,7 +40,7 @@ export function parseSupplierDraft(value: unknown): SupplierDraft {
     if (value !== null && value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 10000000)) throw new Error('A IA retornou valores inválidos. Confira o catálogo.');
     draft[field] = typeof value === 'number' ? value : '';
   }
-  draft.costBasis = ['unidade', 'carteira', 'maco', 'embalagem'].includes(String(row.costBasis)) ? row.costBasis as SupplierDraft['costBasis'] : '';
+  draft.costBasis = ['unidade', 'carteira', 'maco', 'meio_maco', 'embalagem'].includes(String(row.costBasis)) ? row.costBasis as SupplierDraft['costBasis'] : '';
   draft.purchaseForm = ['unidade', 'fardo', 'pacote'].includes(String(row.purchaseForm)) ? row.purchaseForm as SupplierDraft['purchaseForm'] : 'unidade';
   draft.unitsPerPackage = draft.type === 'cigarro' ? 10 : typeof row.unitsPerPackage === 'number' && Number.isInteger(row.unitsPerPackage) && row.unitsPerPackage >= 1 && row.unitsPerPackage <= 10000 ? row.unitsPerPackage : '';
   return draft;
@@ -63,6 +63,7 @@ export function buildSupplierProducts(drafts: SupplierDraft[], existingNames: st
     let unitCost = row.purchaseCost;
     if (cigarette) {
       if (row.costBasis === 'unidade') unitCost *= 20;
+      else if (row.costBasis === 'meio_maco') unitCost /= 5;
       else if (row.costBasis === 'maco' || row.costBasis === 'embalagem') unitCost /= 10;
       else if (row.costBasis !== 'carteira') throw new Error(`Confira a medida da compra de ${name}.`);
     } else {
@@ -81,7 +82,7 @@ export function buildSupplierProducts(drafts: SupplierDraft[], existingNames: st
       purchaseForm: cigarette ? 'pacote' : row.purchaseForm, unitsPerPackage: units, unitCost,
       stock: 0, initialStock: 0, initialStockDate: new Date().toISOString().slice(0, 10), safetyStock: 0,
       dailyAverageSales: 0, replacementDays: 3, basePrice,
-      ...(cigarette ? { pricePack, priceCart, priceHalfCart, priceUnit } : {}) });
+      ...(cigarette ? { supplierPackageUnits: row.costBasis === 'meio_maco' ? 5 : 10, pricePack, priceCart, priceHalfCart, priceUnit } : {}) });
     names.add(key);
   }
   return products;

@@ -1,3 +1,4 @@
+import { useModalViewport } from '../lib/useModalViewport';
 import { usePreferences } from '../lib/preferencesContext';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -13,6 +14,7 @@ interface Props { isOpen: boolean; onClose: () => void; availableCategories: str
 
 export function CatalogImportModal({ isOpen, onClose, availableCategories, existingProductNames, existingProducts = [], onBeforeSave, onOpenExisting }: Props) {
   const { v } = usePreferences();
+  const viewport = useModalViewport(isOpen);
   const copy = (key: string, fallback: string) => v(key, fallback);
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [drafts, setDrafts] = useState<SupplierDraft[]>([]);
@@ -100,6 +102,7 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
         if (generation !== generationRef.current) return;
         setDrafts(previous => {
           const added = result.products.map((row, index) => ({ ...row,
+            costBasis: row.type === 'cigarro' ? row.costBasis === 'embalagem' ? 'maco' : ['maco','meio_maco','carteira'].includes(row.costBasis) ? row.costBasis : '' : row.costBasis,
             selected: !match(row) && !existing.has(normalizeProductName(row.name)) && ![...previous, ...result.products.slice(0, index)].some(other => isDuplicateProduct(row, other)) }));
           return [...previous, ...added];
         });
@@ -169,18 +172,18 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
 
   const numberField = (row: SupplierDraft, field: 'purchaseCost' | 'unitsPerPackage' | 'basePrice' | 'pricePack' | 'priceCart' | 'priceHalfCart' | 'priceUnit', label: string) => (
     <label className="block text-xs font-medium">{label}
-      <input type="number" min="0" step={field === 'unitsPerPackage' ? '1' : '0.01'} value={row[field]} onChange={event => update(row.id, { [field]: event.target.value === '' ? '' : Number(event.target.value) })}
+      <input type="number" inputMode="decimal" min="0" step={field === 'unitsPerPackage' ? '1' : '0.01'} value={row[field]} onChange={event => update(row.id, { [field]: event.target.value === '' ? '' : Number(event.target.value) })}
         className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm" placeholder="Não informado" />
     </label>
   );
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-2 sm:p-4">
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={headingId} className="flex max-h-[95dvh] w-full max-w-5xl flex-col rounded-2xl border border-border bg-surface text-foreground shadow-xl">
-        <header className="flex items-start justify-between gap-3 border-b border-border p-4">
+    <div style={{top: viewport.top, height: viewport.height, bottom: 'auto'}} className="fixed inset-0 z-[70] flex items-center justify-center overflow-hidden bg-black/50 p-2 sm:p-4">
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={headingId} className="flex max-h-full w-full min-w-0 max-w-5xl flex-col overflow-hidden rounded-2xl border border-border bg-surface text-foreground shadow-xl [&_input]:text-base [&_select]:text-base [&_input:not([type=checkbox])]:min-h-11 [&_select]:min-h-11">
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-4">
           <div><h2 ref={headingRef} tabIndex={-1} id={headingId} className="text-lg font-bold">{copy('catalog.title', 'Importar catálogo do fornecedor')}</h2><p className="mt-1 text-xs text-muted-foreground">PDF ou fotos da sua lista de preços. A IA extrai vários produtos para você revisar.</p></div>
-          <button type="button" disabled={isSaving} onClick={onClose} aria-label="Fechar importação" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg hover:bg-muted disabled:opacity-50"><X className="h-5 w-5" /></button>
+          <button type="button" disabled={isSaving} onClick={onClose} aria-label="Fechar importação" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-muted disabled:opacity-50"><X className="h-5 w-5" /></button>
         </header>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
           <input ref={cameraRef} hidden type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={readFiles} />
           <input ref={galleryRef} hidden type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={readFiles} />
           <input ref={pdfRef} hidden type="file" accept="application/pdf,.pdf" multiple onChange={readFiles} />
@@ -197,7 +200,7 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
             {drafts.map((row, index) => (
               <article key={row.id} id={`catalog-row-${row.id}`} tabIndex={-1} aria-describedby={rowErrors[row.id] ? `catalog-error-${row.id}` : undefined} className={`rounded-2xl border p-3 ${rowErrors[row.id] ? 'border-red-500 ring-1 ring-red-500' : 'border-border'}`}>
                 {rowErrors[row.id] && <p id={`catalog-error-${row.id}`} className="mb-3 text-sm font-semibold text-red-700 dark:text-red-300">{rowErrors[row.id]}</p>}
-                <div className="mb-3 flex items-center justify-between gap-2"><label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={row.selected} onChange={event => update(row.id, { selected: event.target.checked && (!duplicated(row, index) || !!row.allowDuplicate) })} />Produto {index + 1}</label><button type="button" aria-label={`Remover produto ${index + 1}`} onClick={() => setDrafts(previous => previous.filter(item => item.id !== row.id))} className="rounded-lg p-2 text-red-600 hover:bg-muted"><Trash2 className="h-4 w-4" /></button></div>
+                <div className="mb-3 flex items-center justify-between gap-2"><label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" className="h-5 w-5" checked={row.selected} onChange={event => update(row.id, { selected: event.target.checked && (!duplicated(row, index) || !!row.allowDuplicate) })} />Produto {index + 1}</label><button type="button" aria-label={`Remover produto ${index + 1}`} onClick={() => setDrafts(previous => previous.filter(item => item.id !== row.id))} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg p-2 text-red-600 hover:bg-muted"><Trash2 className="h-4 w-4" /></button></div>
                 {duplicated(row, index) && <div className="mb-3 rounded-lg border border-amber-500 p-3 text-xs">
                   <p className="font-semibold">Duplicado suspeito: {match(row)?.name || row.name}. Desmarcado por padrão.</p>
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -217,7 +220,8 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
                   <label className="block text-xs font-medium">Categoria<input list={categoriesId} value={row.category} maxLength={50} onChange={event => update(row.id, { category: event.target.value, ...(/cigar/i.test(event.target.value) && row.type !== 'cigarro' ? { type: 'cigarro', costBasis: '', unitsPerPackage: 10 } : {}) })} className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm" /></label>
                   <label className="block text-xs font-medium">Tipo<select value={row.type} onChange={event => update(row.id, { type: event.target.value as SupplierDraft['type'], costBasis: '', unitsPerPackage: event.target.value === 'cigarro' ? 10 : 1 })} className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm"><option value="comum">Comum</option><option value="cigarro">Cigarro fracionado</option></select></label>
                   {numberField(row, 'purchaseCost', 'Custo da compra (R$)')}
-                  <label className="block text-xs font-medium">Este custo corresponde a<select value={row.costBasis} onChange={event => update(row.id, { costBasis: event.target.value as SupplierDraft['costBasis'] })} className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm"><option value="">Confirme a medida</option>{row.type === 'cigarro' ? <><option value="carteira">1 carteira (20 cigarros)</option><option value="maco">1 maço (10 carteiras)</option><option value="embalagem">1 pacote (10 carteiras)</option><option value="unidade">1 cigarro avulso</option></> : <><option value="unidade">1 unidade</option><option value="embalagem">1 embalagem fechada</option></>}</select></label>
+                  <label className="block min-w-0 text-xs font-medium">{copy('catalog.costBasis', 'Este custo corresponde a')}<select value={row.costBasis} onChange={event => update(row.id, { costBasis: event.target.value as SupplierDraft['costBasis'] })} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background p-2 text-sm"><option value="">{copy('catalog.costPlaceholder', 'Confirme a medida')}</option>{row.type === 'cigarro' ? <><option value="maco">{copy('catalog.costPack', '1 maço (10 carteiras)')}</option><option value="meio_maco">{copy('catalog.costHalf', 'Meio maço (5 carteiras)')}</option><option value="carteira">{copy('catalog.costCart', '1 carteira avulsa')}</option></> : <><option value="unidade">1 unidade</option><option value="embalagem">1 embalagem fechada</option></>}</select></label>
+                  {row.type === 'cigarro' && <p className="text-xs text-muted-foreground sm:col-span-2">{copy('catalog.costHelp', 'O custo por carteira usa 10, 5 ou 1 carteira, conforme a opção escolhida.')}</p>}
                   {row.type === 'comum' && <><label className="block text-xs font-medium">Forma de compra<select value={row.purchaseForm} onChange={event => update(row.id, { purchaseForm: event.target.value as SupplierDraft['purchaseForm'] })} className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm"><option value="unidade">Unidade</option><option value="fardo">Fardo / Caixa</option><option value="pacote">Pacote</option></select></label>{numberField(row, 'unitsPerPackage', 'Unidades por embalagem')}</>}
                 </div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -229,11 +233,11 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
             <button type="button" onClick={() => setDrafts(previous => [...previous, blankSupplierDraft()])} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"><Plus className="h-4 w-4" />Adicionar produto manualmente</button>
           </fieldset>
         </div>
-        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-4">
+        <footer className="flex shrink-0 flex-col items-stretch justify-between gap-3 border-t border-border bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:flex-wrap sm:items-center sm:p-4">
           {drafts.length > 0 && !drafts.some(row => row.selected) && <p role="status" className="w-full text-sm font-semibold text-amber-800 dark:text-amber-300">{copy('catalog.unchecked', 'Nenhum produto selecionado. Marque os desejados e revise os avisos de duplicidade.')}</p>}
           {error && <p className="w-full text-sm font-semibold text-amber-800 dark:text-amber-300">{Object.keys(rowErrors).length ? copy('catalog.fix', 'Confira os dados antes de repetir.') : error}</p>}
-          <div><p className="text-xs text-muted-foreground">{drafts.filter(row => row.selected).length} selecionados. Confira os valores antes de salvar.</p><div className="mt-1 flex gap-3 text-xs"><button type="button" disabled={isReading || isSaving} onClick={() => setDrafts(previous => previous.map((row, index) => ({ ...row, selected: !duplicated(row, index) || !!row.allowDuplicate })))} className="text-primary hover:underline">Selecionar todos</button><button type="button" disabled={isReading || isSaving} onClick={() => setDrafts(previous => previous.map(row => ({ ...row, selected: false })))} className="text-primary hover:underline">Desmarcar todos</button></div></div>
-          <button type="button" onClick={save} disabled={isReading || isSaving || !drafts.length} className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">{isSaving ? copy('catalog.saving', 'Salvando produtos...') : copy('catalog.save', 'Cadastrar selecionados')}</button>
+          <div><p className="text-xs text-muted-foreground">{drafts.filter(row => row.selected).length} selecionados. Confira os valores antes de salvar.</p><div className="mt-1 flex gap-3 text-xs"><button type="button" disabled={isReading || isSaving} onClick={() => setDrafts(previous => previous.map((row, index) => ({ ...row, selected: !duplicated(row, index) || !!row.allowDuplicate })))} className="min-h-11 text-primary hover:underline">Selecionar todos</button><button type="button" disabled={isReading || isSaving} onClick={() => setDrafts(previous => previous.map(row => ({ ...row, selected: false })))} className="min-h-11 text-primary hover:underline">Desmarcar todos</button></div></div>
+          <button type="button" onClick={save} disabled={isReading || isSaving || !drafts.length} className="min-h-11 w-full rounded-xl bg-primary px-4 py-3 sm:w-auto text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">{isSaving ? copy('catalog.saving', 'Salvando produtos...') : copy('catalog.save', 'Cadastrar selecionados')}</button>
         </footer>
       </div>
     </div>, document.body

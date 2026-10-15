@@ -108,6 +108,10 @@ test('catalog save action and validation use the active language mode',()=>{
   localStorage.setItem('app_lang_mode',mode);
   const ui=render(React.createElement(PreferencesProvider,null,React.createElement(CatalogImportModal,{isOpen:true,onClose(){},availableCategories:['Diversos'],existingProductNames:[]})));
   fireEvent.click(ui.getByRole('button',{name:'Adicionar produto manualmente'}));
+  fireEvent.change(ui.getByLabelText('Categoria'),{target:{value:'Cigarros'}});
+  const basis=ui.getByLabelText(VOCABULARY[mode]['catalog.costBasis']);
+  assert.deepEqual(Array.from(basis.options,option=>option.value),['','maco','meio_maco','carteira']);
+  assert.equal(basis.options[2].text,VOCABULARY[mode]['catalog.costHalf']);
   fireEvent.click(ui.getByRole('button',{name:action}));
   assert.ok(ui.getByRole('alert').textContent.startsWith(prefix));
   assert.ok(ui.getByRole('dialog'));cleanup();

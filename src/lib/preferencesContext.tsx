@@ -81,6 +81,12 @@ export const LANGUAGE_MODE_INFOS: LanguageModeInfo[] = [
 // Unified, consistent dictionary per language mode
 export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   technical: {
+    'catalog.costBasis': 'Base do custo de aquisição',
+    'catalog.costPack': 'Maço integral (10 carteiras)',
+    'catalog.costHalf': 'Meio maço (5 carteiras)',
+    'catalog.costCart': 'Carteira avulsa (1 carteira)',
+    'catalog.costPlaceholder': 'Selecione a base de aquisição',
+    'catalog.costHelp': 'O custo unitário por carteira resulta da divisão do custo informado por 10, 5 ou 1, respectivamente.',
     'catalog.unchecked': 'Nenhum registro selecionado. Selecione os cadastros e confirme eventuais coincidências.',
     'catalog.empty': 'A extração não retornou registros neste arquivo. Revise o documento ou cadastre manualmente.',
     'catalog.title': 'Importação de catálogo do fornecedor',
@@ -218,6 +224,12 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Frente de Caixa',
   },
   neutral: {
+    'catalog.costBasis': 'Este custo corresponde a',
+    'catalog.costPack': '1 maço (10 carteiras)',
+    'catalog.costHalf': 'Meio maço (5 carteiras)',
+    'catalog.costCart': '1 carteira avulsa',
+    'catalog.costPlaceholder': 'Confirme a medida',
+    'catalog.costHelp': 'O custo por carteira é calculado usando 10, 5 ou 1 carteira, conforme a opção escolhida.',
     'catalog.unchecked': 'Nenhum produto selecionado. Marque os desejados e revise os avisos de duplicidade.',
     'catalog.empty': 'Nenhum produto foi encontrado neste arquivo. Tente outra foto ou preencha manualmente.',
     'catalog.title': 'Importar catálogo do fornecedor',
@@ -355,6 +367,12 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Caixa',
   },
   basic: {
+    'catalog.costBasis': 'Esse preço é de quê?',
+    'catalog.costPack': '1 maço (10 carteiras)',
+    'catalog.costHalf': 'Meio maço (5 carteiras)',
+    'catalog.costCart': '1 carteira avulsa',
+    'catalog.costPlaceholder': 'Escolha uma opção',
+    'catalog.costHelp': 'Maço: dividimos por 10. Meio maço: por 5. Carteira: usamos o preço informado.',
     'catalog.unchecked': 'Nenhum produto marcado. Marque os que quer salvar. Os repetidos precisam da sua confirmação.',
     'catalog.empty': 'Não encontramos produtos neste arquivo. Tente outra foto ou adicione à mão.',
     'catalog.title': 'Trazer produtos de uma foto ou PDF',

@@ -118,3 +118,13 @@ test('catalog scanner exposes safe metadata for model failures without logging f
   assert.deepEqual(logs[0],{code:'MODEL_UNAVAILABLE',status:502,providerStatus:404,requestId:'test-request',mimeType:'image/jpeg',base64Length:8});
   assert.ok(!JSON.stringify(logs).includes('aW1hZ2U='));
 });
+
+test('half-pack cigarette costs divide by five and retain the supplier packaging preference',()=>{
+ for(const [basis,cost,packageSize] of [['maco',80,10],['meio_maco',40,5],['carteira',8,10]]){
+  const draft=parseSupplierDraft({name:'Cigarro teste',category:'Cigarros',type:'comum',purchaseCost:cost,costBasis:basis,priceCart:12});
+  assert.equal(draft.type,'cigarro');
+  const [product]=buildSupplierProducts([draft]);
+  assert.equal(product.unitCost,8);assert.equal(product.supplierPackageUnits,packageSize);
+  assert.equal(product.unitsPerPackage,10);assert.equal(product.stockUnit,'carteira');assert.equal(product.stock,0);
+ }
+});
