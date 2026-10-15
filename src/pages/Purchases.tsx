@@ -1,3 +1,4 @@
+import { getReorderPoint } from '../lib/stockSuggestions';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import { useState, useEffect, useMemo } from 'react';
 import { subscribeProducts, subscribePurchases, recordPurchase, deletePurchase } from '../lib/api';
@@ -92,7 +93,7 @@ export default function Purchases() {
   const replenishList = useMemo(() => {
     return products
       .map(p => {
-        const reorderPoint = p.safetyStock + (p.dailyAverageSales * p.replacementDays);
+        const reorderPoint = getReorderPoint(p);
         const needsReplenish = p.stock <= reorderPoint;
         const isCritical = p.stock === 0;
         const isBelowSafety = p.stock <= p.safetyStock;

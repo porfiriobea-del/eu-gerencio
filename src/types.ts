@@ -14,6 +14,7 @@ export interface Product {
   stock: number;
   safetyStock: number;
   maxStock?: number;
+  stockCoverageDays?: number; // Planned days of sales between replenishments.
   initialStock?: number;
   initialStockDate?: string;
   dailyAverageSales: number;

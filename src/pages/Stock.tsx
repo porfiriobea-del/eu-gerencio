@@ -1,3 +1,5 @@
+import { StockLevelSuggestion } from '../components/StockLevelSuggestion';
+import { getReorderPoint } from '../lib/stockSuggestions';
 import { showToast, showActionError, ConfirmationTimeoutError } from '../lib/actionFeedback';
 import { getPackageUnits, getCigaretteFormats, CIGARETTE_UNITS, isValidStockQuantity } from '../lib/productUnits';
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -106,7 +108,7 @@ export default function Stock() {
     purchaseForm: 'unidade', unitsPerPackage: 1, 
     unitCost: 0, purchaseTotalCost: '', stock: 0, safetyStock: 0, 
     maxStock: 0, initialStock: 0, initialStockDate: format(new Date(), 'yyyy-MM-dd'),
-    dailyAverageSales: 0, replacementDays: 0, basePrice: 0,
+    dailyAverageSales: 0, replacementDays: 0, stockCoverageDays: 7, basePrice: 0,
     expirationDate: '',
     hasPromoSuggestion: false,
     promoPrice: '',
@@ -249,6 +251,7 @@ export default function Stock() {
         : product.unitCost;
       setFormData({
         ...product,
+        stockCoverageDays: product.stockCoverageDays || 7,
         unitsPerPackage: unitsPkg,
         purchaseForm: product.type === 'cigarro' ? 'pacote' : product.purchaseForm,
         imageUrl: product.imageUrl || '',
@@ -319,6 +322,7 @@ export default function Stock() {
       stock: stockNum,
       safetyStock: safetyNum,
       maxStock: maxNum,
+      stockCoverageDays: Math.max(1, Math.min(365, Math.trunc(Number(formData.stockCoverageDays)) || 7)),
       initialStock: initStockNum,
       initialStockDate: formData.initialStockDate || format(new Date(), 'yyyy-MM-dd'),
       dailyAverageSales: Number(formData.dailyAverageSales) || 0,
@@ -548,7 +552,7 @@ export default function Stock() {
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
-      const reorderPoint = p.safetyStock + (p.dailyAverageSales * p.replacementDays);
+      const reorderPoint = getReorderPoint(p);
       const needsReplenish = p.stock <= reorderPoint;
       
       const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.category.toLowerCase().includes(searchTerm.toLowerCase());
@@ -576,7 +580,7 @@ export default function Stock() {
   }, [products, searchTerm, selectedCategory, filterReplenishOnly, filterExpiringOnly, filterPromoOnly, filterDuplicatesOnly, duplicateAnalysis]);
 
   const replenishCount = useMemo(() => {
-    return products.filter(p => p.stock <= (p.safetyStock + (p.dailyAverageSales * p.replacementDays))).length;
+    return products.filter(p => p.stock <= (getReorderPoint(p))).length;
   }, [products]);
 
   const expiringCount = useMemo(() => {
@@ -594,7 +598,7 @@ export default function Stock() {
   const totalReplenishCost = useMemo(() => {
     return products.reduce((acc, p) => {
       const max = p.maxStock || Math.max(p.stock, p.safetyStock * 2, 10);
-      const reorderPoint = p.safetyStock + (p.dailyAverageSales * p.replacementDays);
+      const reorderPoint = getReorderPoint(p);
       if (p.stock <= reorderPoint && max > p.stock) {
         const qtyToBuy = max - p.stock;
         return acc + (qtyToBuy * p.unitCost);
@@ -1055,7 +1059,7 @@ export default function Stock() {
       {displayMode === 'cards' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredProducts.map(p => {
-            const reorderPoint = p.safetyStock + (p.dailyAverageSales * p.replacementDays);
+            const reorderPoint = getReorderPoint(p);
             const maxStockVal = p.maxStock || Math.max(p.stock, p.safetyStock * 2, 10);
             const needsReplenish = p.stock <= reorderPoint;
             const isOverStocked = p.stock > maxStockVal;
@@ -1269,11 +1273,11 @@ export default function Stock() {
                       </div>
                       <div className="flex justify-between items-center text-muted-foreground">
                         <span>{v('stock.min', 'Quando Pedir Mais (Mínimo)')}:</span>
-                        <strong className="text-foreground">{Math.round(reorderPoint)} un. (segurança: {p.safetyStock})</strong>
+                        <strong className="text-foreground">{reorderPoint.toLocaleString('pt-BR', {maximumFractionDigits: 2})} {p.type === 'cigarro' ? 'carteiras' : 'un.'} (reserva: {p.safetyStock})</strong>
                       </div>
                       <div className="flex justify-between items-center text-muted-foreground">
                         <span>{v('stock.max', 'Limite para Não Sobrar (Máximo)')}:</span>
-                        <strong className="text-foreground">{maxStockVal} un.</strong>
+                        <strong className="text-foreground">{maxStockVal} {p.type === 'cigarro' ? 'carteiras' : 'un.'}</strong>
                       </div>
                       {needsReplenish && (
                         <div className="flex justify-between items-center text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-950/40 p-2 rounded-lg">
@@ -1381,7 +1385,7 @@ export default function Stock() {
             </thead>
             <tbody className="divide-y divide-border/60">
               {filteredProducts.map(p => {
-                const reorderPoint = p.safetyStock + (p.dailyAverageSales * p.replacementDays);
+                const reorderPoint = getReorderPoint(p);
                 const maxStockVal = p.maxStock || Math.max(p.stock, p.safetyStock * 2, 10);
                 const needsReplenish = p.stock <= reorderPoint;
                 const isOverStocked = p.stock > maxStockVal;
@@ -1541,17 +1545,17 @@ export default function Stock() {
                       <div>
                         <span className="text-muted-foreground">Segurança: </span>
                         <span className="font-semibold text-foreground">
-                          {getPackageUnits(p) > 1 ? `${p.safetyStock} un. (${Math.floor(p.safetyStock / getPackageUnits(p))} fardos)` : `${p.safetyStock} un.`}
+                          {p.type === 'cigarro' ? `${p.safetyStock} carteiras` : getPackageUnits(p) > 1 ? `${p.safetyStock} un. (${Math.floor(p.safetyStock / getPackageUnits(p))} fardos)` : `${p.safetyStock} un.`}
                         </span>
                       </div>
                       <div className="mt-0.5">
                         <span className="text-muted-foreground">Ponto Repor: </span>
-                        <span className="font-semibold text-foreground">{Math.round(reorderPoint)} {p.type === 'cigarro' ? 'carteiras' : 'un.'}</span>
+                        <span className="font-semibold text-foreground">{reorderPoint.toLocaleString('pt-BR', {maximumFractionDigits: 2})} {p.type === 'cigarro' ? 'carteiras' : 'un.'}</span>
                       </div>
                       <div className="mt-0.5 text-primary font-bold">
                         <span>Estoque Máximo: </span>
                         <span>
-                          {getPackageUnits(p) > 1 ? `${maxStockVal} un. (${Math.floor(maxStockVal / getPackageUnits(p))} fardos)` : `${maxStockVal} un.`}
+                          {p.type === 'cigarro' ? `${maxStockVal} carteiras` : getPackageUnits(p) > 1 ? `${maxStockVal} un. (${Math.floor(maxStockVal / getPackageUnits(p))} fardos)` : `${maxStockVal} un.`}
                         </span>
                       </div>
                     </td>
@@ -2837,12 +2841,13 @@ export default function Stock() {
 
                 <div>
                   <label className="block text-sm font-medium text-primary font-bold mb-1">
-                    Estoque Máximo (Teto de Compra) *
+                    {v('stock.max', 'Estoque Máximo')} *
                   </label>
                   <input 
                     type="number" 
                     required 
-                    min={1}
+                    min={formData.type === 'cigarro' ? 0.05 : 1}
+                    step={formData.type === 'cigarro' ? '0.05' : '1'}
                     value={formData.maxStock || ''} 
                     placeholder="Ex: 50"
                     onChange={e => setFormData({...formData, maxStock: e.target.value})} 
@@ -2851,7 +2856,7 @@ export default function Stock() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Estoque de Segurança (Mínimo)</label>
+                  <label className="block text-sm font-medium text-foreground mb-1">Reserva de segurança (além das vendas até a entrega)</label>
                   <input 
                     type="number" 
                     required 
@@ -2864,10 +2869,10 @@ export default function Stock() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Venda Média Estimada / Dia</label>
+                  <label className="block text-sm font-medium text-foreground mb-1">{formData.type === 'cigarro' ? 'Média de carteiras vendidas por dia' : 'Média de unidades vendidas por dia'}</label>
                   <input 
                     type="number" 
-                    step="0.1" 
+                    step="any"
                     required 
                     min={0}
                     value={formData.dailyAverageSales} 
@@ -2888,6 +2893,13 @@ export default function Stock() {
                   />
                 </div>
               </div>
+
+              <StockLevelSuggestion
+                product={{type: formData.type, stock: Number(formData.stock), dailyAverageSales: Number(formData.dailyAverageSales), replacementDays: Number(formData.replacementDays)}}
+                coverageDays={Number(formData.stockCoverageDays) || 7}
+                onCoverageChange={days => setFormData((previous: any) => ({...previous, stockCoverageDays: days}))}
+                onApply={values => { setFormData((previous: any) => ({...previous, ...values})); showToast('Limites preenchidos. Salve o produto para confirmar.'); }}
+              />
 
               <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3 mt-8 pt-4 border-t border-border">
                 {editingId ? (

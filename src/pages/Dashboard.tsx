@@ -1,3 +1,4 @@
+import { getReorderPoint } from '../lib/stockSuggestions';
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { subscribeProducts, subscribeTodaySales, subscribeCustomers, subscribeSettings, getSaleItems, getPurchasesByDateRange } from '../lib/api';
@@ -98,7 +99,7 @@ export default function Dashboard() {
   const totalDebt = customers.reduce((sum, c) => sum + c.totalDebt, 0);
   const goal = settings?.dailyGoal || 500;
   
-  const toReplenish = products.filter(p => p.stock <= p.safetyStock + (p.dailyAverageSales * p.replacementDays));
+  const toReplenish = products.filter(p => p.stock <= getReorderPoint(p));
 
   return (
     <div className="space-y-6">
