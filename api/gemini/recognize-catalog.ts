@@ -63,11 +63,11 @@ Retorne somente JSON {products:[...], truncated:boolean}. Se nada for legível, 
     let requestMode = 0; // Structured JSON, JSON mode, then prompt-only JSON.
     let providerCalls = 0;
     const send = async (selectedConfig: Partial<typeof parameters.config>) => {
-      const remaining = 45000 - (Date.now() - startedAt);
+      const remaining = 52000 - (Date.now() - startedAt);
       if (remaining <= 0 || providerCalls >= 4) throw new Error('Provider retry deadline exceeded');
       providerCalls++;
       return await ai.models.generateContent({ ...parameters, model, config: { ...selectedConfig,
-        httpOptions: { ...selectedConfig.httpOptions, timeout: Math.min(20000, remaining) } } });
+        httpOptions: { ...selectedConfig.httpOptions, timeout: Math.min(model === fallbackModel ? 30000 : 20000, remaining) } } });
     };
     const generate = async () => {
       const { responseJsonSchema, ...jsonConfig } = parameters.config;
@@ -91,7 +91,15 @@ Retorne somente JSON {products:[...], truncated:boolean}. Se nada for legível, 
       try { result = await generate(); break; }
       catch (error: unknown) {
         const status = Number((error as { status?: number; code?: number })?.status || (error as { code?: number })?.code);
-        const transient = [500, 502, 503, 504].includes(status);
+        const message = error instanceof Error ? error.message : '';
+        const timedOut = [408, 499, 504].includes(status) || /timeout|timed out|deadline|abort|cancel/i.test(message) || (error as { name?: string })?.name === 'AbortError';
+        if (timedOut) {
+          if (model === fallbackModel || attempt === 2) throw error;
+          diagnose('TIMEOUT_MODEL_FALLBACK', { stage, fallbackModel, providerStatus: Number.isFinite(status) ? status : null });
+          model = fallbackModel;
+          continue;
+        }
+        const transient = [500, 502, 503].includes(status);
         if (attempt === 2) throw error;
         if (transient && !retriedTransient) {
           retriedTransient = true;
@@ -152,7 +160,7 @@ Retorne somente JSON {products:[...], truncated:boolean}. Se nada for legível, 
     const message = error instanceof Error ? error.message : '';
     const tooLarge = stage === 'provider-request' && (status === 413 || /payload too large|request.*too large|request.*size.*exceed/i.test(message));
     const code = tooLarge ? 'FILE_TOO_LARGE' : stage === 'response-parsing' ? 'INVALID_JSON_RESPONSE' : stage === 'response-validation' ? 'INVALID_CATALOG_RESPONSE' :
-      status === 429 ? 'QUOTA_EXCEEDED' : status === 401 || status === 403 ? 'AUTHORIZATION_FAILED' : [500, 502, 503, 504].includes(status) ? 'PROVIDER_UNAVAILABLE' : status === 404 ? 'MODEL_UNAVAILABLE' : status === 400 ? 'REQUEST_REJECTED' : /timeout|deadline|abort/i.test(message) ? 'TIMEOUT' : 'UPSTREAM_FAILURE';
+      [408, 499, 504].includes(status) || /timeout|timed out|deadline|abort|cancel/i.test(message) || (error as { name?: string })?.name === 'AbortError' ? 'TIMEOUT' : status === 429 ? 'QUOTA_EXCEEDED' : status === 401 || status === 403 ? 'AUTHORIZATION_FAILED' : [500, 502, 503, 504].includes(status) ? 'PROVIDER_UNAVAILABLE' : status === 404 ? 'MODEL_UNAVAILABLE' : status === 400 ? 'REQUEST_REJECTED' : /timeout|deadline|abort/i.test(message) ? 'TIMEOUT' : 'UPSTREAM_FAILURE';
     // Never log provider message text: it can contain credentials or document text.
     const providerReason = status !== 400 ? undefined : /api.?key|credential/i.test(message) ? 'CREDENTIAL_REJECTED'
       : /schema|response.?mime|json.?mode|generation.?config|output.?token/i.test(message) ? 'CONFIGURATION_REJECTED'
@@ -163,11 +171,11 @@ Retorne somente JSON {products:[...], truncated:boolean}. Se nada for legível, 
       code === 'PROVIDER_UNAVAILABLE' ? 'A IA está temporariamente indisponível, mesmo após as tentativas automáticas. Tente novamente em alguns minutos ou preencha manualmente.' :
       code === 'MODEL_UNAVAILABLE' || code === 'AUTHORIZATION_FAILED' ? 'O serviço de leitura está indisponível. Você pode cadastrar os produtos manualmente enquanto a configuração é verificada.' :
       code === 'REQUEST_REJECTED' ? 'A IA recusou a leitura após as tentativas automáticas. Tente novamente mais tarde ou adicione os produtos manualmente.' :
-      code === 'TIMEOUT' ? 'A leitura demorou demais. Envie menos páginas ou uma foto com menos produtos.' :
+      code === 'TIMEOUT' ? 'A leitura demorou demais, mesmo após a recuperação automática. Tente mais tarde ou adicione os produtos manualmente.' :
       code === 'INVALID_JSON_RESPONSE' || code === 'INVALID_CATALOG_RESPONSE' ? 'A IA não conseguiu organizar os produtos desta imagem. Envie menos itens por foto ou preencha manualmente.' :
       'Não foi possível ler este catálogo. Tente outro arquivo ou preencha manualmente.';
     if (code === 'PROVIDER_UNAVAILABLE') res.setHeader('Retry-After', '10');
-    return res.status(tooLarge ? 413 : status === 429 ? 429 : status === 401 || status === 403 || code === 'PROVIDER_UNAVAILABLE' || code === 'REQUEST_REJECTED' ? 503 : 502).json({ code, requestId,
+    return res.status(tooLarge ? 413 : code === 'TIMEOUT' ? 504 : status === 429 ? 429 : status === 401 || status === 403 || code === 'PROVIDER_UNAVAILABLE' || code === 'REQUEST_REJECTED' ? 503 : 502).json({ code, requestId,
       providerStatus: Number.isFinite(status) ? status : null, ...(providerReason ? { providerReason } : {}), ...(tooLarge ? { maxFileBytes } : {}), error: errorMessage });
   }
 }

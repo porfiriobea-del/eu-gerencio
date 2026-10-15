@@ -130,7 +130,7 @@ for (const name of ['product','catalog']) {
    assert.equal(result.status,scenario==='all-overloaded'?503:200);
    assert.deepEqual(calls.map(call=>call.model),name==='catalog'&&scenario!=='quota-fallback'?['gemini-3.5-flash','gemini-3.5-flash','gemini-3.1-flash-lite']:['gemini-3.5-flash','gemini-3.1-flash-lite']);
    if(scenario==='all-overloaded')assert.equal(result.body.code,'PROVIDER_UNAVAILABLE');
-   for(const call of calls)assert.ok(call.config.httpOptions.timeout<=20000);
+   for(const call of calls)assert.ok(call.config.httpOptions.timeout <= (call.model === 'gemini-3.1-flash-lite' ? 30000 : 20000));
   });
  }
 }
@@ -156,7 +156,7 @@ for (const scenario of ['json-mode-rejected', 'token-limit-rejected', 'primary-m
   assert.equal(calls.at(-1).config.responseMimeType,undefined);
   assert.equal(calls.at(-1).config.responseJsonSchema,undefined);
   assert.equal(calls.at(-1).config.maxOutputTokens,undefined);
-  assert.ok(calls.every(call=>call.config.httpOptions.timeout<=20000));
+  assert.ok(calls.every(call=>call.config.httpOptions.timeout <= (call.model === 'gemini-3.1-flash-lite' ? 30000 : 20000)));
   assert.ok(!JSON.stringify(logs).includes('private-document-text'));
   assert.ok(!JSON.stringify(logs).includes('secret-key-value'));
   if(scenario==='all-configurations-rejected'){
@@ -165,5 +165,25 @@ for (const scenario of ['json-mode-rejected', 'token-limit-rejected', 'primary-m
    assert.match(result.body.error,/tentativas automáticas/);
   }
   if(scenario==='primary-model-rejected')assert.equal(calls.at(-1).model,'gemini-3.1-flash-lite');
+ });
+}
+
+
+for (const failure of [Object.assign(new Error('request cancelled'), {status:499}), Object.assign(new Error('deadline exceeded'),{status:504}), Object.assign(new Error('request aborted'),{name:'AbortError'}), new Error('request timed out')]) {
+ test(`catalogue switches model on timeout or cancellation: ${failure.status || failure.name}`,async t=>{
+  const key=process.env.GEMINI_API_KEY, model=process.env.GEMINI_MODEL;
+  process.env.GEMINI_API_KEY='mock-only';process.env.GEMINI_MODEL='gemini-3.5-flash';
+  t.after(()=>{for(const [name,value] of [['GEMINI_API_KEY',key],['GEMINI_MODEL',model]]){if(value===undefined)delete process.env[name];else process.env[name]=value;}delete globalThis.__generateModel;});
+  const calls=[];t.mock.method(console,'error',()=>{});
+  globalThis.__generateModel=async args=>{calls.push(args);if(calls.length===1)throw failure;return {text:JSON.stringify(catalog)};};
+  const result=await invoke('catalog');
+  assert.equal(result.status,200);assert.equal(result.body.products[0].name,'Suco');
+  assert.deepEqual(calls.map(call=>call.model),['gemini-3.5-flash','gemini-3.1-flash-lite']);
+  assert.equal(calls[0].config.httpOptions.timeout,20000);
+  assert.ok(calls[1].config.httpOptions.timeout>20000&&calls[1].config.httpOptions.timeout<=30000);
+  calls.length=0;
+  globalThis.__generateModel=async args=>{calls.push(args);throw failure;};
+  const unavailable=await invoke('catalog');
+  assert.equal(unavailable.status,504);assert.equal(unavailable.body.code,'TIMEOUT');assert.equal(calls.length,2);
  });
 }

@@ -28,7 +28,7 @@ export async function recognizeCatalog(dataUrl: string, categories: string[], si
   const abort = () => controller.abort();
   signal?.addEventListener('abort', abort, { once: true });
   if (signal?.aborted) controller.abort();
-  const timer = setTimeout(abort, 50000);
+  const timer = setTimeout(abort, 58000);
   try {
     const response = await fetch('/api/gemini/recognize-catalog', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
@@ -54,7 +54,7 @@ export async function recognizeCatalog(dataUrl: string, categories: string[], si
         INCOMPLETE_CATALOG: 'O catálogo tem muitas informações. Envie menos páginas ou divida a foto em partes.',
         INVALID_JSON_RESPONSE: 'A IA não conseguiu organizar os produtos desta imagem. Envie menos itens por foto ou preencha manualmente.',
         INVALID_CATALOG_RESPONSE: 'A IA não conseguiu organizar os produtos desta imagem. Envie menos itens por foto ou preencha manualmente.',
-        TIMEOUT: 'A leitura demorou demais. Envie menos páginas ou uma foto com menos produtos.',
+        TIMEOUT: 'A leitura demorou demais, mesmo com o modelo alternativo. Tente mais tarde ou adicione os produtos manualmente.',
         REQUEST_REJECTED: 'A IA recusou a leitura após as tentativas automáticas. Tente novamente mais tarde ou adicione os produtos manualmente.'
       };
       throw Object.assign(new Error(messages[result?.code] || 'Não foi possível ler o catálogo agora. Tente outra foto ou PDF, ou preencha manualmente.'), { code: result?.code });

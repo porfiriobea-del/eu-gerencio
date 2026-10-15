@@ -114,7 +114,7 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
     } catch (error) {
       if (generation === generationRef.current) {
         setStatus('A leitura não foi concluída. Os produtos já revisados foram mantidos.');
-        setError((error as { code?: string })?.code === 'REQUEST_REJECTED' ? copy('catalog.rejected', 'A IA recusou a leitura. Tente mais tarde ou adicione os produtos manualmente.') : error instanceof Error ? error.message : 'Não foi possível ler o catálogo. Preencha os produtos manualmente.');
+        setError((error as { code?: string })?.code === 'TIMEOUT' ? copy('catalog.timeout', 'A leitura demorou demais, mesmo com o modelo alternativo. Tente mais tarde ou adicione os produtos manualmente.') : (error as { code?: string })?.code === 'REQUEST_REJECTED' ? copy('catalog.rejected', 'A IA recusou a leitura. Tente mais tarde ou adicione os produtos manualmente.') : error instanceof Error ? error.message : 'Não foi possível ler o catálogo. Preencha os produtos manualmente.');
       }
     } finally {
       if (generation === generationRef.current) { setIsReading(false); readingRef.current = false; controllerRef.current = null; }
