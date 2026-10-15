@@ -1,3 +1,4 @@
+import { formatProductStock } from '../lib/productUnits';
 import { rankProductsBySales } from '../lib/productSalesRanking';
 import { CartDrawer, type CartItem } from '../components/CartDrawer';
 import { showToast, showActionError } from '../lib/actionFeedback';
@@ -546,12 +547,12 @@ export default function POS() {
                   <span className="text-[10px] font-semibold text-primary bg-palette-1 px-1.5 py-0.5 rounded">
                     {p.category}
                   </span>
-                  {getPackageUnits(p) > 1 ? (
+                  {p.type === 'cigarro' ? <span className="text-[11px] text-muted-foreground">{formatProductStock(p)}</span> : getPackageUnits(p) > 1 ? (
                     <span className="text-[11px] text-muted-foreground font-medium">
-                      📦 {Math.floor(p.stock / getPackageUnits(p))} {p.purchaseForm === 'fardo' ? 'fardos' : 'pac.'} + {Number((p.stock % getPackageUnits(p)).toFixed(2))} {p.type === 'cigarro' ? 'carteiras' : 'un.'}
+                      📦 {Math.floor(p.stock / getPackageUnits(p))} {p.purchaseForm === 'fardo' ? 'fardos' : 'pac.'} + {Number((p.stock % getPackageUnits(p)).toFixed(2))} un.
                     </span>
                   ) : (
-                    <span className="text-[11px] text-muted-foreground">{p.stock} {p.type === 'cigarro' ? 'carteiras' : 'un.'}</span>
+                    <span className="text-[11px] text-muted-foreground">{p.stock} un.</span>
                   )}
                 </div>
 

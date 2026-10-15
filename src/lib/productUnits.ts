@@ -14,7 +14,7 @@ export function getPurchasePackageUnits(product: Pick<Product, 'type' | 'unitsPe
 export function getCigaretteFormats(product: Pick<Product, 'basePrice' | 'priceUnit' | 'priceHalfCart' | 'priceCart' | 'pricePack'>) {
   // Missing/zero prices disable a format; never infer prices from basePrice.
   return [
-    { label: 'Maço/Pacote (10 carteiras)', units: CIGARETTE_UNITS.pack, price: Number(product.pricePack) },
+    { label: '10 carteiras fechadas', units: CIGARETTE_UNITS.pack, price: Number(product.pricePack) },
     { label: 'Carteira (1 carteira fechada)', units: CIGARETTE_UNITS.cart, price: Number(product.priceCart) },
     { label: 'Meia Carteira (10 unidades)', units: CIGARETTE_UNITS.halfCart, price: Number(product.priceHalfCart) },
     { label: 'Unidade Avulsa (1 cigarro)', units: CIGARETTE_UNITS.unit, price: Number(product.priceUnit) }
@@ -56,7 +56,14 @@ export function isValidStockQuantity(value: number): boolean {
 /** Legacy cigarette records use individual cigarettes; convert once using a unit marker. */
 export function normalizeCigaretteStock<T extends Partial<Product>>(product: T): T {
   if (product.type !== 'cigarro') return product;
-  if (product.stockUnit === 'carteira') return { ...product, unitsPerPackage: 10 };
+  if (product.stockUnit === 'carteira') {
+    const normalized = { ...product, unitsPerPackage: 10 };
+    for (const field of ['stock', 'initialStock'] as const) {
+      const value = product[field];
+      if (value !== undefined && isValidStockQuantity(value)) normalized[field] = Math.round(value * 20) / 20;
+    }
+    return normalized;
+  }
   const converted: any = { ...product, stockUnit: 'carteira', unitsPerPackage: 10, purchaseForm: 'pacote' };
   for (const field of ['stock', 'initialStock', 'safetyStock', 'maxStock', 'dailyAverageSales'] as const) {
     if (product[field] !== undefined) converted[field] = Number(product[field]) / 20;
@@ -73,4 +80,20 @@ export function cigaretteStockFields(product: Partial<Product>): Partial<Product
     if (normalized[key] !== undefined) fields[key] = normalized[key];
   }
   return fields;
+}
+
+/** Display the physical balance using integer cigarettes, never supplier packages. */
+export function formatCigaretteStock(stock: number): string {
+  const count = Math.round(stock * 20);
+  if (!Number.isSafeInteger(count) || count < 0) return 'Estoque inválido';
+  const wallets = Math.floor(count / 20), loose = count % 20;
+  const whole = `${wallets} ${wallets === 1 ? 'carteira' : 'carteiras'}`;
+  if (!loose) return whole;
+  if (loose === 10) return wallets ? `${whole} e meia` : 'meia carteira';
+  const remainder = `${loose} ${loose === 1 ? 'cigarro' : 'cigarros'}`;
+  return wallets ? `${whole} e ${remainder}` : remainder;
+}
+
+export function formatProductStock(product: Pick<Product, 'type' | 'stock'>, stock = product.stock): string {
+  return product.type === 'cigarro' ? formatCigaretteStock(stock) : `${stock.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ${stock === 1 ? 'unidade' : 'unidades'}`;
 }

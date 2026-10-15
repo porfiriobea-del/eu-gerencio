@@ -1,3 +1,4 @@
+import { formatProductStock } from '../lib/productUnits';
 import { usePreferences } from '../lib/preferencesContext';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -59,7 +60,7 @@ export function CartDrawer({ items, total, busy = false, onQuantity, onRemove, o
       {!items.length && <p className="py-12 text-center text-muted-foreground">{v('pos.emptyCart', 'Carrinho vazio')}</p>}
       {items.map((item, index) => <article key={`${item.product.id}:${item.format}`} className="rounded-xl border border-border p-3">
         <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words font-semibold">{item.product.name}</h3><p className="text-xs text-muted-foreground">{item.format}</p><p className="mt-1 text-xs">{item.quantity} × {money(item.price)}</p></div><strong className="shrink-0 text-primary">{money(item.price * item.quantity)}</strong></div>
-        <p className="mt-2 text-xs text-muted-foreground">Baixa: {Number((item.quantity * item.stockDeduction).toFixed(2))} {item.product.type === 'cigarro' ? 'carteiras' : 'unidades'}</p>
+        <p className="mt-2 text-xs text-muted-foreground">Baixa: {formatProductStock(item.product, Math.round(item.quantity * item.stockDeduction * 20) / 20)}</p>
         <div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-3"><button type="button" disabled={busy} aria-label={`Diminuir ${item.product.name}, ${item.format}`} onClick={() => onQuantity(index, -1)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-border disabled:opacity-50"><Minus className="h-4 w-4" /></button><span className="text-sm font-bold">{item.quantity}</span><button type="button" disabled={busy} aria-label={`Aumentar ${item.product.name}, ${item.format}`} onClick={() => onQuantity(index, 1)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-border disabled:opacity-50"><Plus className="h-4 w-4" /></button></div><button type="button" disabled={busy} aria-label={`Remover ${item.product.name}, ${item.format}`} onClick={() => onRemove(index)} className="flex h-11 w-11 items-center justify-center rounded-lg text-red-500 disabled:opacity-50"><Trash2 className="h-4 w-4" /></button></div>
       </article>)}
     </div>

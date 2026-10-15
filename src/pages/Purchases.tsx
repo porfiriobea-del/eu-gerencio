@@ -1,3 +1,4 @@
+import { formatProductStock } from '../lib/productUnits';
 import { getPurchasePackageUnits } from '../lib/productUnits';
 import { getReorderPoint } from '../lib/stockSuggestions';
 import { showToast, showActionError } from '../lib/actionFeedback';
@@ -649,7 +650,7 @@ export default function Purchases() {
 
                           <td className="p-3.5 text-center">
                             <div className={`font-bold ${item.isCritical ? 'text-red-600' : item.isBelowSafety ? 'text-amber-600' : 'text-foreground'}`}>
-                              {p.stock} un.
+                              {formatProductStock(p)}
                             </div>
                             <div className="text-[11px] text-muted-foreground">
                               Segurança: {p.safetyStock} un. | Máx: {item.maxStock} un.
@@ -1014,7 +1015,7 @@ export default function Purchases() {
                 <div>
                   <span className="font-bold text-sm text-foreground block">{selectedProduct.name}</span>
                   <span className="text-muted-foreground">
-                    Categoria: {selectedProduct.category} • Estoque atual: <strong>{selectedProduct.stock} un.</strong>
+                    Categoria: {selectedProduct.category} • Estoque atual: <strong>{formatProductStock(selectedProduct)}</strong>
                   </span>
                 </div>
                 {getPurchasePackageUnits(selectedProduct) > 1 && (
@@ -1590,7 +1591,7 @@ export default function Purchases() {
                   >
                     <div>
                       <span className="font-semibold text-foreground block">{p.name}</span>
-                      <span className="text-muted-foreground text-[11px]">{p.category} • Estoque atual: {p.stock} un.</span>
+                      <span className="text-muted-foreground text-[11px]">{p.category} • Estoque atual: {formatProductStock(p)}</span>
                     </div>
                     <div className="text-right">
                       <span className="font-bold text-primary block">R$ {p.unitCost.toFixed(2)}</span>

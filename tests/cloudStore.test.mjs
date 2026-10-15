@@ -277,3 +277,33 @@ test('catalogue retry uses stable draft IDs and confirms without duplicating or 
  assert.equal((await store.getDocs(store.collection(store.db,'products'))).size,before+1);
  assert.equal((await store.getDoc(saved.ref)).data().stock,7);
 });
+
+
+test('cigarette sales save exact fractional balances and the committed balance in history',async()=>{
+ const ref=store.doc(store.db,'products','fraction-history');
+ await store.setDoc(ref,{ownerId:'owner',name:'Cigarro fracionado',type:'cigarro',stockUnit:'carteira',unitsPerPackage:10,stock:2,unitCost:8,basePrice:12,priceCart:12,priceHalfCart:6,priceUnit:1});
+ const item=(format,price,stockDeduction,quantity=1)=>({productId:'fraction-history',name:'Cigarro fracionado',format,quantity,price,unitCost:0,stockDeduction});
+ await api.recordSale({total:6,type:'cash',customerId:''},[item('Meia Carteira (10 unidades)',6,0.5)],[]);
+ assert.equal((await store.getDoc(ref)).data().stock,1.5);
+ const sales=await store.getDocs(store.collection(store.db,'sales'));
+ assert.ok(sales.docs.some(doc=>doc.data().itemsSummary.includes('Venda: meia carteira; estoque agora 1 carteira e meia')));
+ await store.updateDoc(ref,{stock:1});
+ for(let index=0;index<20;index++)await api.recordSale({total:1,type:'cash',customerId:''},[item('Unidade Avulsa (1 cigarro)',1,0.05)],[]);
+ assert.equal((await store.getDoc(ref)).data().stock,0);
+ const before=(await store.getDocs(store.collection(store.db,'sales'))).size;
+ await assert.rejects(api.recordSale({total:1,type:'cash',customerId:''},[item('Unidade Avulsa (1 cigarro)',1,0.05)],[]),/insuficiente/);
+ assert.equal((await store.getDocs(store.collection(store.db,'sales'))).size,before);
+ await store.updateDoc(ref,{stock:2});
+ await api.recordSale({total:15,type:'cash',customerId:''},[item('Carteira (1 carteira fechada)',12,1),item('Unidade Avulsa (1 cigarro)',1,0.05,3)],[]);
+ assert.equal((await store.getDoc(ref)).data().stock,0.85);
+});
+
+
+test('editing cigarette stock canonicalizes floating drift and rejects non-cigarette fractions',async()=>{
+ const ref=store.doc(store.db,'products','fraction-edit');
+ await store.setDoc(ref,{ownerId:'owner',name:'Cigarro',type:'cigarro',stockUnit:'carteira',unitsPerPackage:10,stock:2,unitCost:8,basePrice:12});
+ await api.updateProduct('fraction-edit',{stock:1.9000000000000001});
+ assert.equal((await store.getDoc(ref)).data().stock,1.9);
+ await assert.rejects(api.updateProduct('fraction-edit',{stock:0.03}),/Estoque inválido/);
+ assert.equal((await store.getDoc(ref)).data().stock,1.9);
+});

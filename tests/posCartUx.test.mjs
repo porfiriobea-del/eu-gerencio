@@ -61,7 +61,7 @@ test('PIX checkout preserves fractional deductions, waits for confirmation and c
  let finish,recorded;const ui=setup((...args)=>{recorded=args;return new Promise(resolve=>{finish=resolve;});});
  fireEvent.click(ui.getByRole('button',{name:/Carteira \(1 carteira fechada\)/}));
  fireEvent.click(ui.getByRole('button',{name:/Unidade Avulsa \(1 cigarro\)/}));
- openCart(ui);assert.ok(ui.getByText(/Baixa: 0.05 carteiras/));
+ openCart(ui);assert.ok(ui.getByText(/Baixa: 1 cigarro/));
  fireEvent.click(ui.getByRole('button',{name:'Finalizar Compra / Receber'}));assert.equal(ui.queryByRole('dialog',{name:/Carrinho/}),null);
  fireEvent.click(ui.getByRole('button',{name:'PIX'}));
  await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Confirmar'}));});

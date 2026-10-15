@@ -1,3 +1,4 @@
+import { formatProductStock } from '../lib/productUnits';
 import { CigarettePurchaseOptions } from '../components/CigarettePurchaseOptions';
 import { StockLevelSuggestion } from '../components/StockLevelSuggestion';
 import { getReorderPoint } from '../lib/stockSuggestions';
@@ -1208,10 +1209,10 @@ export default function Stock() {
                         {v('stock.current', 'Quantidade na Prateleira')}
                       </span>
                       <div className="text-2xl font-black text-foreground flex items-baseline gap-1 mt-0.5">
-                        {getPackageUnits(p) > 1 ? (
+                        {p.type === 'cigarro' ? <span>{formatProductStock(p)}</span> : getPackageUnits(p) > 1 ? (
                           <>
-                            <span>{Math.floor(p.stock / getPackageUnits(p))} {p.type === 'cigarro' ? 'maços' : 'fardos'}</span>
-                            <span className="text-xs font-normal text-muted-foreground">+ {p.stock % getPackageUnits(p)} {p.type === 'cigarro' ? 'carteiras' : 'un.'}</span>
+                            <span>{Math.floor(p.stock / getPackageUnits(p))} fardos</span>
+                            <span className="text-xs font-normal text-muted-foreground">+ {p.stock % getPackageUnits(p)} un.</span>
                           </>
                         ) : (
                           <>
@@ -1259,7 +1260,7 @@ export default function Stock() {
                       <div className="flex justify-between items-center text-muted-foreground">
                         <span>{v('stock.initial', 'Estoque no Início do Mês')}:</span>
                         <strong className="text-foreground">
-                          {p.initialStock !== undefined ? p.initialStock : p.stock} un.
+                          {formatProductStock(p, p.initialStock ?? p.stock)}
                         </strong>
                       </div>
                       <div className="flex justify-between items-center text-muted-foreground">
@@ -1487,18 +1488,18 @@ export default function Stock() {
 
                     {/* Estoque Inicial com Data Base */}
                     <td className="p-3.5">
-                      {getPackageUnits(p) > 1 ? (
+                      {p.type === 'cigarro' ? <span>{formatProductStock(p, p.initialStock ?? p.stock)}</span> : getPackageUnits(p) > 1 ? (
                         <div>
                           <div className="font-bold text-foreground">
-                            {Math.floor((p.initialStock !== undefined ? p.initialStock : p.stock) / getPackageUnits(p))} {p.type === 'cigarro' ? 'maços' : 'fardos'} + {((p.initialStock !== undefined ? p.initialStock : p.stock) % getPackageUnits(p))} un.
+                            {Math.floor((p.initialStock !== undefined ? p.initialStock : p.stock) / getPackageUnits(p))} fardos + {((p.initialStock !== undefined ? p.initialStock : p.stock) % getPackageUnits(p))} un.
                           </div>
                           <div className="text-xs text-muted-foreground font-medium">
-                            ({p.initialStock !== undefined ? p.initialStock : p.stock} un. no total)
+                            ({formatProductStock(p, p.initialStock ?? p.stock)} no total)
                           </div>
                         </div>
                       ) : (
                         <div className="font-medium text-foreground">
-                          {p.initialStock !== undefined ? p.initialStock : p.stock} un.
+                          {formatProductStock(p, p.initialStock ?? p.stock)}
                         </div>
                       )}
                       <button
@@ -1516,13 +1517,13 @@ export default function Stock() {
 
                     {/* Estoque Atual e Barra Visual */}
                     <td className="p-3.5">
-                      {getPackageUnits(p) > 1 ? (
+                      {p.type === 'cigarro' ? <span>{formatProductStock(p)}</span> : getPackageUnits(p) > 1 ? (
                         <div>
                           <div className={`font-bold text-base ${needsReplenish ? 'text-red-600' : 'text-foreground'}`}>
-                            {Math.floor(p.stock / getPackageUnits(p))} {p.type === 'cigarro' ? 'maços' : 'fardos'} + {p.stock % getPackageUnits(p)} un.
+                            {Math.floor(p.stock / getPackageUnits(p))} fardos + {p.stock % getPackageUnits(p)} un.
                           </div>
                           <div className="text-xs text-muted-foreground font-medium">
-                            {p.stock} un. físicas no total
+                            {formatProductStock(p)} físicas no total
                           </div>
                         </div>
                       ) : (
@@ -1548,7 +1549,7 @@ export default function Stock() {
                       <div>
                         <span className="text-muted-foreground">Segurança: </span>
                         <span className="font-semibold text-foreground">
-                          {p.type === 'cigarro' ? `${p.safetyStock} carteiras` : getPackageUnits(p) > 1 ? `${p.safetyStock} un. (${Math.floor(p.safetyStock / getPackageUnits(p))} fardos)` : `${p.safetyStock} un.`}
+                          {p.type === 'cigarro' ? formatProductStock(p, p.safetyStock) : getPackageUnits(p) > 1 ? `${p.safetyStock} un. (${Math.floor(p.safetyStock / getPackageUnits(p))} fardos)` : `${p.safetyStock} un.`}
                         </span>
                       </div>
                       <div className="mt-0.5">
@@ -1558,7 +1559,7 @@ export default function Stock() {
                       <div className="mt-0.5 text-primary font-bold">
                         <span>Estoque Máximo: </span>
                         <span>
-                          {p.type === 'cigarro' ? `${maxStockVal} carteiras` : getPackageUnits(p) > 1 ? `${maxStockVal} un. (${Math.floor(maxStockVal / getPackageUnits(p))} fardos)` : `${maxStockVal} un.`}
+                          {p.type === 'cigarro' ? formatProductStock(p, maxStockVal) : getPackageUnits(p) > 1 ? `${maxStockVal} un. (${Math.floor(maxStockVal / getPackageUnits(p))} fardos)` : `${maxStockVal} un.`}
                         </span>
                       </div>
                     </td>
@@ -1883,7 +1884,7 @@ export default function Stock() {
                     </p>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {[
-                        { field: 'pricePack', label: 'Preço do Maço / Pacote', detail: '10 carteiras' },
+                        { field: 'pricePack', label: 'Preço de 10 carteiras', detail: '10 carteiras' },
                         { field: 'priceCart', label: 'Preço da Carteira', detail: '1 carteira fechada' },
                         { field: 'priceHalfCart', label: 'Preço da Meia Carteira', detail: '10 cigarros — 0,5 carteira' },
                         { field: 'priceUnit', label: 'Preço da Unidade Avulsa', detail: '1 cigarro — 0,05 carteira' }
@@ -2684,7 +2685,7 @@ export default function Stock() {
                         Contagem do Estoque Inicial:
                       </span>
                       <span className="text-xs font-bold text-primary bg-surface px-2.5 py-1 rounded-md border border-border">
-                        Total Inicial: {formData.initialStock !== undefined ? formData.initialStock : formData.stock} {formData.type === 'cigarro' ? 'carteiras' : 'unidades'}
+                        Total Inicial: {formatProductStock({type: formData.type || 'comum', stock: Number(formData.initialStock ?? formData.stock ?? 0)})}
                       </span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2793,7 +2794,7 @@ export default function Stock() {
                         Estoque Atual Físico em Prateleira/Depósito:
                       </span>
                       <span className="text-xs font-bold text-primary bg-surface px-2.5 py-1 rounded-md border border-border">
-                        Total Atual Físico: {formData.stock} {formData.type === 'cigarro' ? 'carteiras' : 'unidades'}
+                        Total Atual Físico: {formatProductStock({type: formData.type || 'comum', stock: Number(formData.stock || 0)})}
                       </span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -3035,7 +3036,7 @@ export default function Stock() {
                     title="Preenche com o estoque físico atual"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>Copiar estoque atual ({editingInitialStockProduct.stock} un.)</span>
+                    <span>Copiar estoque atual ({formatProductStock(editingInitialStockProduct)})</span>
                   </button>
                 </div>
 
@@ -3065,7 +3066,7 @@ export default function Stock() {
                       />
                     </div>
                     <div className="col-span-2 text-xs text-primary font-semibold">
-                      Total Inicial Calculado: {(initialStockEditPackages * getPackageUnits(editingInitialStockProduct)) + initialStockEditLoose} {editingInitialStockProduct.type === 'cigarro' ? 'carteiras' : 'unidades'}
+                      Total Inicial Calculado: {formatProductStock(editingInitialStockProduct, (initialStockEditPackages * getPackageUnits(editingInitialStockProduct)) + initialStockEditLoose)}
                     </div>
                   </div>
                 ) : (
@@ -3086,7 +3087,7 @@ export default function Stock() {
               <div className="text-xs text-muted-foreground bg-palette-1/30 p-3 rounded-xl border border-palette-1/50 flex items-start gap-2">
                 <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                 <span>
-                  O estoque físico atual deste produto é de <strong>{editingInitialStockProduct.stock} un.</strong> Atualizar o estoque inicial redefine a referência mensal sem apagar as vendas realizadas.
+                  O estoque físico atual deste produto é de <strong>{formatProductStock(editingInitialStockProduct)}</strong> Atualizar o estoque inicial redefine a referência mensal sem apagar as vendas realizadas.
                 </span>
               </div>
             </div>
@@ -3262,7 +3263,7 @@ export default function Stock() {
               <div className="text-xs text-muted-foreground grid grid-cols-2 gap-2 pt-1 border-t border-border/50">
                 <div>
                   <span className="block font-medium">Estoque atual:</span>
-                  <span className="font-bold text-foreground">{productToDelete.stock} unidades</span>
+                  <span className="font-bold text-foreground">{formatProductStock(productToDelete)}idades</span>
                 </div>
                 <div>
                   <span className="block font-medium">Preço de venda:</span>
@@ -3389,7 +3390,7 @@ export default function Stock() {
                       <span className="text-muted-foreground ml-1.5 text-[11px]">({prod.category})</span>
                     </div>
                     <div className="shrink-0 flex items-center gap-2">
-                      <span className="text-muted-foreground">{prod.stock} {prod.type === 'cigarro' ? 'carteiras' : 'un.'}</span>
+                      <span className="text-muted-foreground">{formatProductStock(prod)}</span>
                       <span className="font-semibold text-foreground">R$ {prod.basePrice?.toFixed(2)}</span>
                     </div>
                   </div>
@@ -3449,7 +3450,7 @@ export default function Stock() {
         <div className="mb-4 flex justify-between"><h2 className="text-lg font-bold">Verificar duplicados</h2><button type="button" onClick={() => setShowDuplicateReview(false)}>Fechar</button></div>
         <p className="mb-4 text-sm text-muted-foreground">A mesclagem soma o estoque e mantém nome, preços e medidas do primeiro produto. O segundo fica arquivado para preservar o histórico.</p>
         {!duplicateAnalysis.duplicateGroups.size && <p>Nenhum par suspeito encontrado.</p>}
-        {duplicatePairs.map(([key, { target, source }]) => <div key={key} className="mb-3 rounded-xl border border-border p-3"><strong>{target.name} — estoque {target.stock}</strong><div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span>{source.name} — {source.stock} {source.type === 'cigarro' ? 'carteiras' : 'unidades'}</span><button type="button" disabled={!!mergingPair || source.type !== target.type} onClick={async () => {
+        {duplicatePairs.map(([key, { target, source }]) => <div key={key} className="mb-3 rounded-xl border border-border p-3"><strong>{target.name} — estoque {formatProductStock(target)}</strong><div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span>{source.name} — {formatProductStock(source)}</span><button type="button" disabled={!!mergingPair || source.type !== target.type} onClick={async () => {
           setMergingPair(source.id!);
           try { await mergeProducts(target.id!, source.id!); showToast('✓ Produtos mesclados!'); }
           catch (error) { showActionError(error, error instanceof Error ? error.message : 'Não foi possível mesclar.'); }

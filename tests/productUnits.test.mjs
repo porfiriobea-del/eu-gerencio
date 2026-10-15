@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getPackageUnits, getPurchasePackageUnits, getCigaretteFormats, calculateStockUpdates, normalizeCigaretteStock, isValidStockQuantity } from '../src/lib/productUnits.ts';
+import { getPackageUnits, getPurchasePackageUnits, getCigaretteFormats, calculateStockUpdates, normalizeCigaretteStock, isValidStockQuantity, formatCigaretteStock, formatProductStock } from '../src/lib/productUnits.ts';
 
 test('cigarette package always contains 10 carteiras, including legacy metadata', () => {
   assert.equal(getPackageUnits({ type: 'cigarro', unitsPerPackage: 1 }), 10);
@@ -89,4 +89,24 @@ test('supplier half pack is five carteiras without redefining the ten-carteira s
  assert.equal(getPurchasePackageUnits({...product,supplierPackageUnits:undefined}),10);
  assert.equal(getPurchasePackageUnits({...product,supplierPackageUnits:7}),10);
  assert.equal(getPurchasePackageUnits({type:'comum',unitsPerPackage:6}),6);
+});
+
+
+test('two carteiras minus half is exactly 1.5 and closed carteira plus three loose is exact',()=>{
+ const line=(quantity,stockDeduction)=>({product:{id:'c'},quantity,stockDeduction});
+ assert.equal(calculateStockUpdates([line(1,0.5)],[{id:'c',stock:2}])[0].newStock,1.5);
+ assert.equal(calculateStockUpdates([line(1,1),line(3,0.05)],[{id:'c',stock:2}])[0].newStock,0.85);
+ assert.throws(()=>calculateStockUpdates([line(1,1),line(1,0.05)],[{id:'c',stock:1}]),/insuficiente/);
+});
+
+test('stock labels contain exact carteiras and cigarettes, never supplier packages',()=>{
+ for(const [value,label] of [[0,'0 carteiras'],[0.05,'1 cigarro'],[0.5,'meia carteira'],[1,'1 carteira'],[1.5,'1 carteira e meia'],[1.95,'1 carteira e 19 cigarros'],[10,'10 carteiras']]){
+  assert.equal(formatCigaretteStock(value),label);
+  assert.equal(formatProductStock({type:'cigarro',stock:value}),label);
+ }
+ assert.equal(formatCigaretteStock(1.9000000000000001),'1 carteira e 18 cigarros');
+ const product={type:'cigarro',stockUnit:'carteira',stock:1.9000000000000001};
+ assert.equal(normalizeCigaretteStock(product).stock,1.9);
+ assert.equal(normalizeCigaretteStock({...product,stock:0.03}).stock,0.03);
+ assert.ok(getCigaretteFormats({pricePack:10}).every(format=>!/[mp]a[cç]o|pacote/i.test(format.label)));
 });

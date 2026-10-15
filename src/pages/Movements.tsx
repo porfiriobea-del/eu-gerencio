@@ -1,3 +1,4 @@
+import { formatProductStock } from '../lib/productUnits';
 import { usePreferences } from '../lib/preferencesContext';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import React, { useState, useEffect, useMemo } from 'react';
@@ -1002,7 +1003,7 @@ export default function Movements() {
                 <datalist id="products-datalist">
                   {products.map(p => (
                     <option key={p.id} value={p.name}>
-                      Estoque atual: {p.stock} un
+                      Estoque atual: {formatProductStock(p)}
                     </option>
                   ))}
                 </datalist>

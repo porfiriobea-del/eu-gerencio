@@ -6,7 +6,7 @@ import { exportFeedbackToSheets } from './feedbackSheets';
 import { type CatalogProduct } from './standardCatalog';
 import { executeCatalogImport, catalogDocumentId } from './catalogImport';
 import { withActionDeadline, ConfirmationTimeoutError } from './actionFeedback';
-import { normalizeCigaretteStock, cigaretteStockFields, isValidStockQuantity, getCigaretteFormats } from './productUnits';
+import { formatProductStock, formatCigaretteStock, normalizeCigaretteStock, cigaretteStockFields, isValidStockQuantity, getCigaretteFormats } from './productUnits';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, writeBatch, runTransaction } from './cloudStore';
 import { db, enqueueCloudWrite } from './cloudStore';
 import { auth } from './firebase';
@@ -294,12 +294,12 @@ export const adjustProductStock = withProductWriteQueue(async (id: string, indiv
     const newStock = (Math.round(Number(product.stock) * 20) + Math.round(individualUnits * 20)) / 20;
     if (newStock < 0) throw new Error('Estoque insuficiente.');
     transaction.update(ref, { ...cigaretteStockFields(product), stock: newStock, updatedAt: Date.now() });
-    return { name: product.name, newStock };
+    return { name: product.name, type: product.type, stock: newStock, newStock };
   });
   recordMovement({
       sourceOwnerId: uid,
     type: 'product_update', entityId: id, entityName: result.name,
-    description: `Estoque de ${result.name}: ${individualUnits > 0 ? '+' : ''}${individualUnits} unidades de estoque.`,
+    description: `Estoque de ${result.name}: ${individualUnits > 0 ? '+' : '−'}${formatProductStock(result, Math.abs(individualUnits))}; estoque agora ${formatProductStock(result)}.`,
     quantity: individualUnits
   }).catch(() => {});
   return result.newStock;
@@ -310,19 +310,22 @@ export const updateProduct = withProductWriteQueue(async (id: string, data: Part
   if (!uid) throw new Error('Unauthenticated');
   try {
     const now = Date.now();
-    await runTransaction(db, async transaction => {
+    const changedProduct = await runTransaction(db, async transaction => {
       const ref = doc(db, 'products', id);
       const current = await transaction.get(ref);
       if (!current.exists()) throw new Error('Produto não encontrado.');
       if (current.data().mergedIntoId) throw new Error('Este produto foi mesclado. Abra o produto existente.');
       const stockFields = cigaretteStockFields(current.data() as Product);
-      transaction.update(ref, { ...removeUndefinedFields({ ...stockFields, ...data }), updatedAt: now });
+      const merged = normalizeCigaretteStock({ ...current.data(), ...stockFields, ...data } as Product);
+      if (merged.type === 'cigarro' && (!isValidStockQuantity(merged.stock) || (merged.initialStock !== undefined && !isValidStockQuantity(merged.initialStock)))) throw new Error('Estoque inválido: use carteiras em passos de 0,05.');
+      transaction.update(ref, { ...removeUndefinedFields({ ...stockFields, ...data, ...cigaretteStockFields(merged) }), updatedAt: now });
+      return merged;
     });
 
     const activeEmp = getActiveEmployeeStorage();
     const descParts: string[] = [];
     if (data.name) descParts.push(`nome: "${data.name}"`);
-    if (data.stock !== undefined) descParts.push(`estoque: ${data.stock} un`);
+    if (data.stock !== undefined) descParts.push(`estoque: ${formatProductStock(changedProduct)}`);
     if (data.basePrice !== undefined) descParts.push(`preço: R$ ${data.basePrice.toFixed(2)}`);
     if (data.unitCost !== undefined) descParts.push(`custo: R$ ${data.unitCost.toFixed(2)}`);
 
@@ -528,6 +531,7 @@ export const recordSale = withActionDeadline(async (
   if (!uid) throw new Error('Unauthenticated');
   
   const now = Date.now();
+  let confirmedSummary = '';
   const summary = items.map(item => `${item.quantity}x ${item.name} (${item.format})`).join(', ').slice(0, 950);
   const activeEmp = getActiveEmployeeStorage();
   const empId = sale.employeeId || activeEmp.id;
@@ -558,9 +562,12 @@ export const recordSale = withActionDeadline(async (
         if (product.type === 'cigarro' && !getCigaretteFormats(product).some(format => format.label === item.format && format.units === units && format.price === item.price)) throw new Error('O preço ou formato mudou. Confira o carrinho.');
         deductions.set(item.productId, (deductions.get(item.productId) || 0) + Math.round(units * 20) * item.quantity);
       }
+      const balances = new Map<string, number>();
       for (const [id, deduction] of deductions) {
         const product = stockProducts.get(id)!;
+        if (!isValidStockQuantity(product.stock)) throw new Error(`Estoque inválido para ${product.name}. Confira a contagem.`);
         const balance = Math.round(product.stock * 20) - deduction;
+        balances.set(id, balance / 20);
         if (balance < 0) throw new Error(`Estoque insuficiente para ${product.name}.`);
         transaction.update(doc(db, 'products', id), { ...cigaretteStockFields(product), stock: balance / 20, updatedAt: now });
       }
@@ -568,9 +575,15 @@ export const recordSale = withActionDeadline(async (
         if (!customer?.exists()) throw new Error('Cliente de fiado não encontrado.');
         transaction.update(customer.ref, { totalDebt: Math.round((Number(customer.data().totalDebt) + sale.total) * 100) / 100, updatedAt: now });
       }
-      transaction.set(saleRef, { ...sale, itemsSummary: summary, employeeId: empId, employeeName: empName, ownerId: uid, createdAt: now });
+      confirmedSummary = items.map(item => {
+        const product = stockProducts.get(item.productId)!;
+        return product.type === 'cigarro'
+          ? `${item.name} — Venda: ${formatCigaretteStock(Math.round(productFormatUnits(product, item.format) * 20) * item.quantity / 20)}; estoque agora ${formatProductStock(product, balances.get(item.productId)!)}`
+          : `${item.quantity}x ${item.name} (${item.format})`;
+      }).join('; ');
+      transaction.set(saleRef, { ...sale, itemsSummary: confirmedSummary || summary, employeeId: empId, employeeName: empName, ownerId: uid, createdAt: now });
       items.forEach((item, index) => transaction.set(itemRefs[index], {
-        ...item, unitCost: stockProducts.get(item.productId)!.unitCost * (item.stockDeduction ?? (productFormatUnits(stockProducts.get(item.productId)!, item.format))), ownerId: uid, createdAt: now
+        ...item, stockAfter: balances.get(item.productId), unitCost: stockProducts.get(item.productId)!.unitCost * (item.stockDeduction ?? (productFormatUnits(stockProducts.get(item.productId)!, item.format))), ownerId: uid, createdAt: now
       }));
     });
 
@@ -585,7 +598,7 @@ export const recordSale = withActionDeadline(async (
       employeeId: empId,
       employeeName: empName,
       type: 'sale',
-      description: `Venda de R$ ${sale.total.toFixed(2)} (${typeLabel}) - ${items.length} item(ns): ${summary.slice(0, 120)}`,
+      description: `Venda de R$ ${sale.total.toFixed(2)} (${typeLabel}) - ${items.length} item(ns): ${confirmedSummary || summary}`,
       entityId: saleRef.id,
       amount: sale.total,
       quantity: totalQuantity,

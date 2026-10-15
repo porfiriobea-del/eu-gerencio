@@ -1,3 +1,4 @@
+import { formatProductStock } from '../lib/productUnits';
 import { getReorderPoint } from '../lib/stockSuggestions';
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
@@ -381,7 +382,7 @@ export default function Dashboard() {
                   <li key={p.id} className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
                     <div>
                       <span className="font-medium text-foreground">{p.name}</span>
-                      <span className="text-xs text-muted-foreground ml-2">({p.stock} un. atuais / máx: {maxStockVal})</span>
+                      <span className="text-xs text-muted-foreground ml-2">({formatProductStock(p)} atuais / máx: {maxStockVal})</span>
                     </div>
                     <span className="text-red-500 font-semibold bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded text-xs">
                       {languageMode === 'basic' ? `Comprar +${suggestedBuy} un.` : `Comprar +${suggestedBuy} un.`}
