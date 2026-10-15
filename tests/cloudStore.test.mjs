@@ -265,12 +265,13 @@ test('POS sales ranking reads actual owner-scoped history beyond the 1000-row li
 });
 
 test('catalogue retry uses stable draft IDs and confirms without duplicating or overwriting stock',async()=>{
- const product={name:'Produto importado por foto',category:'Diversos',type:'comum',unitsPerPackage:1,purchaseForm:'unidade',unitCost:2,basePrice:5,stock:0,safetyStock:0,dailyAverageSales:0,replacementDays:3};
+ const product={name:'Produto importado por foto',category:'Diversos',type:'comum',unitsPerPackage:1,purchaseForm:'unidade',unitCost:2,basePrice:5,stock:5,initialStock:5,safetyStock:0,dailyAverageSales:0,replacementDays:3};
  const before=(await store.getDocs(store.collection(store.db,'products'))).size;
  assert.equal(await api.importSupplierCatalog([product],{allowDuplicates:true,draftIds:['review-photo-test']}),1);
  const all=await store.getDocs(store.collection(store.db,'products'));
  assert.equal(all.size,before+1);
  const saved=all.docs.find(doc=>doc.data().name===product.name);
+ assert.equal(saved.data().stock,5);assert.equal(saved.data().initialStock,5);
  await store.updateDoc(saved.ref,{stock:7});
  assert.equal(await api.importSupplierCatalog([product],{allowDuplicates:true,draftIds:['review-photo-test']}),0);
  assert.equal((await store.getDocs(store.collection(store.db,'products'))).size,before+1);

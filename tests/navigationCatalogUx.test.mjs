@@ -326,3 +326,19 @@ test('catalog modal follows the visible mobile viewport when the keyboard opens 
   ui.unmount();assert.equal(handlers.size,0);
  }finally{if(previous)Object.defineProperty(window,'visualViewport',previous);else delete window.visualViewport;}
 });
+
+
+test('catalogue optional initial inventory is manually reviewed and sent with selected products',async()=>{
+ const ui=importer();
+ globalThis.__recognizeCatalog=async()=>({products:[{...draft,initialStock:999}],truncated:false});
+ await upload(ui);
+ const input=ui.getByLabelText(/Estoque inicial.*unidades/);
+ assert.equal(input.value,'');
+ fireEvent.change(input,{target:{value:'24'}});
+ fireEvent.change(ui.getByLabelText('Preço de venda (R$)'),{target:{value:'8'}});
+ let submitted;
+ globalThis.__uiApi.importSupplierCatalog=async products=>{submitted=products;return products.length;};
+ await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Cadastrar selecionados'}));});
+ assert.equal(submitted[0].stock,24);assert.equal(submitted[0].initialStock,24);
+ assert.equal(ui.queryByRole('dialog'),null);
+});

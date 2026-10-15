@@ -108,7 +108,7 @@ test('catalog photos are resized and progressively compressed before upload',asy
   Object.defineProperty(globalThis,'FileReader',{configurable:true,value:class {result='data:image/png;base64,aW1hZ2U=';readAsDataURL(){queueMicrotask(()=>this.onload());}}});
   Object.defineProperty(globalThis,'Image',{configurable:true,value:class {width=4000;height=3000;set src(value){queueMicrotask(()=>this.onload());}}});
   const result=await prepareCatalogFile(new File(['image'],'catalog.png',{type:'image/png'}));
-  assert.equal(result,'data:image/jpeg;base64,aW1hZ2U=');assert.deepEqual(qualities,[0.9,0.8,0.7]);assert.deepEqual(sizes,[[1600,1200]]);
+  assert.equal(result,'data:image/jpeg;base64,aW1hZ2U=');assert.deepEqual(qualities,[0.9,0.8,0.7]);assert.deepEqual(sizes,[[2800,2100]]);
 });
 
 test('catalog scanner exposes safe metadata for model failures without logging file contents',async t=>{
@@ -127,4 +127,24 @@ test('half-pack cigarette costs divide by five and retain the supplier packaging
   assert.equal(product.unitCost,8);assert.equal(product.supplierPackageUnits,packageSize);
   assert.equal(product.unitsPerPackage,10);assert.equal(product.stockUnit,'carteira');assert.equal(product.stock,0);
  }
+});
+
+
+test('initial inventory is entered manually, optional, and uses carteiras for cigarettes', () => {
+  const draft = parseSupplierDraft({ ...source, initialStock: 999, stock: 999 });
+  assert.equal(draft.initialStock, '');
+  assert.equal(buildSupplierProducts([draft])[0].stock, 0);
+  const product = buildSupplierProducts([{ ...draft, initialStock: 12 }])[0];
+  assert.equal(product.stock, 12); assert.equal(product.initialStock, 12);
+  assert.throws(() => buildSupplierProducts([{ ...draft, initialStock: 1.5 }]), /estoque inicial/);
+  const cigarette = { ...draft, type: 'cigarro', category: 'Cigarros', costBasis: 'carteira', priceCart: 12, initialStock: 5.05 };
+  assert.equal(buildSupplierProducts([cigarette])[0].stock, 5.05);
+  assert.throws(() => buildSupplierProducts([{ ...cigarette, initialStock: 0.03 }]), /estoque inicial/);
+  assert.throws(() => buildSupplierProducts([{ ...draft, initialStock: -1 }]), /estoque inicial/);
+});
+
+test('catalogue keeps readable rows when another product is malformed', async t => {
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ success: true, products: [source, { name: '' }] }));
+  const result = await recognizeCatalog('data:image/jpeg;base64,aW1hZ2U=', ['Bebidas']);
+  assert.equal(result.products.length, 1); assert.equal(result.skippedCount, 1);
 });

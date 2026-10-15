@@ -4,7 +4,7 @@ export interface RecognizedProduct {
 }
 
 /** Resize before upload so mobile photos fit serverless request limits. */
-export async function prepareProductImage(file: File): Promise<string> {
+export async function prepareProductImage(file: File, maxDimension = 1600): Promise<string> {
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Não foi possível abrir a foto.'));
@@ -16,7 +16,7 @@ export async function prepareProductImage(file: File): Promise<string> {
     };
     reader.readAsDataURL(file);
   });
-  let scale = Math.min(1, 1600 / Math.max(image.width, image.height));
+  let scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(image.width * scale));
   canvas.height = Math.max(1, Math.round(image.height * scale));

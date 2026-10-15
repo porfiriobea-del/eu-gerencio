@@ -13,12 +13,13 @@ export async function prepareCatalogFile(file: File): Promise<string> {
       reader.readAsDataURL(file);
     });
   }
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) throw new Error('Escolha uma foto JPEG, PNG ou WebP, ou um arquivo PDF.');
+  const imageType = file.type === 'image/jpg' ? 'image/jpeg' : (!file.type || file.type === 'application/octet-stream') ? (/\.jpe?g$/i.test(file.name) ? 'image/jpeg' : /\.png$/i.test(file.name) ? 'image/png' : /\.webp$/i.test(file.name) ? 'image/webp' : '') : file.type;
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(imageType)) throw new Error('Escolha uma foto JPEG, PNG ou WebP, ou um arquivo PDF.');
   if (file.size > 20 * 1024 * 1024) throw new Error('A foto é muito grande. Escolha uma imagem de até 20 MB.');
-  return prepareProductImage(file);
+  return prepareProductImage(file, 2800);
 }
 
-export async function recognizeCatalog(dataUrl: string, categories: string[], signal?: AbortSignal): Promise<{ products: SupplierDraft[]; truncated: boolean }> {
+export async function recognizeCatalog(dataUrl: string, categories: string[], signal?: AbortSignal): Promise<{ products: SupplierDraft[]; truncated: boolean; skippedCount?: number }> {
   const data = /^data:(application\/pdf|image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/i.exec(dataUrl);
   if (!data || data[2].length % 4 !== 0) throw new Error('O arquivo está inválido. Selecione outro PDF ou foto.');
   const sizeMessage = 'O limite por arquivo enviado é 3 MB. Reduza a foto ou divida o PDF em arquivos menores.';
@@ -58,7 +59,13 @@ export async function recognizeCatalog(dataUrl: string, categories: string[], si
       throw new Error(messages[result?.code] || 'Não foi possível ler o catálogo agora. Tente outra foto ou PDF, ou preencha manualmente.');
     }
     if (result.success !== true || !Array.isArray(result.products) || result.products.length === 0 || result.products.length > 200) throw new Error('A IA não identificou produtos. Tente um arquivo mais legível ou preencha manualmente.');
-    return { products: result.products.map(parseSupplierDraft), truncated: result.truncated === true };
+    const products: SupplierDraft[] = [];
+    let skippedCount = Number.isSafeInteger(result.skippedCount) ? result.skippedCount : 0;
+    for (const row of result.products) {
+      try { products.push(parseSupplierDraft(row)); } catch { skippedCount++; }
+    }
+    if (!products.length) throw new Error('A IA não identificou produtos completos. Tente uma foto mais próxima ou preencha manualmente.');
+    return { products, truncated: result.truncated === true, skippedCount };
   } catch (error) {
     if (controller.signal.aborted) throw new Error(signal?.aborted ? 'Leitura interrompida. Os itens já revisados foram mantidos.' : 'A leitura demorou demais. Tente um catálogo menor ou preencha manualmente.');
     if (error instanceof TypeError) throw new Error('Não foi possível enviar o arquivo. Verifique sua conexão ou preencha manualmente.');

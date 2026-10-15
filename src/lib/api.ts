@@ -397,7 +397,8 @@ export const importSupplierCatalog = withActionDeadline(async (products: Catalog
   for (const product of products) {
     if (!product.name.trim() || product.name.length > 100 || !product.category.trim() || product.category.length > 50 ||
         !Number.isFinite(product.unitCost) || product.unitCost < 0 || !Number.isFinite(product.basePrice) || product.basePrice <= 0 ||
-        product.stock !== 0 || !['comum', 'cigarro'].includes(product.type) ||
+        (!Number.isFinite(product.stock) || product.stock < 0 || !(product.type === 'cigarro' ? isValidStockQuantity(product.stock) : Number.isSafeInteger(product.stock))) ||
+        (product.initialStock != null && product.initialStock !== product.stock) || !['comum', 'cigarro'].includes(product.type) ||
         (product.type === 'cigarro' && (product.stockUnit !== 'carteira' || product.unitsPerPackage !== 10))) {
       throw new Error('Confira os nomes, custos, medidas e preços dos produtos antes de importar.');
     }

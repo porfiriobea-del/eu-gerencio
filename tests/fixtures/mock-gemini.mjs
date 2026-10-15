@@ -13,7 +13,7 @@ globalThis.fetch = async (url, options) => {
     if (marker.includes('catalog-quota')) return Response.json({ error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'Simulated quota' } }, { status: 429 });
     let item = { name: 'Suco Uva 1L', category: 'bebidas', type: 'comum', purchaseCost: 60, costBasis: 'embalagem', purchaseForm: 'fardo', unitsPerPackage: 12, basePrice: null, pricePack: null, priceCart: null, priceHalfCart: null, priceUnit: null };
     if(marker.includes('catalog-half-cigarette')) item={...item,name:'Cigarro teste',category:'Cigarros',type:'cigarro',purchaseCost:40,costBasis:'meio_maco',unitsPerPackage:10,priceCart:12};
-    const text = marker.includes('catalog-invalid-json') ? '{broken' : marker.includes('catalog-negative') ? JSON.stringify({ products: [{ ...item, purchaseCost: -1 }] }) : JSON.stringify({ products: marker.includes('catalog-empty') ? [] : [item, { ...item, name: 'Suco Laranja 1L' }], truncated: false });
+    const text = marker.includes('catalog-partial') ? JSON.stringify({ products: [{ ...item, purchaseCost: 'R$ 60,00' }, { name: '' }, { name: 'Produto sem categoria' }] }) : marker.includes('catalog-invalid-json') ? '{broken' : marker.includes('catalog-negative') ? JSON.stringify({ products: [{ ...item, purchaseCost: -1 }] }) : JSON.stringify({ products: marker.includes('catalog-empty') ? [] : [item, { ...item, name: 'Suco Laranja 1L' }], truncated: false });
     return Response.json({ candidates: [{ content: { role: 'model', parts: [{ text }] }, finishReason: 'STOP' }] });
   }
   for (const evidence of ['MARCA', 'RÓTULO', 'INGREDIENTES', 'EAN']) assert.ok(prompt.includes(evidence));

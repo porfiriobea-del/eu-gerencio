@@ -101,12 +101,13 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
         const result = await recognizeCatalog(data, availableCategories, controller.signal);
         if (generation !== generationRef.current) return;
         setDrafts(previous => {
-          const added = result.products.map((row, index) => ({ ...row,
+          const added = result.products.map((row, index) => ({ ...row, initialStock: '' as const,
             costBasis: row.type === 'cigarro' ? row.costBasis === 'embalagem' ? 'maco' : ['maco','meio_maco','carteira'].includes(row.costBasis) ? row.costBasis : '' : row.costBasis,
             selected: !match(row) && !existing.has(normalizeProductName(row.name)) && ![...previous, ...result.products.slice(0, index)].some(other => isDuplicateProduct(row, other)) }));
           return [...previous, ...added];
         });
         if (!result.products.length) setError(copy('catalog.empty', 'Nenhum produto foi encontrado neste arquivo. Tente outra foto ou preencha manualmente.'));
+        if (result.skippedCount) setError(copy('catalog.partial', 'Alguns produtos não ficaram legíveis. Confira a lista e acrescente os que faltam.'));
         if (result.truncated) setError('Este arquivo tem mais de 200 itens. A IA retornou os primeiros; envie as páginas restantes separadamente.');
       }
       setStatus('Leitura concluída. Revise nomes, medidas de compra, custos e preços de venda antes de cadastrar.');
@@ -170,9 +171,9 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
     } finally { savingRef.current = false; setIsSaving(false); }
   };
 
-  const numberField = (row: SupplierDraft, field: 'purchaseCost' | 'unitsPerPackage' | 'basePrice' | 'pricePack' | 'priceCart' | 'priceHalfCart' | 'priceUnit', label: string) => (
+  const numberField = (row: SupplierDraft, field: 'initialStock' | 'purchaseCost' | 'unitsPerPackage' | 'basePrice' | 'pricePack' | 'priceCart' | 'priceHalfCart' | 'priceUnit', label: string) => (
     <label className="block text-xs font-medium">{label}
-      <input type="number" inputMode="decimal" min="0" step={field === 'unitsPerPackage' ? '1' : '0.01'} value={row[field]} onChange={event => update(row.id, { [field]: event.target.value === '' ? '' : Number(event.target.value) })}
+      <input type="number" inputMode="decimal" min="0" step={field === 'initialStock' ? row.type === 'cigarro' ? '0.05' : '1' : field === 'unitsPerPackage' ? '1' : '0.01'} value={row[field] ?? ''} onChange={event => update(row.id, { [field]: event.target.value === '' ? '' : Number(event.target.value) })}
         className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm" placeholder="Não informado" />
     </label>
   );
@@ -192,7 +193,7 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
             <button type="button" disabled={isReading || isSaving} onClick={() => galleryRef.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-border p-3 text-sm hover:bg-muted disabled:opacity-50"><Image className="h-5 w-5" />Selecionar da galeria</button>
             <button type="button" disabled={isReading || isSaving} onClick={() => pdfRef.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-border p-3 text-sm hover:bg-muted disabled:opacity-50"><FileText className="h-5 w-5" />Enviar PDF</button>
           </div>
-          <p className="text-xs text-muted-foreground">PDF: até 3 MB por arquivo. Fotos: JPEG, PNG ou WebP. Cadastre até 200 itens por lote, com estoque zerado. Preços que não constarem no arquivo ficam em branco.</p>
+          <p className="text-xs text-muted-foreground">{copy('catalog.fileHelp', 'PDF: até 3 MB. Fotos: JPEG, PNG ou WebP. Até 200 produtos por vez. Estoque inicial opcional. Preços não encontrados ficam em branco.')}</p>
           {(status || isReading) && <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-xl bg-muted p-3 text-sm">{(isReading || isSaving) && <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}{status}{isReading && <button type="button" onClick={cancelReading} className="ml-auto shrink-0 font-semibold text-primary">Interromper</button>}</div>}
           {error && <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950 dark:text-amber-100">{error}</p>}
           <datalist id={categoriesId}>{availableCategories.map(category => <option key={category} value={category} />)}</datalist>
@@ -227,6 +228,7 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
                 <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {row.type === 'cigarro' ? <>{numberField(row, 'pricePack', 'Venda: Maço (10 carteiras)')}{numberField(row, 'priceCart', 'Venda: Carteira (20 cigarros)')}{numberField(row, 'priceHalfCart', 'Venda: Meia carteira')}{numberField(row, 'priceUnit', 'Venda: Unidade avulsa')}</> : numberField(row, 'basePrice', 'Preço de venda (R$)')}
                 </div>
+                <div className="mt-3 max-w-md">{numberField(row, 'initialStock', `${copy('catalog.initialStock', 'Estoque inicial (opcional)')} — ${row.type === 'cigarro' ? 'carteiras' : 'unidades'}`)}<p className="mt-1 text-xs text-muted-foreground">{copy('catalog.initialStockHelp', 'Informe unidades ou carteiras para cigarros. Se deixar vazio, começa com zero.')}</p></div>
                 {row.type === 'cigarro' && <p className="mt-2 text-xs text-muted-foreground">Formatos sem preço ou com valor zero não serão vendidos. O estoque será contado em carteiras.</p>}
               </article>
             ))}

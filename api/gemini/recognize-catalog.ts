@@ -113,12 +113,24 @@ Retorne somente JSON {products:[...], truncated:boolean}. Se nada for legível, 
       diagnose('NO_PRODUCTS', { stage, providerStatus: null });
       return res.status(422).json({ code: 'NO_PRODUCTS', error: 'Não foram identificados produtos. Tente outro arquivo ou preencha manualmente.' });
     }
-    const products = parsed.products.map((row: any) => {
+    let skippedCount = 0;
+    const products = parsed.products.flatMap((row: any) => {
+      try {
+      if (row && typeof row.name === 'string') {
+        if (!row.category) row.category = 'Diversos';
+        if (!row.type) row.type = /cigar/i.test(row.category) ? 'cigarro' : 'comum';
+      }
       if (!row || typeof row.name !== 'string' || !row.name.trim() || row.name.length > 100 || typeof row.category !== 'string' || !row.category.trim() || row.category.length > 50 || !['comum', 'cigarro'].includes(row.type)) throw new Error('Invalid product');
       if (row.barcode != null && (typeof row.barcode !== 'string' || row.barcode.length > 100)) throw new Error('Invalid barcode');
       const clean: any = { ...(row.barcode?.trim() ? { barcode: row.barcode.trim() } : {}), name: row.name.trim(), category: row.category.trim(), type: row.type === 'cigarro' || /cigar/i.test(row.category) ? 'cigarro' : 'comum' };
       for (const field of ['purchaseCost', 'basePrice', 'pricePack', 'priceCart', 'priceHalfCart', 'priceUnit']) {
-        const value = row[field];
+        let value = row[field];
+        // Some models serialize legible decimal amounts as strings even in JSON mode.
+        if (typeof value === 'string') {
+          const amount = value.trim().replace(/^R\$\s*/, '');
+          if (amount === '') value = null;
+          else if (/^\d+(?:[.,]\d{1,2})?$/.test(amount)) value = Number(amount.replace(',', '.'));
+        }
         if (value != null && (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 10000000)) throw new Error('Invalid price');
         clean[field] = value ?? null;
       }
@@ -127,9 +139,11 @@ Retorne somente JSON {products:[...], truncated:boolean}. Se nada for legível, 
       clean.purchaseForm = ['unidade', 'fardo', 'pacote'].includes(row.purchaseForm) ? row.purchaseForm : 'unidade';
       clean.unitsPerPackage = clean.type === 'cigarro' ? 10 : Number.isInteger(row.unitsPerPackage) && row.unitsPerPackage >= 1 && row.unitsPerPackage <= 10000 ? row.unitsPerPackage : null;
       clean.category = availableCategories.find(category => category.toLowerCase() === clean.category.toLowerCase()) || clean.category;
-      return clean;
+      return [clean];
+      } catch { skippedCount++; return []; }
     });
-    return res.json({ success: true, products, truncated: parsed.truncated === true });
+    if (!products.length) throw new Error('Invalid products');
+    return res.json({ success: true, products, skippedCount, truncated: parsed.truncated === true });
   } catch (error: unknown) {
     const status = Number((error as { status?: number; code?: number })?.status || (error as { code?: number })?.code);
     const message = error instanceof Error ? error.message : '';

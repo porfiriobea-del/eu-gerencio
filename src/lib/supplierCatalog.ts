@@ -1,4 +1,5 @@
 import type { Product } from '../types';
+import { isValidStockQuantity } from './productUnits';
 import { normalizeProductName } from './duplicateDetector';
 
 export interface SupplierDraft {
@@ -7,6 +8,7 @@ export interface SupplierDraft {
   barcode?: string;
   allowDuplicate?: boolean;
   stockToAdd?: number;
+  initialStock?: number | '';
   name: string;
   category: string;
   type: 'comum' | 'cigarro';
@@ -23,7 +25,7 @@ export interface SupplierDraft {
 
 export const blankSupplierDraft = (): SupplierDraft => ({
   id: crypto.randomUUID(), selected: true, name: '', category: 'Diversos', type: 'comum',
-  purchaseCost: '', costBasis: '', unitsPerPackage: 1, purchaseForm: 'unidade',
+  initialStock: '', purchaseCost: '', costBasis: '', unitsPerPackage: 1, purchaseForm: 'unidade',
   basePrice: '', pricePack: '', priceCart: '', priceHalfCart: '', priceUnit: ''
 });
 
@@ -58,6 +60,8 @@ export function buildSupplierProducts(drafts: SupplierDraft[], existingNames: st
     if (names.has(key) && !row.allowDuplicate) continue;
     if (row.purchaseCost === '' || !Number.isFinite(row.purchaseCost) || row.purchaseCost < 0 || !row.costBasis) throw new Error(`Confira o custo e a medida da compra de ${name}.`);
     const cigarette = row.type === 'cigarro';
+    const initialStock = row.initialStock === '' || row.initialStock == null ? 0 : row.initialStock;
+    if (!Number.isFinite(initialStock) || initialStock < 0 || !(cigarette ? isValidStockQuantity(initialStock) : Number.isSafeInteger(initialStock))) throw new Error(`Confira o estoque inicial de ${name}. Use ${cigarette ? 'carteiras, em passos de 0,05' : 'unidades inteiras'}.`);
     const units = cigarette ? 10 : row.unitsPerPackage;
     if (!units || !Number.isSafeInteger(units) || units < 1 || units > 10000) throw new Error(`Informe as unidades por embalagem de ${name}.`);
     let unitCost = row.purchaseCost;
@@ -80,7 +84,7 @@ export function buildSupplierProducts(drafts: SupplierDraft[], existingNames: st
     if (basePrice <= 0) throw new Error(`Informe pelo menos um preço de venda para ${name}.`);
     products.push({ name, category, ...(row.barcode?.trim() ? { barcode: row.barcode.trim() } : {}), type: row.type, stockUnit: cigarette ? 'carteira' : 'unidade',
       purchaseForm: cigarette ? 'pacote' : row.purchaseForm, unitsPerPackage: units, unitCost,
-      stock: 0, initialStock: 0, initialStockDate: new Date().toISOString().slice(0, 10), safetyStock: 0,
+      stock: initialStock, initialStock, initialStockDate: new Date().toISOString().slice(0, 10), safetyStock: 0,
       dailyAverageSales: 0, replacementDays: 3, basePrice,
       ...(cigarette ? { supplierPackageUnits: row.costBasis === 'meio_maco' ? 5 : 10, pricePack, priceCart, priceHalfCart, priceUnit } : {}) });
     names.add(key);

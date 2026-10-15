@@ -79,6 +79,11 @@ test('catalogue API reads PDF and image lists, keeps unknown prices null and han
     assert.equal(result.body.products[0].category, 'Bebidas');
     assert.equal(result.body.products[0].basePrice, null);
   }
+  const partial = await postCatalog({fileBase64:encode('catalog-partial'),mimeType:'image/jpeg'});
+  assert.equal(partial.status, 200); assert.equal(partial.body.products.length, 2);
+  assert.equal(partial.body.products[0].purchaseCost, 60);
+  assert.equal(partial.body.skippedCount, 1); assert.equal(partial.body.products[1].category, 'Diversos');
+  assert.equal(partial.body.products[1].purchaseCost, null);
   const half = await postCatalog({fileBase64:encode('catalog-half-cigarette'),mimeType:'image/jpeg',availableCategories:['Cigarros']});
   assert.equal(half.status,200);assert.equal(half.body.products[0].costBasis,'meio_maco');assert.equal(half.body.products[0].purchaseCost,40);
   assert.equal((await postCatalog({ fileBase64: encode('fake-pdf'), mimeType: 'application/pdf' })).status, 400);
