@@ -81,6 +81,8 @@ export const LANGUAGE_MODE_INFOS: LanguageModeInfo[] = [
 // Unified, consistent dictionary per language mode
 export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   technical: {
+    'catalog.unchecked': 'Nenhum registro selecionado. Selecione os cadastros e confirme eventuais coincidências.',
+    'catalog.empty': 'A extração não retornou registros neste arquivo. Revise o documento ou cadastre manualmente.',
     'catalog.title': 'Importação de catálogo do fornecedor',
     'catalog.save': 'Confirmar cadastros selecionados',
     'catalog.saving': 'Persistindo cadastros...',
@@ -216,6 +218,8 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Frente de Caixa',
   },
   neutral: {
+    'catalog.unchecked': 'Nenhum produto selecionado. Marque os desejados e revise os avisos de duplicidade.',
+    'catalog.empty': 'Nenhum produto foi encontrado neste arquivo. Tente outra foto ou preencha manualmente.',
     'catalog.title': 'Importar catálogo do fornecedor',
     'catalog.save': 'Cadastrar selecionados',
     'catalog.saving': 'Salvando produtos...',
@@ -351,6 +355,8 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Caixa',
   },
   basic: {
+    'catalog.unchecked': 'Nenhum produto marcado. Marque os que quer salvar. Os repetidos precisam da sua confirmação.',
+    'catalog.empty': 'Não encontramos produtos neste arquivo. Tente outra foto ou adicione à mão.',
     'catalog.title': 'Trazer produtos de uma foto ou PDF',
     'catalog.save': 'Salvar produtos marcados',
     'catalog.saving': 'Salvando produtos...',

@@ -280,3 +280,20 @@ test('catalogue saves only checked rows and retains unchecked drafts after reope
  fireEvent.click(ui.getByRole('button',{name:'Abrir importação'}));
  assert.ok(ui.getByDisplayValue('Outro produto'));assert.equal(ui.queryByDisplayValue(draft.name),null);
 });
+
+test('clicking save with all products unchecked explains the issue instead of silently disabling the action',async()=>{
+ const ui=importer();await upload(ui);
+ fireEvent.click(ui.getByRole('button',{name:'Desmarcar todos'}));
+ const button=ui.getByRole('button',{name:'Cadastrar selecionados'});assert.equal(button.disabled,false);
+ globalThis.__uiApi.importSupplierCatalog=()=>assert.fail('No checked rows must never be saved');
+ fireEvent.click(button);
+ assert.match(ui.getByRole('alert').textContent,/Selecione pelo menos/);
+ assert.ok(ui.getByRole('dialog'));
+ assert.ok(ui.getByText(/Nenhum produto selecionado/));
+});
+test('empty extraction explains why there are no products to register',async()=>{
+ const ui=importer();globalThis.__recognizeCatalog=async()=>({products:[],truncated:false});
+ await upload(ui);assert.match(ui.getByRole('alert').textContent,/Nenhum produto foi encontrado/);
+ assert.equal(ui.getByRole('button',{name:'Cadastrar selecionados'}).disabled,true);
+ assert.ok(ui.getByRole('button',{name:'Adicionar produto manualmente'}));
+});

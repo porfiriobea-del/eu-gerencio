@@ -103,6 +103,7 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
             selected: !match(row) && !existing.has(normalizeProductName(row.name)) && ![...previous, ...result.products.slice(0, index)].some(other => isDuplicateProduct(row, other)) }));
           return [...previous, ...added];
         });
+        if (!result.products.length) setError(copy('catalog.empty', 'Nenhum produto foi encontrado neste arquivo. Tente outra foto ou preencha manualmente.'));
         if (result.truncated) setError('Este arquivo tem mais de 200 itens. A IA retornou os primeiros; envie as páginas restantes separadamente.');
       }
       setStatus('Leitura concluída. Revise nomes, medidas de compra, custos e preços de venda antes de cadastrar.');
@@ -123,7 +124,8 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
     if (savingRef.current || readingRef.current) return;
     const selected = drafts.filter(row => row.selected);
     if (!selected.length || selected.length > 200) {
-      setError(selected.length ? copy('catalog.tooMany', 'Selecione até 200 produtos por importação.') : copy('catalog.noSelection', 'Selecione pelo menos um produto.')); return;
+      const message = selected.length ? copy('catalog.tooMany', 'Selecione até 200 produtos por importação.') : copy('catalog.noSelection', 'Selecione pelo menos um produto.');
+      setError(message); showToast(message, 'warning'); return;
     }
     const errors: Record<string, string> = {};
     const candidates: { row: SupplierDraft; product: ReturnType<typeof buildSupplierProducts>[number] }[] = [];
@@ -136,6 +138,7 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
     setRowErrors(errors);
     if (Object.keys(errors).length) {
       setError(`${copy('catalog.validation', 'Confira os dados selecionados.')} ${Object.values(errors)[0]}`);
+      showToast(copy('catalog.fix', 'Corrija as linhas destacadas antes de cadastrar.'), 'warning');
       const first = document.getElementById(`catalog-row-${Object.keys(errors)[0]}`);
       first?.focus(); first?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
       return;
@@ -227,9 +230,10 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
           </fieldset>
         </div>
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-4">
+          {drafts.length > 0 && !drafts.some(row => row.selected) && <p role="status" className="w-full text-sm font-semibold text-amber-800 dark:text-amber-300">{copy('catalog.unchecked', 'Nenhum produto selecionado. Marque os desejados e revise os avisos de duplicidade.')}</p>}
           {error && <p className="w-full text-sm font-semibold text-amber-800 dark:text-amber-300">{Object.keys(rowErrors).length ? copy('catalog.fix', 'Confira os dados antes de repetir.') : error}</p>}
           <div><p className="text-xs text-muted-foreground">{drafts.filter(row => row.selected).length} selecionados. Confira os valores antes de salvar.</p><div className="mt-1 flex gap-3 text-xs"><button type="button" disabled={isReading || isSaving} onClick={() => setDrafts(previous => previous.map((row, index) => ({ ...row, selected: !duplicated(row, index) || !!row.allowDuplicate })))} className="text-primary hover:underline">Selecionar todos</button><button type="button" disabled={isReading || isSaving} onClick={() => setDrafts(previous => previous.map(row => ({ ...row, selected: false })))} className="text-primary hover:underline">Desmarcar todos</button></div></div>
-          <button type="button" onClick={save} disabled={isReading || isSaving || !drafts.some(row => row.selected)} className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">{isSaving ? copy('catalog.saving', 'Salvando produtos...') : copy('catalog.save', 'Cadastrar selecionados')}</button>
+          <button type="button" onClick={save} disabled={isReading || isSaving || !drafts.length} className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">{isSaving ? copy('catalog.saving', 'Salvando produtos...') : copy('catalog.save', 'Cadastrar selecionados')}</button>
         </footer>
       </div>
     </div>, document.body
