@@ -19,10 +19,16 @@ function doPost(e) {
       row = [new Date(), data.loja, data.usuario, data.evento, Number(data.valor || 0)];
     } else return reportJson({ok: false});
     lock.waitLock(20000);
-    const book = SpreadsheetApp.getActiveSpreadsheet();
+    const spreadsheetId = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+    const book = spreadsheetId ? SpreadsheetApp.openById(spreadsheetId) : SpreadsheetApp.getActiveSpreadsheet();
     if (!book) throw new Error('Vincule o script à planilha de destino.');
     const sheet = book.getSheetByName(name) || book.insertSheet(name);
     if (sheet.getLastRow() === 0) { sheet.appendRow(headings); sheet.setFrozenRows(1); }
+    // Never append into an incompatible layout: it silently corrupts summary calculations.
+    const actualHeadings = sheet.getRange(1, 1, 1, headings.length).getValues()[0];
+    if (headings.some(function(heading, index) { return actualHeadings[index] !== heading; })) {
+      return reportJson({ok: false, code: 'SHEET_SCHEMA_MISMATCH', sheet: name});
+    }
     if (data.categoria === 'feedback' && sheet.getLastRow() > 1 && sheet.getRange(2,1,sheet.getLastRow()-1,1).createTextFinder(data.id).matchEntireCell(true).findNext()) return reportJson({ok: true, duplicate: true});
     row = row.map(function(value) {
       if (value instanceof Date) return value;
