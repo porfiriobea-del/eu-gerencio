@@ -129,6 +129,7 @@ export interface Sale {
   id?: string;
   total: number;
   type: 'cash' | 'card' | 'fiado';
+  paymentMethod?: 'cash' | 'debit' | 'credit' | 'pix' | 'voucher' | 'fiado';
   customerId?: string;
   itemsSummary?: string;
   employeeId?: string;

@@ -1,3 +1,4 @@
+import { CartDrawer, type CartItem } from '../components/CartDrawer';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import { getCigaretteFormats, getPackageUnits, calculateStockUpdates } from '../lib/productUnits';
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -41,14 +42,6 @@ import { PocketTip } from '../components/PocketTip';
 import { calculateExpirationStatus } from '../lib/promoUtils';
 import { useEmployee } from '../lib/employeeContext';
 
-type CartItem = {
-  product: Product;
-  format: string; // "maço", "carteira", "meia carteira", "unidade", "padrão"
-  quantity: number;
-  price: number;
-  stockDeduction: number;
-};
-
 export default function POS() {
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
   const { currentEmployee, openSwitchModal } = useEmployee();
@@ -63,6 +56,7 @@ export default function POS() {
   const [selectedCategory, setSelectedCategory] = useState('Todas');
   
   const [cart, setCart] = useState<CartItem[]>([]);
+  const cartRef = useRef<CartItem[]>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   
   // Checkout states
@@ -118,20 +112,31 @@ export default function POS() {
   }, [products, search, selectedCategory]);
 
   const addToCart = (product: Product, format: string, price: number, stockDeduction: number) => {
-    const existing = cart.find(i => i.product.id === product.id && i.format === format);
+    if (checkoutInProgressRef.current) return;
+    const current = cartRef.current;
+    const existing = current.find(i => i.product.id === product.id && i.format === format);
     const nextCart = existing
-      ? cart.map(i => i === existing ? { ...i, quantity: i.quantity + 1 } : i)
-      : [...cart, { product, format, quantity: 1, price, stockDeduction }];
+      ? current.map(i => i === existing ? { ...i, quantity: i.quantity + 1 } : i)
+      : [...current, { product, format, quantity: 1, price, stockDeduction }];
     try {
       calculateStockUpdates(nextCart, products);
+      cartRef.current = nextCart;
       setCart(nextCart);
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Não foi possível adicionar o produto.');
     }
   };
 
+  const changeCartQuantity = (index: number, delta: number) => {
+    if (checkoutInProgressRef.current) return;
+    const next = cartRef.current.map((item, i) => i === index ? { ...item, quantity: item.quantity + delta } : item).filter(item => item.quantity > 0);
+    try { calculateStockUpdates(next, products); cartRef.current = next; setCart(next); }
+    catch (error) { showActionError(error, error instanceof Error ? error.message : 'Estoque insuficiente.'); }
+  };
   const removeFromCart = (index: number) => {
-    setCart(prev => prev.filter((_, i) => i !== index));
+    if (checkoutInProgressRef.current) return;
+    const next = cartRef.current.filter((_, i) => i !== index);
+    cartRef.current = next; setCart(next);
   };
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -244,6 +249,7 @@ export default function POS() {
         {
           total: finalTotal,
           type: paymentType,
+          paymentMethod: paymentType === 'card' ? cardMethod : paymentType,
           customerId: finalCustomerId,
           employeeId: currentEmployee?.id || 'owner',
           employeeName: currentEmployee?.name || 'Proprietário'
@@ -256,6 +262,7 @@ export default function POS() {
       setIsCheckoutOpen(false);
     }
 
+    cartRef.current = [];
     setCart([]);
     setIsCheckoutOpen(false);
     setPaymentType('cash');
@@ -469,9 +476,9 @@ export default function POS() {
 
       <div className="flex flex-col lg:flex-row h-full gap-6">
       {/* Products Section */}
-      <div className="flex-1 flex flex-col space-y-4">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
+      <div className="min-w-0 flex-1 flex flex-col space-y-4">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
+          <div className="relative min-w-0 flex-1 sm:min-w-[180px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-5 h-5" />
             <input 
               value={search} 
@@ -500,7 +507,7 @@ export default function POS() {
           </button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto pb-24">
+        <div className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4 overflow-y-auto pb-24">
           {filteredProducts.map(p => (
             <div key={p.id} className="bg-surface border border-border rounded-2xl p-3.5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group">
               <div>
@@ -686,97 +693,14 @@ export default function POS() {
         </div>
       </div>
 
-      {/* Cart Section */}
-      <div className="w-full lg:w-96 bg-surface border border-border rounded-2xl shadow-sm flex flex-col h-[calc(100vh-8rem)] sticky top-8 shrink-0">
-        <div className="p-4 border-b border-border bg-muted/40 rounded-t-2xl flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5 text-primary"/>
-            <h2 className="font-bold text-foreground text-lg">Carrinho</h2>
-          </div>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-palette-1 text-primary">
-            {cart.reduce((acc, item) => acc + item.quantity, 0)} {cart.reduce((acc, item) => acc + item.quantity, 0) === 1 ? 'item' : 'itens'}
-          </span>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
-          {cart.map((item, idx) => (
-            <div key={idx} className="flex justify-between items-center bg-surface border border-border rounded-xl p-2.5 shadow-2xs gap-2.5">
-              <div className="flex items-center gap-2.5 min-w-0">
-                {item.product.imageUrl ? (
-                  <img 
-                    src={item.product.imageUrl} 
-                    alt={item.product.name} 
-                    className="w-10 h-10 rounded-lg object-cover border border-border shrink-0" 
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-lg bg-palette-1 text-primary flex items-center justify-center shrink-0 border border-primary/20">
-                    <Package className="w-4 h-4 opacity-60" />
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <h4 className="font-semibold text-xs leading-tight text-foreground truncate">{item.product.name}</h4>
-                  <div className="text-[11px] text-muted-foreground">{item.format} • {item.quantity}x R$ {item.price.toFixed(2)}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="font-bold text-xs text-primary">R$ {(item.quantity * item.price).toFixed(2)}</span>
-                <button 
-                  onClick={() => removeFromCart(idx)} 
-                  className="text-muted-foreground hover:text-red-500 p-1 cursor-pointer transition-colors"
-                  title="Remover item"
-                >
-                  <X className="w-3.5 h-3.5"/>
-                </button>
-              </div>
-            </div>
-          ))}
-          {cart.length === 0 && (
-            <div className="text-center text-muted-foreground mt-10 text-sm">
-              <ShoppingCart className="w-8 h-8 opacity-30 mx-auto mb-2" />
-              Carrinho vazio
-            </div>
-          )}
-        </div>
-
-        <div className="p-4 border-t border-border bg-surface rounded-b-2xl">
-          <div className="flex justify-between items-center mb-3">
-            <span className="text-muted-foreground font-medium text-sm">Total a pagar</span>
-            <span className="text-2xl font-bold text-foreground">R$ {cartTotal.toFixed(2)}</span>
-          </div>
-
-          <div className="space-y-2">
-            <button 
-              disabled={cart.length === 0}
-              onClick={() => {
-                setPaymentType('cash');
-                setIsCheckoutOpen(true);
-              }}
-              className="w-full bg-primary text-white font-bold py-3.5 rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 flex justify-center items-center gap-2 text-base cursor-pointer shadow-md"
-            >
-              Cobrar R$ {cartTotal.toFixed(2)}
-            </button>
-
-            {/* Atalho rápido no carrinho para colocar para fiado / cadastrar novos */}
-            <button
-              disabled={cart.length === 0}
-              type="button"
-              onClick={() => {
-                setPaymentType('fiado');
-                setIsCheckoutOpen(true);
-              }}
-              className="w-full py-2.5 px-3 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shadow-2xs"
-            >
-              <UserPlus className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-              <span>📝 Vender no Fiado (Caderneta / Novo Cliente)</span>
-            </button>
-          </div>
-        </div>
-      </div>
+      <CartDrawer items={cart} total={cartTotal} busy={isCompletingSale} onQuantity={changeCartQuantity} onRemove={removeFromCart}
+        onCheckout={() => { setPaymentType('cash'); setIsCheckoutOpen(true); }}
+        onFiado={() => { setPaymentType('fiado'); setIsCheckoutOpen(true); }} />
 
       {/* Checkout Modal */}
       {isCheckoutOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs">
-          <div className="bg-surface rounded-2xl w-full max-w-md p-6 shadow-2xl border border-border">
+          <div role="dialog" aria-modal="true" aria-label="Finalizar venda" className="max-h-[90dvh] overflow-y-auto bg-surface rounded-2xl w-full max-w-md p-6 shadow-2xl border border-border">
             <h2 className="text-2xl font-bold mb-4 text-foreground border-b border-border pb-3">Finalizar Venda</h2>
             
             {/* Active Operator info */}
@@ -800,10 +724,10 @@ export default function POS() {
               </button>
             </div>
             
-            <div className="space-y-4">
+            <fieldset disabled={isCompletingSale} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">Forma de Pagamento</label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button 
                     onClick={() => { setPaymentType('cash'); setAmountReceived(finalTotal); }} 
                     className={`py-3 rounded-xl border font-bold text-sm transition-all cursor-pointer flex flex-col items-center justify-center gap-1 shadow-2xs ${paymentType === 'cash' ? 'bg-palette-1 border-primary text-primary ring-2 ring-primary/20' : 'bg-surface border-border hover:bg-muted text-foreground'}`}
@@ -812,11 +736,15 @@ export default function POS() {
                     <span>Dinheiro</span>
                   </button>
                   <button 
-                    onClick={() => setPaymentType('card')} 
-                    className={`py-3 rounded-xl border font-bold text-sm transition-all cursor-pointer flex flex-col items-center justify-center gap-1 shadow-2xs ${paymentType === 'card' ? 'bg-palette-1 border-primary text-primary ring-2 ring-primary/20' : 'bg-surface border-border hover:bg-muted text-foreground'}`}
+                    onClick={() => { setPaymentType('card'); setCardMethod('debit'); }}
+                    className={`py-3 rounded-xl border font-bold text-sm transition-all cursor-pointer flex flex-col items-center justify-center gap-1 shadow-2xs ${paymentType === 'card' && cardMethod !== 'pix' ? 'bg-palette-1 border-primary text-primary ring-2 ring-primary/20' : 'bg-surface border-border hover:bg-muted text-foreground'}`}
                   >
                     <span className="text-base">💳</span>
                     <span>Cartão</span>
+                  </button>
+                  <button type="button" onClick={() => { setPaymentType('card'); setCardMethod('pix'); }}
+                    className={`rounded-xl border py-3 text-sm font-bold ${paymentType === 'card' && cardMethod === 'pix' ? 'border-primary bg-palette-1 text-primary' : 'border-border bg-surface'}`}>
+                    PIX
                   </button>
                   <button 
                     onClick={() => setPaymentType('fiado')} 
@@ -831,7 +759,7 @@ export default function POS() {
               {paymentType === 'card' && isCardFeeEnabled && (
                 <div className="p-3 bg-muted/50 rounded-xl border border-border space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-foreground">Forma no Cartão</label>
+                    <label className="block text-xs font-bold text-foreground">Detalhes do pagamento</label>
                     <button
                       type="button"
                       onClick={() => setShowDetailedCardFees(!showDetailedCardFees)}
@@ -841,7 +769,7 @@ export default function POS() {
                     </button>
                   </div>
                   
-                  <div className="grid grid-cols-4 gap-1.5 text-xs">
+                  <div className={`grid grid-cols-3 gap-1.5 text-xs ${cardMethod === 'pix' ? 'hidden' : ''}`}>
                     <button
                       type="button"
                       onClick={() => setCardMethod('debit')}
@@ -855,13 +783,6 @@ export default function POS() {
                       className={`py-2 px-1 rounded-lg border font-bold text-center transition-colors cursor-pointer ${cardMethod === 'credit' ? 'bg-primary text-white border-primary shadow-xs' : 'bg-surface border-border hover:bg-muted text-foreground'}`}
                     >
                       Crédito
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCardMethod('pix')}
-                      className={`py-2 px-1 rounded-lg border font-bold text-center transition-colors cursor-pointer ${cardMethod === 'pix' ? 'bg-primary text-white border-primary shadow-xs' : 'bg-surface border-border hover:bg-muted text-foreground'}`}
-                    >
-                      Pix
                     </button>
                     <button
                       type="button"
@@ -1138,10 +1059,10 @@ export default function POS() {
                   <span className="text-xl font-bold text-foreground">R$ {finalTotal.toFixed(2)}</span>
                 </div>
               </div>
-            </div>
+            </fieldset>
 
             <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border">
-              <button onClick={() => setIsCheckoutOpen(false)} className="px-6 py-3 border border-border rounded-xl hover:bg-muted font-medium text-muted-foreground cursor-pointer">Cancelar</button>
+              <button disabled={isCompletingSale} onClick={() => setIsCheckoutOpen(false)} className="px-6 py-3 border border-border rounded-xl hover:bg-muted font-medium text-muted-foreground cursor-pointer disabled:opacity-50">Cancelar</button>
               <button 
                 onClick={handleCheckout} 
                 disabled={isCompletingSale || (

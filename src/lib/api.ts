@@ -504,7 +504,7 @@ function productFormatUnits(product: Product, format: string): number {
 }
 
 export const recordSale = withActionDeadline(async (
-  sale: { total: number, type: 'cash' | 'card' | 'fiado', customerId: string, employeeId?: string, employeeName?: string },
+  sale: { total: number, type: 'cash' | 'card' | 'fiado', paymentMethod?: Sale['paymentMethod'], customerId: string, employeeId?: string, employeeName?: string },
   items: Omit<SaleItem, 'id'|'ownerId'|'createdAt'>[],
   _productsToUpdate: {id: string, newStock: number}[]
 ) => {
@@ -560,7 +560,7 @@ export const recordSale = withActionDeadline(async (
 
     reportUsage('venda', uid, sale.total);
     if (sale.type === 'fiado') reportUsage('fiado_lancado', uid, sale.total);
-    const typeLabel = sale.type === 'cash' ? 'Dinheiro' : sale.type === 'card' ? 'Cartão' : 'Fiado';
+    const typeLabel = sale.paymentMethod === 'pix' ? 'PIX' : sale.type === 'cash' ? 'Dinheiro' : sale.type === 'card' ? 'Cartão' : 'Fiado';
     const totalQuantity = items.reduce((acc, it) => acc + (it.quantity || 1), 0);
 
     recordMovement({
