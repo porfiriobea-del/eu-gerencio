@@ -1,3 +1,4 @@
+import { formatAmount, formatMoney, normalizeCurrency, type MoneyOptions } from './currency';
 import { paymentLabel, saleFee, saleNet } from './paymentFees';
 import { format } from 'date-fns';
 import { Purchase, Sale, Customer, Product } from '../types';
@@ -20,7 +21,8 @@ function downloadFile(content: string, filename: string, mimeType: string = 'tex
 /**
  * Exports purchases to CSV with complete columns and totals.
  */
-export function exportPurchasesToCSV(purchases: Purchase[], filenamePrefix = 'relatorio-compras') {
+export function exportPurchasesToCSV(purchases: Purchase[], filenamePrefix = 'relatorio-compras', csvOptions: MoneyOptions = {}) {
+  const csvCurrency = normalizeCurrency(csvOptions.currency);
   const rows: string[][] = [
     ['RELATÓRIO DETALHADO DE COMPRAS E REPOSIÇÕES DE ESTOQUE'],
     [`Extraído em: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`],
@@ -32,8 +34,8 @@ export function exportPurchasesToCSV(purchases: Purchase[], filenamePrefix = 're
       'Categoria',
       'Quantidade (Unidades)',
       'Embalagem/Fardo',
-      'Custo Unitário (R$)',
-      'Total Pago (R$)',
+      ("Custo Unitário (" + csvCurrency + ")"),
+      ("Total Pago (" + csvCurrency + ")"),
       'Fornecedor / Local',
       'Observações'
     ]
@@ -60,8 +62,8 @@ export function exportPurchasesToCSV(purchases: Purchase[], filenamePrefix = 're
       `"${(p.category || '').replace(/"/g, '""')}"`,
       String(p.quantity || 0),
       `"${pkgStr}"`,
-      Number(p.unitCost || 0).toFixed(2).replace('.', ','),
-      Number(p.totalCost || 0).toFixed(2).replace('.', ','),
+      formatAmount(Number(p.unitCost || 0), csvOptions),
+      formatAmount(Number(p.totalCost || 0), csvOptions),
       `"${(p.supplier || 'Não informado').replace(/"/g, '""')}"`,
       `"${(p.notes || '').replace(/"/g, '""')}"`
     ]);
@@ -75,7 +77,7 @@ export function exportPurchasesToCSV(purchases: Purchase[], filenamePrefix = 're
     String(totalUnits),
     '',
     '',
-    totalSpent.toFixed(2).replace('.', ','),
+    formatAmount(totalSpent, csvOptions),
     '',
     ''
   ]);
@@ -89,6 +91,8 @@ export function exportPurchasesToCSV(purchases: Purchase[], filenamePrefix = 're
  * Comprehensive multi-section CSV report (Compras + Vendas + Fiado) with financial consolidation.
  */
 export function exportFullReportToCSV(data: {
+  currency?: MoneyOptions['currency'];
+  language?: MoneyOptions['language'];
   purchases: Purchase[];
   sales: Sale[];
   customers: Customer[];
@@ -102,6 +106,8 @@ export function exportFullReportToCSV(data: {
   balance?: number;
   fiadoInflow?: number;
 }) {
+  const csvOptions: MoneyOptions = data;
+  const csvCurrency = normalizeCurrency(csvOptions.currency);
   const store = data.storeName ? data.storeName.toUpperCase() : 'EU GERENCIO!';
   const rows: string[][] = [
     [`RELATÓRIO GERAL DO COMÉRCIO - ${store}`],
@@ -111,33 +117,33 @@ export function exportFullReportToCSV(data: {
     ['========================================'],
     ['RESUMO FINANCEIRO DO PERÍODO'],
     ['========================================'],
-    ['Indicador', 'Valor (R$)', 'Observação'],
+    ['Indicador', ("Valor (" + csvCurrency + ")"), 'Observação'],
     [
       'Dinheiro que entrou (Vendas Faturadas)',
-      Number(data.inflow ?? data.sales.reduce((sum, s) => sum + (s.total || 0), 0)).toFixed(2).replace('.', ','),
+      formatAmount(Number(data.inflow ?? data.sales.reduce((sum, s) => sum + (s.total || 0), 0)), csvOptions),
       'Receita operacional apurada no período'
     ],
     [
       'Dinheiro que saiu (Compras e Reposições)',
-      Number(data.outflow ?? data.purchases.reduce((sum, p) => sum + (p.totalCost || 0), 0)).toFixed(2).replace('.', ','),
+      formatAmount(Number(data.outflow ?? data.purchases.reduce((sum, p) => sum + (p.totalCost || 0), 0)), csvOptions),
       'Desembolsos para reposição de mercadorias'
     ],
-    ['Taxas pagas pela loja', data.sales.reduce((sum,sale) => sum + saleFee(sale), 0).toFixed(2).replace('.', ','), 'Taxas gravadas na data da venda'],
+    ['Taxas pagas pela loja', formatAmount(data.sales.reduce((sum,sale) => sum + saleFee(sale), 0), csvOptions), 'Taxas gravadas na data da venda'],
     [
       'O que sobrou para você (Saldo Operacional)',
-      Number(data.balance ?? ((data.inflow ?? data.sales.reduce((sum, s) => sum + (s.total || 0), 0)) - (data.outflow ?? data.purchases.reduce((sum, p) => sum + (p.totalCost || 0), 0)) - data.sales.reduce((sum,sale) => sum + saleFee(sale), 0))).toFixed(2).replace('.', ','),
+      formatAmount(Number(data.balance ?? ((data.inflow ?? data.sales.reduce((sum, s) => sum + (s.total || 0), 0)) - (data.outflow ?? data.purchases.reduce((sum, p) => sum + (p.totalCost || 0), 0)) - data.sales.reduce((sum,sale) => sum + saleFee(sale), 0))), csvOptions),
       'Vendas menos compras e taxas; inclui fiado ainda não recebido'
     ],
     [
       'Total em Caderneta (Fiado a Receber no Período)',
-      Number(data.fiadoInflow ?? data.sales.filter(s => s.type === 'fiado').reduce((sum, s) => sum + (s.total || 0), 0)).toFixed(2).replace('.', ','),
+      formatAmount(Number(data.fiadoInflow ?? data.sales.filter(s => s.type === 'fiado').reduce((sum, s) => sum + (s.total || 0), 0)), csvOptions),
       'Compras a prazo anotadas para clientes'
     ],
     [''],
     ['========================================'],
     ['1. DETALHAMENTO DE VENDAS REALIZADAS'],
     ['========================================'],
-    ['Data e Hora', 'Forma de Pagamento', 'Itens Vendidos', 'Valor Total (R$)', 'Taxa (R$)', 'Valor líquido (R$)']
+    ['Data e Hora', 'Forma de Pagamento', 'Itens Vendidos', ("Valor Total (" + csvCurrency + ")"), ("Taxa (" + csvCurrency + ")"), ("Valor líquido (" + csvCurrency + ")")]
   ];
 
   let totalSalesAmount = 0;
@@ -149,13 +155,13 @@ export function exportFullReportToCSV(data: {
       format(new Date(s.createdAt), 'dd/MM/yyyy HH:mm'),
       typeLabel,
       itemsText,
-      Number(s.total || 0).toFixed(2).replace('.', ','),
-      saleFee(s).toFixed(2).replace('.', ','),
-      saleNet(s).toFixed(2).replace('.', ',')
+      formatAmount(Number(s.total || 0), csvOptions),
+      formatAmount(saleFee(s), csvOptions),
+      formatAmount(saleNet(s), csvOptions)
     ]);
   });
 
-  rows.push(['TOTAL VENDAS', '', `${data.sales.length} vendas`, totalSalesAmount.toFixed(2).replace('.', ',')]);
+  rows.push(['TOTAL VENDAS', '', `${data.sales.length} vendas`, formatAmount(totalSalesAmount, csvOptions)]);
 
   rows.push(['']);
   rows.push(['========================================'],);
@@ -167,8 +173,8 @@ export function exportFullReportToCSV(data: {
     'Categoria',
     'Quantidade (Unidades)',
     'Embalagem',
-    'Custo Unitário (R$)',
-    'Total Pago (R$)',
+    ("Custo Unitário (" + csvCurrency + ")"),
+    ("Total Pago (" + csvCurrency + ")"),
     'Fornecedor',
     'Observações'
   ]);
@@ -190,8 +196,8 @@ export function exportFullReportToCSV(data: {
       `"${(p.category || '').replace(/"/g, '""')}"`,
       String(p.quantity || 0),
       `"${p.packageQuantity && p.packageQuantity > 0 ? `${p.packageQuantity} ${p.packageType || 'emb.'}` : '-'}"`,
-      Number(p.unitCost || 0).toFixed(2).replace('.', ','),
-      Number(p.totalCost || 0).toFixed(2).replace('.', ','),
+      formatAmount(Number(p.unitCost || 0), csvOptions),
+      formatAmount(Number(p.totalCost || 0), csvOptions),
       `"${(p.supplier || 'Não informado').replace(/"/g, '""')}"`,
       `"${(p.notes || '').replace(/"/g, '""')}"`
     ]);
@@ -204,7 +210,7 @@ export function exportFullReportToCSV(data: {
     String(totalPurchasesUnits),
     '',
     '',
-    totalPurchasesSpent.toFixed(2).replace('.', ','),
+    formatAmount(totalPurchasesSpent, csvOptions),
     '',
     ''
   ]);
@@ -213,7 +219,7 @@ export function exportFullReportToCSV(data: {
   rows.push(['========================================']);
   rows.push(['3. CLIENTES COM SALDO EM FIADO (CADERNETA)']);
   rows.push(['========================================']);
-  rows.push(['Nome do Cliente', 'Telefone', 'Dívida Atual (R$)']);
+  rows.push(['Nome do Cliente', 'Telefone', ("Dívida Atual (" + csvCurrency + ")")]);
 
   let totalDebt = 0;
   data.customers.filter(c => c.totalDebt > 0).forEach(c => {
@@ -221,11 +227,11 @@ export function exportFullReportToCSV(data: {
     rows.push([
       `"${(c.name || '').replace(/"/g, '""')}"`,
       `"${(c.phone || '').replace(/"/g, '""')}"`,
-      Number(c.totalDebt || 0).toFixed(2).replace('.', ',')
+      formatAmount(Number(c.totalDebt || 0), csvOptions)
     ]);
   });
 
-  rows.push(['TOTAL FIADO PENDENTE', '', totalDebt.toFixed(2).replace('.', ',')]);
+  rows.push(['TOTAL FIADO PENDENTE', '', formatAmount(totalDebt, csvOptions)]);
 
   if (data.products && data.products.length > 0) {
     rows.push(['']);
@@ -291,8 +297,10 @@ export function exportFullReportToCSV(data: {
 export function exportDailySalesAndSafetyStockToCSV(
   products: Product[],
   storeName?: string,
-  filenamePrefix = 'venda-diaria-estoque-seguranca'
+  filenamePrefix = 'venda-diaria-estoque-seguranca',
+  csvOptions: MoneyOptions = {}
 ) {
+  const csvCurrency = normalizeCurrency(csvOptions.currency);
   const store = storeName ? storeName.toUpperCase() : 'EU GERENCIO!';
   const rows: string[][] = [
     [`RELATÓRIO DE CONSUMO DIÁRIO E SUGESTÃO DE ESTOQUE DE SEGURANÇA - ${store}`],
@@ -307,8 +315,8 @@ export function exportDailySalesAndSafetyStockToCSV(
       'Prazo Fornecedor (dias)',
       'Estoque de Segurança Recomendado (unid.)',
       'Estoque Mínimo Configurado (unid.)',
-      'Custo Unitário (R$)',
-      'Capital de Giro na Segurança (R$)',
+      ("Custo Unitário (" + csvCurrency + ")"),
+      ("Capital de Giro na Segurança (" + csvCurrency + ")"),
       'Diagnóstico de Ruptura',
       'Sugestão de Pedido Imediato (unid.)'
     ]
@@ -349,8 +357,8 @@ export function exportDailySalesAndSafetyStockToCSV(
       String(leadTimeDays),
       String(suggestedSafety),
       String(configuredMin),
-      unitCost.toFixed(2).replace('.', ','),
-      safetyCapital.toFixed(2).replace('.', ','),
+      formatAmount(unitCost, csvOptions),
+      formatAmount(safetyCapital, csvOptions),
       `"${status}"`,
       String(orderQty)
     ]);
@@ -361,7 +369,7 @@ export function exportDailySalesAndSafetyStockToCSV(
   rows.push(['Total de Produtos Analisados', String(products.length)]);
   rows.push(['Produtos em Ruptura Crítica (Estoque Zero)', String(totalCriticalItems)]);
   rows.push(['Produtos em Ponto de Pedido (Comprar com Urgência)', String(totalWarningItems)]);
-  rows.push(['Capital Total Recomendado Imobilizado em Segurança', `R$ ${totalSafetyCapital.toFixed(2).replace('.', ',')}`]);
+  rows.push(['Capital Total Recomendado Imobilizado em Segurança', formatMoney(totalSafetyCapital,csvOptions)]);
 
   const csvContent = rows.map(r => r.join(';')).join('\r\n');
   const filename = `${filenamePrefix}-${format(new Date(), 'yyyy-MM-dd')}.csv`;

@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { formatProductStock } from '../lib/productUnits';
 import { getPurchasePackageUnits } from '../lib/productUnits';
 import { getReorderPoint } from '../lib/stockSuggestions';
@@ -25,6 +26,8 @@ import {
 } from '../lib/promoUtils';
 
 export default function Purchases() {
+  const { formatMoney, currencySymbol, currency, language } = useCurrency();
+
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
   const [products, setProducts] = useState<Product[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -487,11 +490,11 @@ export default function Purchases() {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-bold text-primary">
-              R$ {totalSuggestedCost.toFixed(2)}
+              {formatMoney(totalSuggestedCost)}
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-3">
-            Total gasto nos últimos 7 dias: <strong>R$ {weeklyMetrics.weeklySpend.toFixed(2)}</strong> ({weeklyMetrics.replenishmentCount} reposições)
+            Total gasto nos últimos 7 dias: <strong>{formatMoney(weeklyMetrics.weeklySpend)}</strong> ({weeklyMetrics.replenishmentCount} reposições)
           </p>
         </div>
       </div>
@@ -642,7 +645,7 @@ export default function Purchases() {
                               {p.hasPromoSuggestion && p.promoPrice && (
                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/30">
                                   <Flame className="w-2.5 h-2.5 text-amber-500" />
-                                  <span>Promo: R$ {p.promoPrice.toFixed(2)}</span>
+                                  <span>Promo: {formatMoney(p.promoPrice)}</span>
                                 </span>
                               )}
                             </div>
@@ -670,10 +673,10 @@ export default function Purchases() {
 
                           <td className="p-3.5">
                             <div className="font-semibold text-foreground">
-                              R$ {item.estimatedCost.toFixed(2)}
+                              {formatMoney(item.estimatedCost)}
                             </div>
                             <div className="text-[11px] text-muted-foreground">
-                              (R$ {p.unitCost.toFixed(2)}/un.)
+                              ({formatMoney(p.unitCost)}/un.)
                             </div>
                           </td>
 
@@ -773,7 +776,7 @@ export default function Purchases() {
                               ? `${item.suggestedPackages} ${p.purchaseForm || 'fardo(s)'} (${item.suggestedBuyUnits} un.)`
                               : `${item.suggestedBuyUnits} unidades`}
                           </span>
-                          <span>• Est. R$ {item.estimatedCost.toFixed(2)}</span>
+                          <span>• Est. {formatMoney(item.estimatedCost)}</span>
                         </div>
                       </div>
                     </div>
@@ -844,7 +847,7 @@ export default function Purchases() {
             </div>
 
             <button
-              onClick={() => exportPurchasesToCSV(filteredHistory, `relatorio-compras-${historyPeriod}`)}
+              onClick={() => exportPurchasesToCSV(filteredHistory, `relatorio-compras-${historyPeriod}`, {currency,language})}
               disabled={filteredHistory.length === 0}
               className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shadow-xs whitespace-nowrap"
               title="Extrair todas as informações de compras deste período em planilha Excel/CSV"
@@ -858,7 +861,7 @@ export default function Purchases() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-surface p-4 rounded-2xl border border-border shadow-xs text-xs">
             <div>
               <span className="text-muted-foreground block">Total Desembolsado:</span>
-              <span className="text-lg font-bold text-primary">R$ {historyTotals.totalSpent.toFixed(2)}</span>
+              <span className="text-lg font-bold text-primary">{formatMoney(historyTotals.totalSpent)}</span>
             </div>
             <div>
               <span className="text-muted-foreground block">Unidades Repostas:</span>
@@ -870,7 +873,7 @@ export default function Purchases() {
             </div>
             <div>
               <span className="text-muted-foreground block">Média por Registro:</span>
-              <span className="text-lg font-bold text-foreground">R$ {historyTotals.avgSpend.toFixed(2)}</span>
+              <span className="text-lg font-bold text-foreground">{formatMoney(historyTotals.avgSpend)}</span>
             </div>
           </div>
 
@@ -926,7 +929,7 @@ export default function Purchases() {
                                 {item.suggestPromo && item.suggestedPromoPrice && (
                                   <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/30">
                                     <Flame className="w-2.5 h-2.5 text-amber-500" />
-                                    <span>Promo: R$ {item.suggestedPromoPrice.toFixed(2)}</span>
+                                    <span>Promo: {formatMoney(item.suggestedPromoPrice)}</span>
                                   </span>
                                 )}
                               </div>
@@ -943,11 +946,11 @@ export default function Purchases() {
                           </td>
 
                           <td className="p-3 text-right text-xs text-muted-foreground">
-                            R$ {item.unitCost.toFixed(2)}
+                            {formatMoney(item.unitCost)}
                           </td>
 
                           <td className="p-3 text-right font-bold text-primary">
-                            R$ {item.totalCost.toFixed(2)}
+                            {formatMoney(item.totalCost)}
                           </td>
 
                           <td className="p-3 text-xs text-muted-foreground">
@@ -1110,7 +1113,7 @@ export default function Purchases() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                    Valor Total Pago (R$):
+                    Valor Total Pago ({currencySymbol}):
                   </label>
                   <input
                     type="number"
@@ -1128,7 +1131,7 @@ export default function Purchases() {
 
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                    Custo por Unidade (R$):
+                    Custo por Unidade ({currencySymbol}):
                   </label>
                   <input
                     type="number"
@@ -1140,7 +1143,7 @@ export default function Purchases() {
                     className="w-full px-3 py-2 rounded-xl border border-border bg-surface text-foreground font-medium text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                   <span className="text-[11px] text-muted-foreground mt-0.5 block">
-                    Anterior: R$ {selectedProduct.unitCost.toFixed(2)}
+                    Anterior: {formatMoney(selectedProduct.unitCost)}
                   </span>
                 </div>
               </div>
@@ -1153,7 +1156,7 @@ export default function Purchases() {
                       Atualizar custo unitário no cadastro?
                     </span>
                     <span className="text-muted-foreground text-[11px]">
-                      Mudará de R$ {selectedProduct.unitCost.toFixed(2)} para R$ {unitCost.toFixed(2)} (mantém a margem de lucro real).
+                      Mudará de {formatMoney(selectedProduct.unitCost)} para {formatMoney(unitCost)} (mantém a margem de lucro real).
                     </span>
                   </div>
                   <input
@@ -1295,7 +1298,7 @@ export default function Purchases() {
                         if (newDate && selectedProduct) {
                           const expStatus = calculateExpirationStatus(newDate);
                           if (expStatus.isExpiringSoon && !suggestPromo) {
-                            const sug = suggestPromoDiscount(selectedProduct.basePrice, unitCost, expStatus.daysLeft);
+                            const sug = suggestPromoDiscount(selectedProduct.basePrice, unitCost, expStatus.daysLeft, {currency,language});
                             setSuggestPromo(true);
                             setSuggestedPromoPrice(sug.promoPrice);
                             setPromoDiscountPercent(sug.discountPercent);
@@ -1317,7 +1320,7 @@ export default function Purchases() {
                             if (selectedProduct) {
                               const expStatus = calculateExpirationStatus(chip.value);
                               if (expStatus.isExpiringSoon && !suggestPromo) {
-                                const sug = suggestPromoDiscount(selectedProduct.basePrice, unitCost, expStatus.daysLeft);
+                                const sug = suggestPromoDiscount(selectedProduct.basePrice, unitCost, expStatus.daysLeft, {currency,language});
                                 setSuggestPromo(true);
                                 setSuggestedPromoPrice(sug.promoPrice);
                                 setPromoDiscountPercent(sug.discountPercent);
@@ -1357,7 +1360,7 @@ export default function Purchases() {
                           setSuggestPromo(checked);
                           if (checked && selectedProduct) {
                             const expStatus = calculateExpirationStatus(expirationDate);
-                            const sug = suggestPromoDiscount(selectedProduct.basePrice, unitCost, expStatus.daysLeft);
+                            const sug = suggestPromoDiscount(selectedProduct.basePrice, unitCost, expStatus.daysLeft, {currency,language});
                             setSuggestedPromoPrice(suggestedPromoPrice ? suggestedPromoPrice : sug.promoPrice);
                             setPromoDiscountPercent(promoDiscountPercent !== '' ? promoDiscountPercent : sug.discountPercent);
                           }
@@ -1375,7 +1378,7 @@ export default function Purchases() {
                         type="button"
                         onClick={() => {
                           const expStatus = calculateExpirationStatus(expirationDate);
-                          const sug = suggestPromoDiscount(selectedProduct.basePrice, unitCost, expStatus.daysLeft);
+                          const sug = suggestPromoDiscount(selectedProduct.basePrice, unitCost, expStatus.daysLeft, {currency,language});
                           setSuggestedPromoPrice(sug.promoPrice);
                           setPromoDiscountPercent(sug.discountPercent);
                         }}
@@ -1417,10 +1420,10 @@ export default function Purchases() {
                       <div className="grid grid-cols-2 gap-2.5">
                         <div>
                           <label className="block text-[11px] font-bold text-foreground mb-1">
-                            Preço Promo Sugerido (R$):
+                            Preço Promo Sugerido ({currencySymbol}):
                           </label>
                           <div className="relative">
-                            <span className="absolute left-2.5 top-1.5 text-xs font-bold text-muted-foreground">R$</span>
+                            <span className="absolute left-2.5 top-1.5 text-xs font-bold text-muted-foreground">{currencySymbol}</span>
                             <input
                               type="number"
                               step="0.01"
@@ -1439,7 +1442,7 @@ export default function Purchases() {
                             />
                           </div>
                           <span className="text-[10px] text-muted-foreground mt-0.5 block">
-                            Preço de venda normal: R$ {selectedProduct.basePrice.toFixed(2)}
+                            Preço de venda normal: {formatMoney(selectedProduct.basePrice)}
                           </span>
                         </div>
 
@@ -1485,7 +1488,7 @@ export default function Purchases() {
                               <div className="flex justify-between items-center font-semibold">
                                 <span className="text-muted-foreground">Lucro por unidade vendida:</span>
                                 <span className={profit >= 0 ? 'text-emerald-600' : 'text-red-600 font-bold'}>
-                                  R$ {profit.toFixed(2)} ({profit >= 0 ? `+${marginPct}%` : 'Abaixo do Custo'})
+                                  {formatMoney(profit)} ({profit >= 0 ? `+${marginPct}%` : 'Abaixo do Custo'})
                                 </span>
                               </div>
                             );
@@ -1594,7 +1597,7 @@ export default function Purchases() {
                       <span className="text-muted-foreground text-[11px]">{p.category} • Estoque atual: {formatProductStock(p)}</span>
                     </div>
                     <div className="text-right">
-                      <span className="font-bold text-primary block">R$ {p.unitCost.toFixed(2)}</span>
+                      <span className="font-bold text-primary block">{formatMoney(p.unitCost)}</span>
                       <span className="text-[11px] text-muted-foreground">custo unit.</span>
                     </div>
                   </div>

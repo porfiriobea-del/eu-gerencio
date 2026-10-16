@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { formatProductStock } from '../lib/productUnits';
 import { CigarettePurchaseOptions } from '../components/CigarettePurchaseOptions';
 import { StockLevelSuggestion } from '../components/StockLevelSuggestion';
@@ -31,6 +32,8 @@ import {
 } from '../lib/promoUtils';
 
 export default function Stock() {
+  const { formatMoney, currencySymbol, currency, language } = useCurrency();
+
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
   const [products, setProducts] = useState<Product[]>([]);
   const [duplicateRequest, setDuplicateRequest] = useState<{ matches: Product[]; quantity: number; isMerge: boolean; resolve: (decision: DuplicateDecision) => void } | null>(null);
@@ -802,7 +805,7 @@ export default function Stock() {
         <div className="bg-surface p-4 rounded-xl border border-border shadow-xs flex items-center justify-between">
           <div>
             <span className="text-xs text-muted-foreground font-medium">Custo Sugerido p/ {v('stock.max', 'Estoque Máximo')}</span>
-            <p className="text-2xl font-bold text-foreground mt-0.5">R$ {totalReplenishCost.toFixed(2)}</p>
+            <p className="text-2xl font-bold text-foreground mt-0.5">{formatMoney(totalReplenishCost)}</p>
           </div>
           <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-primary">
             <ShoppingBag className="w-5 h-5" />
@@ -1162,7 +1165,7 @@ export default function Stock() {
                         {p.hasPromoSuggestion && p.promoPrice && (
                           <span className="text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 rounded-md flex items-center gap-1">
                             <Flame className="w-3 h-3 text-amber-500" />
-                            Promo R$ {p.promoPrice.toFixed(2)}
+                            Promo {formatMoney(p.promoPrice)}
                           </span>
                         )}
                       </div>
@@ -1197,7 +1200,7 @@ export default function Stock() {
                         {v('pricing.selling', 'Preço de Venda')}
                       </span>
                       <span className="text-sm font-black text-foreground">
-                        R$ {p.basePrice.toFixed(2)}
+                        {formatMoney(p.basePrice)}
                       </span>
                     </div>
                   </div>
@@ -1291,7 +1294,7 @@ export default function Stock() {
                       )}
                       <div className="flex justify-between items-center text-muted-foreground">
                         <span>{v('purchases.unitCost', 'Quanto Você Paga (Custo)')}:</span>
-                        <strong className="text-foreground">R$ {p.unitCost.toFixed(2)}/un.</strong>
+                        <strong className="text-foreground">{formatMoney(p.unitCost)}/un.</strong>
                       </div>
                       {p.expirationDate && (
                         <div className="flex justify-between items-center text-muted-foreground">
@@ -1450,7 +1453,7 @@ export default function Stock() {
                           <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-1.5 mt-0.5">
                             <span className="bg-muted px-1.5 py-0.5 rounded text-[11px] font-medium">{p.category}</span>
                             <span>•</span>
-                            <span>Custo: R$ {p.unitCost.toFixed(2)}/un.</span>
+                            <span>Custo: {formatMoney(p.unitCost)}/un.</span>
                           </div>
 
                           {/* Badges de Validade e Promoção */}
@@ -1468,18 +1471,18 @@ export default function Stock() {
                             {p.hasPromoSuggestion && p.promoPrice && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
                                 <Flame className="w-3 h-3 text-amber-500" />
-                                <span>Promo: R$ {p.promoPrice.toFixed(2)} {p.promoDiscountPercent ? `(-${p.promoDiscountPercent}%)` : ''}</span>
+                                <span>Promo: {formatMoney(p.promoPrice)} {p.promoDiscountPercent ? `(-${p.promoDiscountPercent}%)` : ''}</span>
                               </span>
                             )}
                           </div>
 
                           {p.type === 'cigarro' ? (
                             <div className="text-[11px] text-primary font-medium mt-1">
-                              {getCigaretteFormats(p).map(option => `${option.label}: R$ ${option.price.toFixed(2)}`).join(' | ') || 'Nenhum formato de venda configurado'}
+                              {getCigaretteFormats(p).map(option => `${option.label}: ${formatMoney(option.price)}`).join(' | ') || 'Nenhum formato de venda configurado'}
                             </div>
                           ) : getPackageUnits(p) > 1 ? (
                             <div className="text-[11px] text-primary font-medium mt-1">
-                              📦 {p.purchaseForm === 'fardo' ? 'Fardo' : 'Pacote'} c/ {getPackageUnits(p)} un.: R$ {(p.pricePackage || (p.basePrice * getPackageUnits(p))).toFixed(2)} | Avulso: R$ {p.basePrice.toFixed(2)}
+                              📦 {p.purchaseForm === 'fardo' ? 'Fardo' : 'Pacote'} c/ {getPackageUnits(p)} un.: {formatMoney((p.pricePackage || (p.basePrice * getPackageUnits(p))))} | Avulso: {formatMoney(p.basePrice)}
                             </div>
                           ) : null}
                         </div>
@@ -1572,7 +1575,7 @@ export default function Stock() {
                             + {suggestedBuyUnits} un. ({suggestedPackages} {p.purchaseForm === 'fardo' ? 'fardos' : p.purchaseForm || 'emb.'})
                           </span>
                           <div className="text-[11px] text-muted-foreground mt-1">
-                            Est. R$ {(suggestedBuyUnits * p.unitCost).toFixed(2)}
+                            Est. {formatMoney((suggestedBuyUnits * p.unitCost))}
                           </div>
                         </div>
                       ) : (
@@ -1891,7 +1894,7 @@ export default function Stock() {
                       ].map(option => (
                         <div key={option.field} className="rounded-lg border border-border bg-surface p-3">
                           <label htmlFor={`cigarette-${option.field}`} className="block text-xs font-bold text-foreground">
-                            {option.label} (R$)
+                            {option.label} ({currencySymbol})
                           </label>
                           <p className="mb-2 text-xs text-muted-foreground">{option.detail}</p>
                           <input
@@ -2034,12 +2037,12 @@ export default function Stock() {
                       <div className="p-3 bg-surface rounded-xl border border-border">
                         <div className="flex items-center justify-between mb-1">
                           <label className="block text-xs font-bold text-foreground">
-                            {formData.type === 'cigarro' ? v('purchase.cost') : `Valor de Compra do ${formData.purchaseForm === 'fardo' ? 'Fardo' : 'Pacote'} (R$)`}
+                            {formData.type === 'cigarro' ? v('purchase.cost') : `Valor de Compra do ${formData.purchaseForm === 'fardo' ? 'Fardo' : 'Pacote'} (${currencySymbol})`}
                           </label>
                           <span className="text-[10px] text-primary font-semibold">Valor da NF/Fornecedor</span>
                         </div>
                         <div className="relative">
-                          <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">R$</span>
+                          <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">{currencySymbol}</span>
                           <input 
                             type="number" 
                             step="0.01" 
@@ -2072,14 +2075,14 @@ export default function Stock() {
                     <div className={`p-3 bg-surface rounded-xl border border-border ${formData.purchaseForm === 'unidade' ? 'col-span-1 sm:col-span-2' : ''}`}>
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-foreground">
-                          Custo por {formData.type === 'cigarro' ? 'Carteira' : 'Unidade'} (R$) *
+                          Custo por {formData.type === 'cigarro' ? 'Carteira' : 'Unidade'} ({currencySymbol}) *
                         </label>
                         <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
                           Automático & Editável
                         </span>
                       </div>
                       <div className="relative">
-                        <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">R$</span>
+                        <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">{currencySymbol}</span>
                         <input 
                           type="number" 
                           step="0.01" 
@@ -2102,7 +2105,7 @@ export default function Stock() {
                       <div className="flex items-center justify-between mt-1 text-[11px] text-muted-foreground">
                         <span>
                           {formData.purchaseForm !== 'unidade' && formUnitsPerPackage > 1 && parseFloat(formData.purchaseTotalCost) > 0 ? (
-                            <>Calculado: R$ {parseFloat(formData.purchaseTotalCost).toFixed(2)} ÷ {formUnitsPerPackage} {formData.type === 'cigarro' ? 'carteiras' : 'un.'}</>
+                            <>Calculado: {formatMoney(parseFloat(formData.purchaseTotalCost))} ÷ {formUnitsPerPackage} {formData.type === 'cigarro' ? 'carteiras' : 'un.'}</>
                           ) : (
                             <>Custo individual de cada unidade para o estoque</>
                           )}
@@ -2146,7 +2149,7 @@ export default function Stock() {
                         {Number(formData.basePrice) > formCostPerUnit ? (
                           <>
                             +{(((Number(formData.basePrice) - formCostPerUnit) / formCostPerUnit) * 100).toFixed(0)}% de ganho
-                            (Lucro: R$ {(Number(formData.basePrice) - formCostPerUnit).toFixed(2)}/un.)
+                            (Lucro: {formatMoney((Number(formData.basePrice) - formCostPerUnit))}/un.)
                           </>
                         ) : (
                           <>Abaixo do custo!</>
@@ -2158,10 +2161,10 @@ export default function Stock() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-foreground mb-1">
-                        Preço de Venda da Unidade Avulsa (R$) *
+                        Preço de Venda da Unidade Avulsa ({currencySymbol}) *
                       </label>
                       <div className="relative">
-                        <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">R$</span>
+                        <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">{currencySymbol}</span>
                         <input 
                           type="number" 
                           step="0.01" 
@@ -2220,7 +2223,7 @@ export default function Stock() {
                                 className="px-2 py-1.5 bg-surface hover:bg-primary hover:text-primary-foreground text-foreground border border-border rounded text-[11px] font-semibold transition-colors text-center cursor-pointer shadow-2xs"
                               >
                                 <span className="block font-bold">+{sug.label}</span>
-                                <span className="text-[10px] opacity-80">R$ {sugPrice.toFixed(2)}</span>
+                                <span className="text-[10px] opacity-80">{formatMoney(sugPrice)}</span>
                               </button>
                             );
                           })}
@@ -2259,7 +2262,7 @@ export default function Stock() {
                           className="text-[11px] font-bold text-primary hover:underline cursor-pointer bg-surface px-2.5 py-1 rounded-md border border-primary/20 shadow-2xs"
                           title="Preço proporcional exato das unidades avulsas somadas"
                         >
-                          ⚡ Proporcional (R$ {((Number(formData.basePrice) || 0) * formUnitsPerPackage).toFixed(2)})
+                          ⚡ Proporcional ({formatMoney(((Number(formData.basePrice) || 0) * formUnitsPerPackage))})
                         </button>
 
                         {Number(formData.basePrice) > 0 && (
@@ -2283,10 +2286,10 @@ export default function Stock() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
                       <div>
                         <label className="block text-xs font-bold text-foreground mb-1">
-                          Preço de Venda do {formData.purchaseForm === 'fardo' ? 'Fardo' : 'Pacote'} Fechado (R$)
+                          Preço de Venda do {formData.purchaseForm === 'fardo' ? 'Fardo' : 'Pacote'} Fechado ({currencySymbol})
                         </label>
                         <div className="relative">
-                          <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">R$</span>
+                          <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">{currencySymbol}</span>
                           <input 
                             type="number" 
                             step="0.01" 
@@ -2312,12 +2315,12 @@ export default function Stock() {
                               <>
                                 <div className="flex items-center justify-between font-semibold">
                                   <span className="text-muted-foreground">Custo do Fardo:</span>
-                                  <span className="text-foreground">R$ {fardoCost.toFixed(2)}</span>
+                                  <span className="text-foreground">{formatMoney(fardoCost)}</span>
                                 </div>
                                 <div className="flex items-center justify-between font-bold">
                                   <span className="text-muted-foreground">Lucro no Fardo Fechado:</span>
                                   <span className={profit >= 0 ? 'text-emerald-600' : 'text-red-600'}>
-                                    R$ {profit.toFixed(2)} (+{marginPercent}%)
+                                    {formatMoney(profit)} (+{marginPercent}%)
                                   </span>
                                 </div>
                               </>
@@ -2394,7 +2397,7 @@ export default function Stock() {
                               if (newDate) {
                                 const status = calculateExpirationStatus(newDate);
                                 if (status.isExpiringSoon && !prev.hasPromoSuggestion && Number(prev.basePrice) > 0) {
-                                  const sug = suggestPromoDiscount(Number(prev.basePrice), Number(prev.unitCost), status.daysLeft);
+                                  const sug = suggestPromoDiscount(Number(prev.basePrice), Number(prev.unitCost), status.daysLeft, {currency,language});
                                   updated.hasPromoSuggestion = true;
                                   updated.promoPrice = sug.promoPrice;
                                   updated.promoDiscountPercent = sug.discountPercent;
@@ -2419,7 +2422,7 @@ export default function Stock() {
                                   const updated = { ...prev, expirationDate: chip.value };
                                   const status = calculateExpirationStatus(chip.value);
                                   if (status.isExpiringSoon && !prev.hasPromoSuggestion && Number(prev.basePrice) > 0) {
-                                    const sug = suggestPromoDiscount(Number(prev.basePrice), Number(prev.unitCost), status.daysLeft);
+                                    const sug = suggestPromoDiscount(Number(prev.basePrice), Number(prev.unitCost), status.daysLeft, {currency,language});
                                     updated.hasPromoSuggestion = true;
                                     updated.promoPrice = sug.promoPrice;
                                     updated.promoDiscountPercent = sug.discountPercent;
@@ -2448,7 +2451,7 @@ export default function Stock() {
                               const checked = e.target.checked;
                               if (checked) {
                                 const expStatus = calculateExpirationStatus(formData.expirationDate);
-                                const sug = suggestPromoDiscount(Number(formData.basePrice) || 0, Number(formData.unitCost) || 0, expStatus.daysLeft);
+                                const sug = suggestPromoDiscount(Number(formData.basePrice) || 0, Number(formData.unitCost) || 0, expStatus.daysLeft, {currency,language});
                                 setFormData((prev: any) => ({
                                   ...prev,
                                   hasPromoSuggestion: true,
@@ -2475,7 +2478,7 @@ export default function Stock() {
                             type="button"
                             onClick={() => {
                               const expStatus = calculateExpirationStatus(formData.expirationDate);
-                              const sug = suggestPromoDiscount(Number(formData.basePrice) || 0, Number(formData.unitCost) || 0, expStatus.daysLeft);
+                              const sug = suggestPromoDiscount(Number(formData.basePrice) || 0, Number(formData.unitCost) || 0, expStatus.daysLeft, {currency,language});
                               setFormData((prev: any) => ({
                                 ...prev,
                                 promoPrice: sug.promoPrice,
@@ -2532,7 +2535,7 @@ export default function Stock() {
                                           ...prev,
                                           promoPrice: cost,
                                           promoDiscountPercent: disc,
-                                          promoNotes: 'Preço promocional igual ao custo de compra (R$ ' + cost.toFixed(2) + ')'
+                                          promoNotes: ("Preço promocional igual ao custo de compra (" + currencySymbol + " ") + cost.toFixed(2) + ')'
                                         }));
                                       }
                                     }}
@@ -2549,10 +2552,10 @@ export default function Stock() {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                               <label className="block text-xs font-bold text-foreground mb-1">
-                                Preço Promocional de Venda (R$) *
+                                Preço Promocional de Venda ({currencySymbol}) *
                               </label>
                               <div className="relative">
-                                <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">R$</span>
+                                <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">{currencySymbol}</span>
                                 <input
                                   type="number"
                                   step="0.01"
@@ -2575,7 +2578,7 @@ export default function Stock() {
                                 />
                               </div>
                               <span className="text-[11px] text-muted-foreground mt-0.5 block">
-                                Preço normal atual: R$ {Number(formData.basePrice || 0).toFixed(2)}
+                                Preço normal atual: {formatMoney(Number(formData.basePrice || 0))}
                               </span>
                             </div>
 
@@ -2628,18 +2631,18 @@ export default function Stock() {
                                     <div className="flex justify-between items-center text-muted-foreground">
                                       <span>Economia para o cliente:</span>
                                       <span className="font-bold text-foreground">
-                                        R$ {clientSavings.toFixed(2)} ({formData.promoDiscountPercent || 0}% de desconto)
+                                        {formatMoney(clientSavings)} ({formData.promoDiscountPercent || 0}% de desconto)
                                       </span>
                                     </div>
                                     <div className="flex justify-between items-center font-bold">
                                       <span className="text-muted-foreground">Lucro restante por unidade:</span>
                                       <span className={profit >= 0 ? 'text-emerald-600' : 'text-red-600 font-extrabold'}>
-                                        R$ {profit.toFixed(2)} ({profit >= 0 ? `+${marginPct}% de margem` : 'PREJUÍZO'})
+                                        {formatMoney(profit)} ({profit >= 0 ? `+${marginPct}% de margem` : 'PREJUÍZO'})
                                       </span>
                                     </div>
                                     {profit < 0 && (
                                       <p className="text-[11px] text-red-600 font-semibold pt-1">
-                                        ⚠️ Atenção: O preço promocional está R$ {Math.abs(profit).toFixed(2)} abaixo do custo de compra (R$ {cost.toFixed(2)}).
+                                        ⚠️ Atenção: O preço promocional está {currencySymbol} {Math.abs(profit).toFixed(2)} abaixo do custo de compra ({currencySymbol} {cost.toFixed(2)}).
                                       </p>
                                     )}
                                   </>
@@ -3267,7 +3270,7 @@ export default function Stock() {
                 </div>
                 <div>
                   <span className="block font-medium">Preço de venda:</span>
-                  <span className="font-bold text-foreground">R$ {productToDelete.basePrice?.toFixed(2)}</span>
+                  <span className="font-bold text-foreground">{formatMoney(productToDelete.basePrice)}</span>
                 </div>
               </div>
             </div>
@@ -3391,7 +3394,7 @@ export default function Stock() {
                     </div>
                     <div className="shrink-0 flex items-center gap-2">
                       <span className="text-muted-foreground">{formatProductStock(prod)}</span>
-                      <span className="font-semibold text-foreground">R$ {prod.basePrice?.toFixed(2)}</span>
+                      <span className="font-semibold text-foreground">{formatMoney(prod.basePrice)}</span>
                     </div>
                   </div>
                 );

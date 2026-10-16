@@ -1,10 +1,11 @@
+import { useCurrency } from '../lib/useCurrency';
 import type { Product } from '../types';
 import { calculateMargin, getPricingFormats, isFractionalCigarette, priceForMargin } from '../lib/pricing';
 
-const currency = (value: number) => Number.isFinite(value)
-  ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Não informado';
 
 function PriceDetails({ cost, price }: { cost: number; price: number }) {
+  const { formatMoney } = useCurrency();
+  const currency = (value:number) => Number.isFinite(value) ? formatMoney(value) : 'Não informado';
   const margin = calculateMargin(cost, price);
   return (
     <dl className="space-y-2 text-sm">
@@ -22,6 +23,8 @@ interface ProductPricingCardProps {
 }
 
 export function ProductPricingCard({ product, isSaving, onUpdatePrice }: ProductPricingCardProps) {
+  const { formatMoney, currencySymbol } = useCurrency(); const currency = (value:number) => Number.isFinite(value) ? formatMoney(value) : 'Não informado';
+
   const fractional = isFractionalCigarette(product);
   const formats = fractional ? getPricingFormats(product) : [];
   const suggestions = (cost: number, field: Parameters<ProductPricingCardProps['onUpdatePrice']>[1]) => (

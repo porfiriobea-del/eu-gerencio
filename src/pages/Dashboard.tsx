@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { saleFee, paymentLabel } from '../lib/paymentFees';
 import { PaymentSummary } from '../components/PaymentSummary';
 import { formatProductStock } from '../lib/productUnits';
@@ -16,6 +17,8 @@ import { VisualReportsPanel } from '../components/VisualReportsPanel';
 import { MonthlyProfitChart } from '../components/MonthlyProfitChart';
 
 export default function Dashboard() {
+  const { formatMoney, currencySymbol } = useCurrency();
+
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -190,7 +193,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="text-2xl font-black text-foreground">
-                R$ {totalSales.toFixed(2)}
+                {formatMoney(totalSales)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Total vendido hoje, incluindo fiado
@@ -199,7 +202,7 @@ export default function Dashboard() {
 
             <div className="mt-3 pt-3 border-t border-border">
               <div className="text-xs font-medium text-muted-foreground flex justify-between items-center mb-1.5">
-                <span>Meta do dia (R$ {goal.toFixed(0)})</span>
+                <span>Meta do dia ({formatMoney(goal)})</span>
                 <span className={totalSales >= goal ? 'text-emerald-600 dark:text-emerald-400 font-bold' : ''}>
                   {totalSales >= goal ? '100% batida! 🎉' : `${Math.round((totalSales / goal) * 100)}%`}
                 </span>
@@ -225,7 +228,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="text-2xl font-black text-foreground">
-                R$ {todayPurchasesSpent.toFixed(2)}
+                {formatMoney(todayPurchasesSpent)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 {languageMode === 'basic' ? 'O que você pagou em mercadorias' : 'Compras e reposições de estoque'}
@@ -252,7 +255,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className={`text-2xl font-black ${totalSales - todayPurchasesSpent - feesPaid >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                R$ {(totalSales - todayPurchasesSpent - feesPaid).toFixed(2)}
+                {formatMoney((totalSales - todayPurchasesSpent - feesPaid))}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Diferença entre o total vendido e as compras registradas.
@@ -277,7 +280,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="text-2xl font-black text-foreground">
-                R$ {totalDebt.toFixed(2)}
+                {formatMoney(totalDebt)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 {languageMode === 'basic' ? 'Compras anotadas na caderneta' : 'Total acumulado a prazo'}
@@ -476,7 +479,7 @@ export default function Dashboard() {
                         </span>
                       </td>
                       <td className="p-3 text-right font-bold text-foreground">
-                        R$ {sale.total.toFixed(2)}
+                        {formatMoney(sale.total)}
                       </td>
                       <td className="p-3 text-center">
                         <button
@@ -630,7 +633,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <span className="text-muted-foreground block">Valor Total:</span>
-                <span className="font-bold text-primary text-base">R$ {selectedSale.total.toFixed(2)}</span>
+                <span className="font-bold text-primary text-base">{formatMoney(selectedSale.total)}</span>
               </div>
               {selectedSale.customerId && (
                 <div className="col-span-2 border-t border-border/50 pt-2">
@@ -655,11 +658,11 @@ export default function Dashboard() {
                       <div>
                         <div className="font-medium text-foreground notranslate normal-case" translate="no">{item.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {item.format} • {item.quantity} un. x R$ {item.price.toFixed(2)}
+                          {item.format} • {item.quantity} un. x {formatMoney(item.price)}
                         </div>
                       </div>
                       <div className="font-bold text-foreground">
-                        R$ {(item.quantity * item.price).toFixed(2)}
+                        {formatMoney((item.quantity * item.price))}
                       </div>
                     </div>
                   ))}

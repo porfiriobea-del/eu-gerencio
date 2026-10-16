@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { PaymentSummary } from './PaymentSummary';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
@@ -39,6 +40,8 @@ const BAR_COLORS = [
 ];
 
 export function VisualReportsPanel() {
+  const { formatMoney, currencySymbol } = useCurrency();
+
   const [loading, setLoading] = useState(true);
   const [salesLast7Days, setSalesLast7Days] = useState<Sale[]>([]);
   const [topProducts, setTopProducts] = useState<TopProductData[]>([]);
@@ -210,11 +213,11 @@ export function VisualReportsPanel() {
         <div className="flex items-center gap-2 flex-wrap">
           <div className="px-3 py-1.5 rounded-xl bg-muted/60 border border-border text-xs flex items-center gap-2">
             <span className="text-muted-foreground">Total 7 dias:</span>
-            <span className="font-bold text-foreground">R$ {total7DaysRevenue.toFixed(2)}</span>
+            <span className="font-bold text-foreground">{formatMoney(total7DaysRevenue)}</span>
           </div>
           <div className="px-3 py-1.5 rounded-xl bg-muted/60 border border-border text-xs flex items-center gap-2">
             <span className="text-muted-foreground">Média/dia:</span>
-            <span className="font-bold text-emerald-600 dark:text-emerald-400">R$ {averageDailyRevenue.toFixed(2)}</span>
+            <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatMoney(averageDailyRevenue)}</span>
           </div>
         </div>
       </div>
@@ -238,7 +241,7 @@ export function VisualReportsPanel() {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {bestDay && bestDay.faturamento > 0 ? (
-                    <>Melhor dia: <strong className="text-foreground">{bestDay.dayLabel} ({bestDay.formattedDate})</strong> com <strong className="text-emerald-600 dark:text-emerald-400">R$ {bestDay.faturamento.toFixed(2)}</strong></>
+                    <>Melhor dia: <strong className="text-foreground">{bestDay.dayLabel} ({bestDay.formattedDate})</strong> com <strong className="text-emerald-600 dark:text-emerald-400">{formatMoney(bestDay.faturamento)}</strong></>
                   ) : (
                     'Valores recebidos a cada dia da semana'
                   )}
@@ -286,7 +289,7 @@ export function VisualReportsPanel() {
                       className="text-muted-foreground"
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(val) => `R$${val >= 1000 ? `${(val/1000).toFixed(1)}k` : val}`}
+                      tickFormatter={(val) => formatMoney(Number(val))}
                     />
                     <Tooltip
                       content={({ active, payload }) => {
@@ -299,7 +302,7 @@ export function VisualReportsPanel() {
                               </p>
                               <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
                                 <DollarSign className="w-3.5 h-3.5" />
-                                <span>R$ {data.faturamento.toFixed(2)}</span>
+                                <span>{formatMoney(data.faturamento)}</span>
                               </div>
                               <p className="text-muted-foreground text-[11px]">
                                 {data.totalVendas} {data.totalVendas === 1 ? 'venda registrada' : 'vendas registradas'}
@@ -338,7 +341,7 @@ export function VisualReportsPanel() {
                       className="text-muted-foreground"
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(val) => `R$${val >= 1000 ? `${(val/1000).toFixed(1)}k` : val}`}
+                      tickFormatter={(val) => formatMoney(Number(val))}
                     />
                     <Tooltip
                       content={({ active, payload }) => {
@@ -351,7 +354,7 @@ export function VisualReportsPanel() {
                               </p>
                               <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
                                 <DollarSign className="w-3.5 h-3.5" />
-                                <span>R$ {data.faturamento.toFixed(2)}</span>
+                                <span>{formatMoney(data.faturamento)}</span>
                               </div>
                               <p className="text-muted-foreground text-[11px]">
                                 {data.totalVendas} {data.totalVendas === 1 ? 'venda registrada' : 'vendas registradas'}
@@ -379,7 +382,7 @@ export function VisualReportsPanel() {
             <div className="mt-3 pt-3 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-primary inline-block" />
-                Hoje: <strong>{dailyData[dailyData.length - 1]?.dayLabel} (R$ {dailyData[dailyData.length - 1]?.faturamento.toFixed(2)})</strong>
+                Hoje: <strong>{dailyData[dailyData.length - 1]?.dayLabel} ({formatMoney(dailyData[dailyData.length - 1]?.faturamento)})</strong>
               </span>
               <span>Total de transações: <strong>{salesLast7Days.length}</strong></span>
             </div>
@@ -405,7 +408,7 @@ export function VisualReportsPanel() {
                       metricType === 'revenue' ? 'bg-surface text-primary shadow-xs' : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    R$ Valor
+                    {currencySymbol} Valor
                   </button>
                   <button
                     type="button"
@@ -447,7 +450,7 @@ export function VisualReportsPanel() {
                           className="text-muted-foreground"
                           axisLine={false}
                           tickLine={false}
-                          tickFormatter={(val) => metricType === 'revenue' ? `R$${val}` : `${val}un`}
+                          tickFormatter={(val) => metricType === 'revenue' ? formatMoney(Number(val)) : `${val}un`}
                         />
                         <YAxis 
                           type="category" 
@@ -470,7 +473,7 @@ export function VisualReportsPanel() {
                                     Total vendido: {p.totalQuantity} unidades
                                   </div>
                                   <div className="text-emerald-600 dark:text-emerald-400 font-bold">
-                                    Faturamento: R$ {p.totalRevenue.toFixed(2)}
+                                    Faturamento: {formatMoney(p.totalRevenue)}
                                   </div>
                                 </div>
                               );
@@ -512,7 +515,7 @@ export function VisualReportsPanel() {
                         </div>
                         <div className="text-right shrink-0 flex items-center gap-2">
                           <span className="text-muted-foreground text-[11px]">{prod.totalQuantity} un.</span>
-                          <span className="font-bold text-foreground">R$ {prod.totalRevenue.toFixed(2)}</span>
+                          <span className="font-bold text-foreground">{formatMoney(prod.totalRevenue)}</span>
                         </div>
                       </div>
                     ))}

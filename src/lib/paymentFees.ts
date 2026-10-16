@@ -2,6 +2,7 @@ import type { Sale, Settings } from '../types';
 export type PaymentMethod = NonNullable<Sale['paymentMethod']>;
 const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 export function calculatePayment(subtotal: number, method: PaymentMethod, settings: Partial<Settings> | null = null) {
+  if (settings?.currency && settings.currency !== 'BRL' && ['pix','pix_machine'].includes(method)) throw new Error('Pix só está disponível para lojas em BRL. Selecione outra forma de pagamento.');
   let rate = 0;
   if (settings?.enableCardFees) {
     rate = method === 'pix_machine' ? settings.pixRate ?? 0 : method === 'credit' ? settings.creditCardRate ?? 3.5

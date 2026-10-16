@@ -122,7 +122,7 @@ export const saveStoreProfile = async (profile: {storeName: string, cnpj: string
   try {
     const initial: Settings = {
       ...profile,
-      language: 'pt', fontSize: 'normal', simpleViewMode: profile.languageMode === 'basic',
+      currency: 'BRL', language: 'pt', fontSize: 'normal', simpleViewMode: profile.languageMode === 'basic',
       theme: 'standard',
       darkMode: false,
       defaultMargin: 30,
@@ -139,6 +139,7 @@ export const saveStoreProfile = async (profile: {storeName: string, cnpj: string
 };
 
 export const updateSettings = withActionDeadline(async (data: Partial<Settings>) => {
+  if (data.currency !== undefined && !['BRL','USD','EUR'].includes(data.currency)) throw new Error('Selecione BRL, USD ou EUR.');
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   const path = `settings/${uid}`;
@@ -152,6 +153,7 @@ export const updateSettings = withActionDeadline(async (data: Partial<Settings>)
     } else {
       const initial: Settings = {
         ...cleanData,
+        currency: cleanData.currency || 'BRL',
         storeName: cleanData.storeName || 'Eu Gerencio!',
         cnpj: cleanData.cnpj || '',
         phone: cleanData.phone || '',
@@ -207,7 +209,7 @@ export const addProduct = withActionDeadline(async (product: Omit<Product, 'id'|
       employeeName: activeEmp.name,
       employeeRole: activeEmp.role,
       type: 'product_create',
-      description: `Produto cadastrado: "${product.name}" (${product.category}) • Preço: R$ ${product.basePrice.toFixed(2)} • Estoque: ${product.stock} un`,
+      description: `Produto cadastrado: "${product.name}" (${product.category}) • Estoque: ${product.stock} un`,
       entityId: ref.id,
       entityName: product.name,
       quantity: product.stock,
@@ -327,8 +329,8 @@ export const updateProduct = withProductWriteQueue(async (id: string, data: Part
     const descParts: string[] = [];
     if (data.name) descParts.push(`nome: "${data.name}"`);
     if (data.stock !== undefined) descParts.push(`estoque: ${formatProductStock(changedProduct)}`);
-    if (data.basePrice !== undefined) descParts.push(`preço: R$ ${data.basePrice.toFixed(2)}`);
-    if (data.unitCost !== undefined) descParts.push(`custo: R$ ${data.unitCost.toFixed(2)}`);
+    if (data.basePrice !== undefined) descParts.push(`preço atualizado para ${data.basePrice.toFixed(2)}`);
+    if (data.unitCost !== undefined) descParts.push(`custo atualizado para ${data.unitCost.toFixed(2)}`);
 
     recordMovement({
       sourceOwnerId: uid,
@@ -468,7 +470,7 @@ export const addCustomer = withActionDeadline(async (customer: Omit<Customer, 'i
       sourceOwnerId: uid,
       timestamp: now,
       type: 'debt_add',
-      description: `Novo cliente adicionado à caderneta de fiado: "${customer.name}"${customer.phone ? ` (Tel: ${customer.phone})` : ''}${customer.previousDebt > 0 ? ` com dívida inicial de R$ ${customer.previousDebt.toFixed(2)}` : ''}`,
+      description: `Novo cliente adicionado à caderneta de fiado: "${customer.name}"${customer.phone ? ` (Tel: ${customer.phone})` : ''}${customer.previousDebt > 0 ? ` com dívida inicial registrada` : ''}`,
       entityId: ref.id,
       entityName: customer.name,
       amount: customer.previousDebt || undefined
@@ -604,7 +606,7 @@ export const recordSale = withActionDeadline(async (
       employeeId: empId,
       employeeName: empName,
       type: 'sale',
-      description: `Venda de R$ ${sale.total.toFixed(2)} (${typeLabel}) - ${items.length} item(ns): ${confirmedSummary || summary}`,
+      description: `Venda (${typeLabel}) - ${items.length} item(ns): ${confirmedSummary || summary}`,
       entityId: saleRef.id,
       amount: sale.total,
       quantity: totalQuantity,
@@ -652,7 +654,7 @@ export const recordPayment = withActionDeadline(async (
       employeeId: empId,
       employeeName: empName,
       type: 'debt_payment',
-      description: `Pagamento de Fiado recebido: R$ ${amount.toFixed(2)} (${method === 'cash' ? 'Dinheiro' : 'Cartão'}) - Cliente: ${customerName}`,
+      description: `Pagamento de Fiado recebido (${method === 'cash' ? 'Dinheiro' : 'Cartão'}) - Cliente: ${customerName}`,
       entityId: customerId,
       entityName: customerName,
       amount: amount
@@ -863,7 +865,7 @@ export const saveCashClosure = withActionDeadline(async (closure: Omit<CashClosu
       employeeId: empId,
       employeeName: empName,
       type: 'cash_closure',
-      description: `Fechamento de Caixa da data ${closure.date}: R$ ${closure.totalSales.toFixed(2)} em vendas | Dinheiro contado: R$ ${closure.countedCash.toFixed(2)} (Diferença: R$ ${closure.difference.toFixed(2)})`,
+      description: `Fechamento de Caixa da data ${closure.date}`,
       entityId: ref.id,
       amount: closure.totalSales
     }).catch(() => {});
@@ -989,7 +991,7 @@ export const recordPurchase = withActionDeadline(async (
       employeeId: purchase.employeeId || activeEmp.id,
       employeeName: purchase.employeeName || activeEmp.name,
       type: 'stock_in',
-      description: `Entrada de Estoque / Compra: +${purchase.quantity} un de "${purchase.productName}" (Valor total: R$ ${(purchase.totalCost || 0).toFixed(2)})`,
+      description: `Entrada de Estoque / Compra: +${purchase.quantity} un de "${purchase.productName}"`,
       entityId: purchase.productId,
       entityName: purchase.productName,
       quantity: purchase.quantity,

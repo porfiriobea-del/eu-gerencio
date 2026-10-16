@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { useModalViewport } from '../lib/useModalViewport';
 import { usePreferences } from '../lib/preferencesContext';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -13,6 +14,8 @@ import { showActionError, showToast } from '../lib/actionFeedback';
 interface Props { isOpen: boolean; onClose: () => void; availableCategories: string[]; existingProductNames: string[]; existingProducts?: Product[]; onBeforeSave?: (product: Pick<Product, 'name' | 'barcode' | 'stock' | 'type'>) => Promise<boolean>; onOpenExisting?: (product: Product) => void }
 
 export function CatalogImportModal({ isOpen, onClose, availableCategories, existingProductNames, existingProducts = [], onBeforeSave, onOpenExisting }: Props) {
+  const { formatMoney, currencySymbol } = useCurrency();
+
   const { v } = usePreferences();
   const viewport = useModalViewport(isOpen);
   const copy = (key: string, fallback: string) => v(key, fallback);
@@ -220,13 +223,13 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
                   <label className="block text-xs font-medium">Código de barras<input value={row.barcode || ''} onChange={event => update(row.id, { barcode: event.target.value })} className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm" /></label>
                   <label className="block text-xs font-medium">Categoria<input list={categoriesId} value={row.category} maxLength={50} onChange={event => update(row.id, { category: event.target.value, ...(/cigar/i.test(event.target.value) && row.type !== 'cigarro' ? { type: 'cigarro', costBasis: '', unitsPerPackage: 10 } : {}) })} className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm" /></label>
                   <label className="block text-xs font-medium">Tipo<select value={row.type} onChange={event => update(row.id, { type: event.target.value as SupplierDraft['type'], costBasis: '', unitsPerPackage: event.target.value === 'cigarro' ? 10 : 1 })} className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm"><option value="comum">Comum</option><option value="cigarro">Cigarro fracionado</option></select></label>
-                  {numberField(row, 'purchaseCost', 'Custo da compra (R$)')}
+                  {numberField(row, 'purchaseCost', ("Custo da compra (" + currencySymbol + ")"))}
                   <label className="block min-w-0 text-xs font-medium">{copy('catalog.costBasis', 'Este custo corresponde a')}<select value={row.costBasis} onChange={event => update(row.id, { costBasis: event.target.value as SupplierDraft['costBasis'] })} className="mt-1 w-full min-w-0 rounded-lg border border-border bg-background p-2 text-sm"><option value="">{copy('catalog.costPlaceholder', 'Confirme a medida')}</option>{row.type === 'cigarro' ? <><option value="maco">{copy('catalog.costPack', '1 maço (10 carteiras)')}</option><option value="meio_maco">{copy('catalog.costHalf', 'Meio maço (5 carteiras)')}</option><option value="carteira">{copy('catalog.costCart', '1 carteira avulsa')}</option></> : <><option value="unidade">1 unidade</option><option value="embalagem">1 embalagem fechada</option></>}</select></label>
                   {row.type === 'cigarro' && <p className="text-xs text-muted-foreground sm:col-span-2">{copy('catalog.costHelp', 'O custo por carteira usa 10, 5 ou 1 carteira, conforme a opção escolhida.')}</p>}
                   {row.type === 'comum' && <><label className="block text-xs font-medium">Forma de compra<select value={row.purchaseForm} onChange={event => update(row.id, { purchaseForm: event.target.value as SupplierDraft['purchaseForm'] })} className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm"><option value="unidade">Unidade</option><option value="fardo">Fardo / Caixa</option><option value="pacote">Pacote</option></select></label>{numberField(row, 'unitsPerPackage', 'Unidades por embalagem')}</>}
                 </div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {row.type === 'cigarro' ? <>{numberField(row, 'pricePack', 'Venda: 10 carteiras')}{numberField(row, 'priceCart', 'Venda: Carteira (20 cigarros)')}{numberField(row, 'priceHalfCart', 'Venda: Meia carteira')}{numberField(row, 'priceUnit', 'Venda: Unidade avulsa')}</> : numberField(row, 'basePrice', 'Preço de venda (R$)')}
+                  {row.type === 'cigarro' ? <>{numberField(row, 'pricePack', 'Venda: 10 carteiras')}{numberField(row, 'priceCart', 'Venda: Carteira (20 cigarros)')}{numberField(row, 'priceHalfCart', 'Venda: Meia carteira')}{numberField(row, 'priceUnit', 'Venda: Unidade avulsa')}</> : numberField(row, 'basePrice', ("Preço de venda (" + currencySymbol + ")"))}
                 </div>
                 <div className="mt-3 max-w-md">{numberField(row, 'initialStock', `${copy('catalog.initialStock', 'Estoque inicial (opcional)')} — ${row.type === 'cigarro' ? 'carteiras' : 'unidades'}`)}<p className="mt-1 text-xs text-muted-foreground">{copy('catalog.initialStockHelp', 'Informe unidades ou carteiras para cigarros. Se deixar vazio, começa com zero.')}</p></div>
                 {row.type === 'cigarro' && <p className="mt-2 text-xs text-muted-foreground">Formatos sem preço ou com valor zero não serão vendidos. O estoque será contado em carteiras.</p>}

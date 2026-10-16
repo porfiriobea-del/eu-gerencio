@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { ProductPricingCard } from '../components/ProductPricingCard';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import { useState, useEffect } from 'react';
@@ -8,6 +9,8 @@ import { DollarSign, RefreshCw, ShoppingCart, Info, Tag, PieChart, ShoppingBag, 
 import { usePreferences } from '../lib/preferencesContext';
 
 export default function Pricing() {
+  const { formatMoney, currencySymbol } = useCurrency();
+
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
   const [products, setProducts] = useState<Product[]>([]);
   const [savingPriceIds, setSavingPriceIds] = useState<Set<string>>(new Set());
@@ -134,14 +137,14 @@ export default function Pricing() {
             </div>
             <div>
               <div className="text-2xl font-bold text-foreground">
-                R$ {(financials?.totalGrossSales || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {formatMoney((financials?.totalGrossSales || 0))}
               </div>
               <div className="text-[11px] text-muted-foreground mt-1 flex items-center justify-between">
                 <span>
                   {languageMode === 'basic' ? `${financials?.salesCount || 0} compras de clientes` : `Total de ${financials?.salesCount || 0} vendas`}
                 </span>
                 <span>
-                  {languageMode === 'basic' ? `Média R$ ${(financials?.averageTicket || 0).toFixed(2)}` : `Ticket: R$ ${(financials?.averageTicket || 0).toFixed(2)}`}
+                  {languageMode === 'basic' ? `Média ${formatMoney((financials?.averageTicket || 0))}` : `Ticket: ${formatMoney((financials?.averageTicket || 0))}`}
                 </span>
               </div>
               {languageMode === 'basic' && (
@@ -162,7 +165,7 @@ export default function Pricing() {
             </div>
             <div>
               <div className="text-2xl font-bold text-foreground">
-                R$ {(financials?.totalCostOfGoods || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {formatMoney((financials?.totalCostOfGoods || 0))}
               </div>
               <div className="text-[11px] text-muted-foreground mt-1">
                 {financials?.totalGrossSales 
@@ -189,7 +192,7 @@ export default function Pricing() {
             </div>
             <div>
               <div className="text-2xl font-black text-emerald-700 dark:text-emerald-400">
-                R$ {(financials?.grossProfit || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {formatMoney((financials?.grossProfit || 0))}
               </div>
               <div className="text-[11px] text-emerald-600/80 dark:text-emerald-400/80 mt-1">
                 {languageMode === 'basic' 
@@ -209,7 +212,7 @@ export default function Pricing() {
             </div>
             <div>
               <div className="text-2xl font-black text-primary">
-                R$ {(financials?.totalNetProfit || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {formatMoney((financials?.totalNetProfit || 0))}
               </div>
               <div className="text-[11px] text-muted-foreground mt-1">
                 {languageMode === 'basic' 
@@ -265,26 +268,26 @@ export default function Pricing() {
                 <span className="text-muted-foreground">
                   {languageMode === 'basic' ? 'Sobra das vendas (Vendas menos Custo dos itens)' : 'Lucro Bruto Apurado (Receita - CMV)'}
                 </span>
-                <span className="font-bold text-foreground">R$ {(financials?.grossProfit || 0).toFixed(2)}</span>
+                <span className="font-bold text-foreground">{formatMoney((financials?.grossProfit || 0))}</span>
               </div>
               <div className="flex items-center justify-between py-1.5 border-b border-border/50">
                 <span className="text-muted-foreground flex items-center gap-1">
                   <span>{languageMode === 'basic' ? 'Taxinha da maquininha de cartão (2%)' : 'Taxas est. de Cartão (2%)'}</span>
-                  <span className="text-[10px] text-muted-foreground">sobre R$ {(financials?.cardSales || 0).toFixed(2)}</span>
+                  <span className="text-[10px] text-muted-foreground">sobre {formatMoney((financials?.cardSales || 0))}</span>
                 </span>
-                <span className="font-medium text-red-600 dark:text-red-400">- R$ {(financials?.cardFeesEstimated || 0).toFixed(2)}</span>
+                <span className="font-medium text-red-600 dark:text-red-400">- {formatMoney((financials?.cardFeesEstimated || 0))}</span>
               </div>
               <div className="flex items-center justify-between py-1.5 border-b border-border/50">
                 <span className="text-muted-foreground">
                   {languageMode === 'basic' ? 'Dinheiro que você retirou do caixa' : 'Retiradas / Sangrias do Caixa'}
                 </span>
-                <span className="font-medium text-red-600 dark:text-red-400">- R$ {(financials?.totalWithdrawals || 0).toFixed(2)}</span>
+                <span className="font-medium text-red-600 dark:text-red-400">- {formatMoney((financials?.totalWithdrawals || 0))}</span>
               </div>
               <div className="flex items-center justify-between py-1.5 border-b border-border/50">
                 <span className="font-bold text-foreground">
                   {v('pricing.netProfit', 'Lucro Líquido Real')}
                 </span>
-                <span className="text-base font-extrabold text-primary">R$ {(financials?.totalNetProfit || 0).toFixed(2)}</span>
+                <span className="text-base font-extrabold text-primary">{formatMoney((financials?.totalNetProfit || 0))}</span>
               </div>
               <div className="flex items-center justify-between pt-1 text-xs">
                 <div className="flex items-center gap-1 text-muted-foreground">
@@ -292,7 +295,7 @@ export default function Pricing() {
                   <span>{languageMode === 'basic' ? 'Total que você gastou com compras novas no mês:' : 'Total em Compras de Reposição no Mês:'}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-foreground">R$ {(financials?.totalPurchasesSpent || 0).toFixed(2)}</span>
+                  <span className="font-bold text-foreground">{formatMoney((financials?.totalPurchasesSpent || 0))}</span>
                   <Link to="/compras" className="text-[11px] text-primary hover:underline">Ver compras</Link>
                 </div>
               </div>
@@ -306,7 +309,7 @@ export default function Pricing() {
                 <PieChart className="w-3.5 h-3.5 text-primary" /> 
                 {languageMode === 'basic' ? 'De onde veio o dinheiro das vendas' : 'Faturamento por Forma de Pagamento'}
               </h3>
-              <span className="text-xs text-muted-foreground">Total: R$ {(financials?.totalGrossSales || 0).toFixed(2)}</span>
+              <span className="text-xs text-muted-foreground">Total: {formatMoney((financials?.totalGrossSales || 0))}</span>
             </div>
 
             <div className="space-y-2 text-sm">
@@ -315,7 +318,7 @@ export default function Pricing() {
                   <span className="text-muted-foreground">
                     {languageMode === 'basic' ? '💵 Dinheiro na mão (notas e moedas)' : '💵 Dinheiro (À Vista)'}
                   </span>
-                  <span className="text-foreground font-bold">R$ {(financials?.cashSales || 0).toFixed(2)}</span>
+                  <span className="text-foreground font-bold">{formatMoney((financials?.cashSales || 0))}</span>
                 </div>
                 <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
                   <div 
@@ -330,7 +333,7 @@ export default function Pricing() {
                   <span className="text-muted-foreground">
                     {languageMode === 'basic' ? '💳 Cartão (passado na maquininha)' : '💳 Cartão (Débito/Crédito)'}
                   </span>
-                  <span className="text-foreground font-bold">R$ {(financials?.cardSales || 0).toFixed(2)}</span>
+                  <span className="text-foreground font-bold">{formatMoney((financials?.cardSales || 0))}</span>
                 </div>
                 <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
                   <div 
@@ -345,7 +348,7 @@ export default function Pricing() {
                   <span className="text-muted-foreground">
                     {languageMode === 'basic' ? '📋 Caderneta / Fiado (pra receber depois)' : '📋 Fiado (A Receber)'}
                   </span>
-                  <span className="text-foreground font-bold">R$ {(financials?.fiadoSales || 0).toFixed(2)}</span>
+                  <span className="text-foreground font-bold">{formatMoney((financials?.fiadoSales || 0))}</span>
                 </div>
                 <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
                   <div 

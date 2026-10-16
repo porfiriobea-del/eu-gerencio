@@ -1,13 +1,17 @@
+import { normalizeCurrency, type MoneyOptions } from './currency';
 import { paymentLabel, saleFee, saleNet } from './paymentFees';
 import { getAccessToken } from "./auth";
 import { format } from "date-fns";
 
 export async function exportToSheets(data: {
+  currency?: MoneyOptions['currency'],
+  language?: MoneyOptions['language'],
   sales: any[],
   expenses: any[],
   customers: any[],
   purchases?: any[]
 }) {
+  const csvCurrency = normalizeCurrency(data.currency);
   const token = await getAccessToken();
   if (!token) throw new Error("Google Drive access token missing.");
 
@@ -35,28 +39,28 @@ export async function exportToSheets(data: {
 
   // 2. Prepare Data
   const salesData = [
-    ["Data", "Tipo", "Total (R$)", "Taxa (R$)", "Valor líquido (R$)"],
-    ...data.sales.map(s => [format(new Date(s.createdAt), "dd/MM/yyyy HH:mm"), paymentLabel(s), Number(s.total || 0).toFixed(2), saleFee(s).toFixed(2), saleNet(s).toFixed(2)])
+    ["Data", "Tipo", ("Total (" + csvCurrency + ")"), ("Taxa (" + csvCurrency + ")"), ("Valor líquido (" + csvCurrency + ")")],
+    ...data.sales.map(s => [format(new Date(s.createdAt), "dd/MM/yyyy HH:mm"), paymentLabel(s), Number(s.total || 0), saleFee(s), saleNet(s)])
   ];
 
   const purchasesData = [
-    ["Data da Compra", "Produto", "Categoria", "Qtd Unidades", "Fardos/Pacotes", "Custo Unitário (R$)", "Total Desembolsado (R$)", "Fornecedor / Local", "Observações"],
+    ["Data da Compra", "Produto", "Categoria", "Qtd Unidades", "Fardos/Pacotes", ("Custo Unitário (" + csvCurrency + ")"), ("Total Desembolsado (" + csvCurrency + ")"), "Fornecedor / Local", "Observações"],
     ...(data.purchases || []).map(p => [
       p.date ? format(new Date(p.date + 'T12:00:00'), "dd/MM/yyyy") : format(new Date(p.createdAt), "dd/MM/yyyy"),
       p.productName || "",
       p.category || "",
       p.quantity || 0,
       p.packageQuantity && p.packageQuantity > 0 ? `${p.packageQuantity} ${p.packageType || 'emb.'}` : '-',
-      Number(p.unitCost || 0).toFixed(2),
-      Number(p.totalCost || 0).toFixed(2),
+      Number(p.unitCost || 0),
+      Number(p.totalCost || 0),
       p.supplier || "Não informado",
       p.notes || ""
     ])
   ];
 
   const fiadoData = [
-    ["Cliente", "Telefone", "Dívida Atual (R$)"],
-    ...data.customers.filter(c => c.totalDebt > 0).map(c => [c.name, c.phone || "", Number(c.totalDebt || 0).toFixed(2)])
+    ["Cliente", "Telefone", ("Dívida Atual (" + csvCurrency + ")")],
+    ...data.customers.filter(c => c.totalDebt > 0).map(c => [c.name, c.phone || "", Number(c.totalDebt || 0)])
   ];
 
   // 3. Update Sheets with data

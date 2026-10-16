@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { calculatePayment } from '../lib/paymentFees';
 import { formatProductStock } from '../lib/productUnits';
 import { rankProductsBySales } from '../lib/productSalesRanking';
@@ -46,6 +47,8 @@ import { calculateExpirationStatus } from '../lib/promoUtils';
 import { useEmployee } from '../lib/employeeContext';
 
 export default function POS() {
+  const { formatMoney, currencySymbol, isBrazil } = useCurrency();
+
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
   const { currentEmployee, openSwitchModal } = useEmployee();
   const [products, setProducts] = useState<Product[]>([]);
@@ -153,11 +156,12 @@ export default function POS() {
     cartRef.current = next; setCart(next);
   };
 
+  useEffect(() => { if (!isBrazil && ['pix','pix_machine'].includes(cardMethod)) setCardMethod('debit'); }, [isBrazil, cardMethod]);
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
   // Card Fee logic
   const isCardFeeEnabled = settings?.enableCardFees ?? false;
-  const payment = useMemo(() => calculatePayment(cartTotal, paymentType === 'card' ? cardMethod : paymentType, settings), [cartTotal, paymentType, cardMethod, settings]);
+  const payment = useMemo(() => calculatePayment(cartTotal, paymentType === 'card' ? (!isBrazil && ['pix','pix_machine'].includes(cardMethod) ? 'debit' : cardMethod) : paymentType, settings), [cartTotal, paymentType, cardMethod, settings, isBrazil]);
   const activeRate = payment.feeRate;
   const finalTotal = payment.total;
   const estimatedDeduction = payment.feeAmount;
@@ -380,20 +384,20 @@ export default function POS() {
           <div class="line"></div>
           <div class="bold">RESUMO DE VENDAS DO DIA:</div>
           <div class="flex mt"><span>Qtd. de Vendas:</span><span class="bold">${todaySales.length}</span></div>
-          <div class="flex"><span>Vendas em Dinheiro:</span><span class="bold">R$ ${cashSalesToday.toFixed(2)}</span></div>
-          <div class="flex"><span>Cartão e Pix:</span><span class="bold">R$ ${cardSalesToday.toFixed(2)}</span></div>
-          <div class="flex"><span>Vendas no Fiado:</span><span class="bold">R$ ${fiadoSalesToday.toFixed(2)}</span></div>
-          <div class="flex bold" style="font-size: 13px; margin-top: 4px;"><span>TOTAL VENDIDO:</span><span>R$ ${totalSalesToday.toFixed(2)}</span></div>
+          <div class="flex"><span>Vendas em Dinheiro:</span><span class="bold">${formatMoney(cashSalesToday)}</span></div>
+          <div class="flex"><span>${isBrazil ? 'Cartão e Pix' : 'Cartão'}:</span><span class="bold">${formatMoney(cardSalesToday)}</span></div>
+          <div class="flex"><span>Vendas no Fiado:</span><span class="bold">${formatMoney(fiadoSalesToday)}</span></div>
+          <div class="flex bold" style="font-size: 13px; margin-top: 4px;"><span>TOTAL VENDIDO:</span><span>${formatMoney(totalSalesToday)}</span></div>
           <div class="line"></div>
           <div class="bold">CONFERÊNCIA DE GAVETA (DINHEIRO):</div>
-          <div class="flex mt"><span>(+) Fundo Inicial (Troco):</span><span>R$ ${(Number(openingBalance) || 0).toFixed(2)}</span></div>
-          <div class="flex"><span>(+) Entradas em Dinheiro:</span><span>R$ ${cashSalesToday.toFixed(2)}</span></div>
-          <div class="flex"><span>(-) Retiradas / Sangrias:</span><span>R$ ${(Number(withdrawals) || 0).toFixed(2)}</span></div>
-          <div class="flex bold mt"><span>(=) Dinheiro Esperado:</span><span>R$ ${expectedCash.toFixed(2)}</span></div>
-          <div class="flex bold"><span>Dinheiro Informado:</span><span>R$ ${c.toFixed(2)}</span></div>
+          <div class="flex mt"><span>(+) Fundo Inicial (Troco):</span><span>${formatMoney((Number(openingBalance) || 0))}</span></div>
+          <div class="flex"><span>(+) Entradas em Dinheiro:</span><span>${formatMoney(cashSalesToday)}</span></div>
+          <div class="flex"><span>(-) Retiradas / Sangrias:</span><span>${formatMoney((Number(withdrawals) || 0))}</span></div>
+          <div class="flex bold mt"><span>(=) Dinheiro Esperado:</span><span>${formatMoney(expectedCash)}</span></div>
+          <div class="flex bold"><span>Dinheiro Informado:</span><span>${formatMoney(c)}</span></div>
           <div class="flex bold" style="font-size: 13px; margin-top: 4px;">
             <span>Diferença:</span>
-            <span>${d === 0 ? 'R$ 0.00 (Exato)' : d > 0 ? `+ R$ ${d.toFixed(2)} (Sobra)` : `- R$ ${Math.abs(d).toFixed(2)} (Falta)`}</span>
+            <span>${d === 0 ? `${formatMoney(0)} (Exato)` : d > 0 ? `+ ${formatMoney(d)} (Sobra)` : `- ${formatMoney(Math.abs(d))} (Falta)`}</span>
           </div>
           ${closureNotes ? `<div class="mt"><strong>Obs:</strong> ${closureNotes}</div>` : ''}
           <div class="line"></div>
@@ -434,7 +438,7 @@ export default function POS() {
             },
             actionButton: {
               label: cart.length > 0 
-                ? `Cobrar Venda Atual (R$ ${cartTotal.toFixed(2)})` 
+                ? `Cobrar Venda Atual (${formatMoney(cartTotal)})`
                 : 'Escolha um item na lista para vender',
               onClick: () => {
                 if (cart.length > 0) {
@@ -578,7 +582,7 @@ export default function POS() {
                           className="w-full text-left text-xs px-2.5 py-1.5 bg-muted/60 hover:bg-palette-1 border border-border hover:border-primary/40 rounded-lg flex items-center justify-between transition-colors disabled:opacity-40 cursor-pointer"
                         >
                           <span className="font-semibold text-foreground">{option.label}</span>
-                          <span className="font-bold text-primary">R$ {option.price.toFixed(2)}</span>
+                          <span className="font-bold text-primary">{formatMoney(option.price)}</span>
                         </button>
                       );
                     })}
@@ -595,7 +599,7 @@ export default function POS() {
                         <span className="font-semibold text-foreground block">🔹 Unidade Avulsa</span>
                         <span className="text-[10px] text-muted-foreground">baixa 1 un.</span>
                       </div>
-                      <span className="font-bold text-primary text-sm">R$ {p.basePrice.toFixed(2)}</span>
+                      <span className="font-bold text-primary text-sm">{formatMoney(p.basePrice)}</span>
                     </button>
 
                     {/* Venda de Fardo/Pacote Fechado - Deduz unitsPerPackage unidades no estoque */}
@@ -615,7 +619,7 @@ export default function POS() {
                               {p.unitsPerPackage} un.
                             </span>
                           </div>
-                          <span className="font-bold text-primary text-sm">R$ {fardoPrice.toFixed(2)}</span>
+                          <span className="font-bold text-primary text-sm">{formatMoney(fardoPrice)}</span>
                         </button>
                       );
                     })()}
@@ -637,7 +641,7 @@ export default function POS() {
                         <span className="flex items-center gap-1">
                           <Flame className="w-3.5 h-3.5" /> Promoção Avulsa
                         </span>
-                        <span>R$ {p.promoPrice.toFixed(2)}</span>
+                        <span>{formatMoney(p.promoPrice)}</span>
                       </button>
                     )}
                   </div>
@@ -659,7 +663,7 @@ export default function POS() {
                       <span className="flex items-center gap-1">
                         <Flame className="w-3.5 h-3.5" /> Promoção
                       </span>
-                      <span>R$ {p.promoPrice.toFixed(2)}</span>
+                      <span>{formatMoney(p.promoPrice)}</span>
                     </button>
                     <button 
                       onClick={() => addToCart(p, 'Padrão', p.basePrice, 1)} 
@@ -667,7 +671,7 @@ export default function POS() {
                       className="w-full py-1 text-muted-foreground hover:text-foreground text-[11px] font-medium text-center hover:underline cursor-pointer"
                       title="Vender pelo preço normal"
                     >
-                      Normal: R$ {p.basePrice.toFixed(2)}
+                      Normal: {formatMoney(p.basePrice)}
                     </button>
                   </div>
                 ) : (
@@ -677,7 +681,7 @@ export default function POS() {
                     className="w-full py-2.5 bg-palette-1 text-primary hover:opacity-90 border border-primary/30 rounded-xl font-bold transition-all disabled:opacity-40 cursor-pointer flex justify-between px-3 items-center"
                   >
                     <span className="text-xs">Vender</span>
-                    <span>R$ {p.basePrice.toFixed(2)}</span>
+                    <span>{formatMoney(p.basePrice)}</span>
                   </button>
                 )}
               </div>
@@ -738,11 +742,11 @@ export default function POS() {
                     <span className="text-base">💳</span>
                     <span>Cartão</span>
                   </button>
-                  <button type="button" onClick={() => { setPaymentType('card'); setCardMethod('pix'); }}
+                  <button hidden={!isBrazil} type="button" onClick={() => { setPaymentType('card'); setCardMethod('pix'); }}
                     className={`rounded-xl border py-3 text-sm font-bold ${paymentType === 'card' && cardMethod === 'pix' ? 'border-primary bg-palette-1 text-primary' : 'border-border bg-surface'}`}>
                     {v('payment.pixDirect', 'Pix (direto na conta)')}
                   </button>
-                  <button type="button" onClick={() => { setPaymentType('card'); setCardMethod('pix_machine'); }} className={`rounded-xl border py-3 text-sm font-bold ${paymentType === 'card' && cardMethod === 'pix_machine' ? 'border-primary bg-palette-1 text-primary' : 'border-border bg-surface'}`}>
+                  <button hidden={!isBrazil} type="button" onClick={() => { setPaymentType('card'); setCardMethod('pix_machine'); }} className={`rounded-xl border py-3 text-sm font-bold ${paymentType === 'card' && cardMethod === 'pix_machine' ? 'border-primary bg-palette-1 text-primary' : 'border-border bg-surface'}`}>
                     {v('payment.pixMachine', 'Pix na maquininha')}
                   </button>
                   <button 
@@ -796,11 +800,11 @@ export default function POS() {
                     <div className="pt-2 border-t border-border/60 text-xs">
                       {isSurchargeMode ? (
                         <div className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold bg-amber-50 dark:bg-amber-950/40 p-2 rounded-lg">
-                          + Taxa de {activeRate}% repassada ao cliente: R$ {(finalTotal - cartTotal).toFixed(2)}
+                          + Taxa de {activeRate}% repassada ao cliente: {formatMoney((finalTotal - cartTotal))}
                         </div>
                       ) : (
                         <div className="text-[11px] text-muted-foreground bg-surface p-2 rounded-lg border border-border/60">
-                          Taxa de {activeRate}% absorvida pela loja: ~R$ {estimatedDeduction.toFixed(2)} • Você recebe: R$ {payment.netTotal.toFixed(2)}
+                          Taxa de {activeRate}% absorvida pela loja: ~{formatMoney(estimatedDeduction)} • Você recebe: {formatMoney(payment.netTotal)}
                         </div>
                       )}
                     </div>
@@ -829,16 +833,16 @@ export default function POS() {
                       onClick={() => setAmountReceived(finalTotal)}
                       className="px-2.5 py-1 rounded-lg bg-palette-1 text-primary text-xs font-bold border border-primary/20 hover:opacity-90 cursor-pointer"
                     >
-                      Exato (R$ {finalTotal.toFixed(2)})
+                      Exato ({formatMoney(finalTotal)})
                     </button>
-                    {[10, 20, 50, 100].filter(val => val > finalTotal).slice(0, 3).map(val => (
+                    {(isBrazil ? [10, 20, 50, 100] : []).filter(val => val > finalTotal).slice(0, 3).map(val => (
                       <button
                         key={val}
                         type="button"
                         onClick={() => setAmountReceived(val)}
                         className="px-2.5 py-1 rounded-lg bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold border border-border cursor-pointer"
                       >
-                        R$ {val},00
+                        {formatMoney(val)}
                       </button>
                     ))}
                   </div>
@@ -846,7 +850,7 @@ export default function POS() {
                   {amountReceived >= finalTotal && (
                     <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
                       <span className="text-xs font-bold uppercase">Troco a devolver:</span>
-                      <span className="text-xl font-black">R$ {change.toFixed(2)}</span>
+                      <span className="text-xl font-black">{formatMoney(change)}</span>
                     </div>
                   )}
                 </div>
@@ -933,14 +937,14 @@ export default function POS() {
                             type="text"
                             value={newCustomerPhone}
                             onChange={(e) => setNewCustomerPhone(e.target.value)}
-                            placeholder="(11) 99999-9999"
+                            placeholder={isBrazil ? '(11) 99999-9999' : 'Telefone com código do país'}
                             className="w-full px-3 py-2 rounded-xl border border-border bg-surface text-foreground text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
                           />
                         </div>
 
                         <div>
                           <label className="block text-[11px] font-semibold text-foreground mb-1">
-                            Dívida Anterior (R$)
+                            Dívida Anterior ({currencySymbol})
                           </label>
                           <input
                             type="number"
@@ -1020,7 +1024,7 @@ export default function POS() {
                             </option>
                             {customers.map(c => (
                               <option key={c.id} value={c.id} className="notranslate normal-case" translate="no">
-                                {c.name} {c.totalDebt > 0 ? `(Já deve R$ ${c.totalDebt.toFixed(2)})` : '(Sem dívida)'}
+                                {c.name} {c.totalDebt > 0 ? `(Já deve ${formatMoney(c.totalDebt)})` : '(Sem dívida)'}
                               </option>
                             ))}
                           </select>
@@ -1055,7 +1059,7 @@ export default function POS() {
               <div className="bg-muted p-4 rounded-xl mt-6">
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Total {isSurchargeMode && paymentType === 'card' && activeRate > 0 && '(c/ taxa)'}</span>
-                  <span className="text-xl font-bold text-foreground">R$ {finalTotal.toFixed(2)}</span>
+                  <span className="text-xl font-bold text-foreground">{formatMoney(finalTotal)}</span>
                 </div>
               </div>
             </fieldset>
@@ -1165,25 +1169,25 @@ export default function POS() {
                       <div className="bg-muted/40 p-3 rounded-xl border border-border">
                         <span className="text-[11px] font-medium text-muted-foreground block">Total Vendido</span>
                         <span className="text-base font-extrabold text-foreground block mt-0.5">
-                          R$ {totalSalesToday.toFixed(2)}
+                          {formatMoney(totalSalesToday)}
                         </span>
                       </div>
                       <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-200/60">
                         <span className="text-[11px] font-medium text-emerald-700 block">💵 Dinheiro</span>
                         <span className="text-base font-extrabold text-emerald-800 block mt-0.5">
-                          R$ {cashSalesToday.toFixed(2)}
+                          {formatMoney(cashSalesToday)}
                         </span>
                       </div>
                       <div className="bg-blue-50/60 p-3 rounded-xl border border-blue-200/60">
-                        <span className="text-[11px] font-medium text-blue-700 block">💳 Cartão e Pix</span>
+                        <span className="text-[11px] font-medium text-blue-700 block">💳 {isBrazil ? 'Cartão e Pix' : 'Cartão'}</span>
                         <span className="text-base font-extrabold text-blue-800 block mt-0.5">
-                          R$ {cardSalesToday.toFixed(2)}
+                          {formatMoney(cardSalesToday)}
                         </span>
                       </div>
                       <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200/60">
                         <span className="text-[11px] font-medium text-amber-700 block">📝 Fiado</span>
                         <span className="text-base font-extrabold text-amber-800 block mt-0.5">
-                          R$ {fiadoSalesToday.toFixed(2)}
+                          {formatMoney(fiadoSalesToday)}
                         </span>
                       </div>
                     </div>
@@ -1201,7 +1205,7 @@ export default function POS() {
                           (+) Fundo de Troco Inicial (Abertura)
                         </label>
                         <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">R$</span>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{currencySymbol}</span>
                           <input
                             type="number"
                             step="0.01"
@@ -1222,7 +1226,7 @@ export default function POS() {
                           (-) Sangrias / Retiradas de Dinheiro
                         </label>
                         <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">R$</span>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{currencySymbol}</span>
                           <input
                             type="number"
                             step="0.01"
@@ -1243,7 +1247,7 @@ export default function POS() {
                       <div className="bg-surface p-3 rounded-lg border border-border">
                         <span className="text-xs text-muted-foreground block">(=) Dinheiro Esperado na Gaveta:</span>
                         <span className="text-xl font-black text-foreground block mt-0.5">
-                          R$ {expectedCash.toFixed(2)}
+                          {formatMoney(expectedCash)}
                         </span>
                         <span className="text-[10px] text-muted-foreground block mt-1">
                           Fundo ({openingBalance.toFixed(2)}) + Dinheiro ({cashSalesToday.toFixed(2)}) - Sangrias ({withdrawals.toFixed(2)})
@@ -1255,7 +1259,7 @@ export default function POS() {
                           Dinheiro Físico Contado na Gaveta:
                         </label>
                         <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-primary">R$</span>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-primary">{currencySymbol}</span>
                           <input
                             type="number"
                             step="0.01"
@@ -1291,12 +1295,12 @@ export default function POS() {
                             {diff === 0 
                               ? 'O caixa bateu perfeitamente! Sem diferença.' 
                               : diff > 0 
-                              ? `Sobra de caixa: R$ ${diff.toFixed(2)} a mais na gaveta.` 
-                              : `Falta de caixa: R$ ${Math.abs(diff).toFixed(2)} a menos na gaveta.`}
+                              ? `Sobra de caixa: ${formatMoney(diff)} a mais na gaveta.`
+                              : `Falta de caixa: ${formatMoney(Math.abs(diff))} a menos na gaveta.`}
                           </span>
                         </div>
                         <span className="font-bold text-sm">
-                          {diff > 0 ? `+ R$ ${diff.toFixed(2)}` : diff < 0 ? `- R$ ${Math.abs(diff).toFixed(2)}` : 'R$ 0,00'}
+                          {diff > 0 ? `+ ${formatMoney(diff)}` : diff < 0 ? `- ${formatMoney(Math.abs(diff))}` : (formatMoney(0))}
                         </span>
                       </div>
                     )}
@@ -1310,7 +1314,7 @@ export default function POS() {
                         type="text"
                         value={closureNotes}
                         onChange={e => setClosureNotes(e.target.value)}
-                        placeholder="Ex: Pagamento de entregador de gás R$ 20, troco faltante em moedas..."
+                        placeholder={"Ex: Pagamento de entregador de gás " + formatMoney(20) + ", troco faltante em moedas..."}
                         className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-surface text-foreground"
                       />
                     </div>
@@ -1344,28 +1348,28 @@ export default function POS() {
                                 ? 'bg-blue-100 text-blue-800' 
                                 : 'bg-rose-100 text-rose-800'
                             }`}>
-                              {d === 0 ? 'Exato' : d > 0 ? `Sobra: +R$ ${d.toFixed(2)}` : `Falta: -R$ ${Math.abs(d).toFixed(2)}`}
+                              {d === 0 ? 'Exato' : d > 0 ? `Sobra: +${formatMoney(d)}` : `Falta: -${formatMoney(Math.abs(d))}`}
                             </span>
                           </div>
 
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                             <div>
                               <span className="text-muted-foreground block text-[10px]">Total Vendido</span>
-                              <span className="font-bold text-foreground">R$ {c.totalSales.toFixed(2)}</span>
+                              <span className="font-bold text-foreground">{formatMoney(c.totalSales)}</span>
                             </div>
                             <div>
-                              <span className="text-muted-foreground block text-[10px]">Dinheiro / Cartão e Pix</span>
+                              <span className="text-muted-foreground block text-[10px]">Dinheiro / {isBrazil ? 'Cartão e Pix' : 'Cartão'}</span>
                               <span className="font-medium text-foreground">
                                 💵 {c.totalCash.toFixed(2)} | 💳 {c.totalCard.toFixed(2)}
                               </span>
                             </div>
                             <div>
                               <span className="text-muted-foreground block text-[10px]">Esperado em Caixa</span>
-                              <span className="font-medium text-foreground">R$ {c.expectedCash.toFixed(2)}</span>
+                              <span className="font-medium text-foreground">{formatMoney(c.expectedCash)}</span>
                             </div>
                             <div>
                               <span className="text-muted-foreground block text-[10px]">Dinheiro Informado</span>
-                              <span className="font-bold text-foreground">R$ {c.countedCash.toFixed(2)}</span>
+                              <span className="font-bold text-foreground">{formatMoney(c.countedCash)}</span>
                             </div>
                           </div>
 

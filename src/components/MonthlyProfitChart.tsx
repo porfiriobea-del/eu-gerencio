@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { saleFee } from '../lib/paymentFees';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -48,6 +49,8 @@ export interface MonthlyProfitData {
 }
 
 export function MonthlyProfitChart() {
+  const { formatMoney, currencySymbol } = useCurrency();
+
   const { v, languageMode, isBasicMode, simpleViewMode } = usePreferences();
   const [loading, setLoading] = useState(true);
   const [periodMonths, setPeriodMonths] = useState<6 | 12>(6);
@@ -161,10 +164,8 @@ export function MonthlyProfitChart() {
 
   const hasAnyData = monthlyData.some(m => m.sales > 0 || m.purchases > 0);
 
-  // Formatação de valores em Reais (R$)
-  const formatCurrency = (val: number) => {
-    return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  };
+  // Formatação na moeda da loja.
+  const formatCurrency = formatMoney;
 
   // Custom Tooltip com vocabulário simples e amigável
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -469,7 +470,7 @@ export function MonthlyProfitChart() {
                         className="text-muted-foreground"
                         axisLine={false}
                         tickLine={false}
-                        tickFormatter={(v) => `R$ ${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
+                        tickFormatter={(val) => formatMoney(Number(val))}
                       />
                       <Tooltip content={<CustomTooltip />} />
                       <ReferenceLine y={0} stroke="currentColor" opacity={0.4} strokeWidth={1.5} />
@@ -506,7 +507,7 @@ export function MonthlyProfitChart() {
                         className="text-muted-foreground"
                         axisLine={false}
                         tickLine={false}
-                        tickFormatter={(v) => `R$ ${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
+                        tickFormatter={(val) => formatMoney(Number(val))}
                       />
                       <Tooltip content={<CustomTooltip />} />
                       <ReferenceLine y={0} stroke="currentColor" opacity={0.3} />

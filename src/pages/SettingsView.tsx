@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { saleFee, pixTotals } from '../lib/paymentFees';
 import { PaymentSummary } from '../components/PaymentSummary';
 import { showToast, showActionError, withActionDeadline } from '../lib/actionFeedback';
@@ -31,6 +32,8 @@ import {
 } from '../lib/supabase';
 
 export default function SettingsView() {
+  const { formatMoney, currencySymbol, currency, isBrazil } = useCurrency();
+
   const { language, setLanguage, languageMode, setLanguageMode, fontSize, setFontSize, themePreset, setThemePreset, darkMode, setDarkMode, t, v, isBasicMode, simpleViewMode, setSimpleViewMode } = usePreferences();
   const { employees, currentEmployee, openSwitchModal } = useEmployee();
   const [isVocabularyExpanded, setIsVocabularyExpanded] = useState(false);
@@ -216,6 +219,7 @@ function doPost(e) {
     setAutoSaveStatus('saving');
     try {
       const payload: Partial<Settings> = {
+        ...(overrides?.currency ? { currency: overrides.currency } : {}),
         businessSector: overrides?.businessSector ?? businessSector,
         customCategories: overrides?.customCategories ?? categoriesList,
         language: overrides?.language ?? language, fontSize: overrides?.fontSize ?? fontSize, simpleViewMode: overrides?.simpleViewMode ?? simpleViewMode,
@@ -601,6 +605,7 @@ function doPost(e) {
       const fetchedPurchases = await getPurchasesByDateRange(startTimestamp, endTimestamp);
 
       const url = await exportToSheets({
+        currency, language,
         sales: fetchedSales,
         expenses: [],
         customers: customers,
@@ -629,6 +634,7 @@ function doPost(e) {
       const fetchedPurchases = await getPurchasesByDateRange(startTimestamp, endTimestamp);
 
       exportFullReportToCSV({
+        currency, language,
         purchases: fetchedPurchases,
         sales: fetchedSales,
         customers: customers,
@@ -653,7 +659,7 @@ function doPost(e) {
 
   const handleExportDailySalesAndSafety = () => {
     try {
-      exportDailySalesAndSafetyStockToCSV(products, storeName || settings?.storeName);
+      exportDailySalesAndSafetyStockToCSV(products, storeName || settings?.storeName, undefined, {currency,language});
       setExportMessage(`Relatório exclusivo de Venda Diária e Estoque de Segurança baixado com sucesso para ${products.length} itens cadastrados!`);
     } catch (err: any) {
       setExportMessage("Erro ao gerar relatório de estoque de segurança: " + (err.message || err));
@@ -1000,6 +1006,7 @@ function doPost(e) {
             />
           </div>
 
+
           {/* 2. Idiomas */}
           <div className="pt-4 border-t border-border">
             <div className="flex items-center gap-2 mb-2">
@@ -1072,6 +1079,17 @@ function doPost(e) {
       {/* Dados do Comércio */}
       <div className="bg-surface p-6 rounded-2xl shadow-sm border border-border mb-6">
         <h2 className="text-lg font-bold mb-4 border-b border-border pb-2 text-foreground">Dados do Comércio</h2>
+          <section className="mb-4">
+            <label htmlFor="store-currency" className="block text-sm font-semibold">{v('currency.title', 'Moeda da loja')}</label>
+            <select id="store-currency" value={settings?.currency || currency} className="mt-2 min-h-11 w-full rounded-xl border border-border bg-surface p-3" onChange={async event => {
+              const next = event.target.value as 'BRL' | 'USD' | 'EUR';
+              if (next === (settings?.currency || currency) || !window.confirm(v('currency.warning', 'Os valores não serão convertidos, só o símbolo muda.'))) return;
+              try { await triggerImmediateSave({currency:next}, true, true); } catch { /* Saving already displays the error. */ }
+            }}>
+              <option value="BRL">R$ — BRL</option><option value="USD">$ — USD</option><option value="EUR">€ — EUR</option>
+            </select>
+            <p className="mt-2 text-xs text-muted-foreground">{v('currency.help', 'A escolha vale para toda a loja e não muda quando você troca o idioma.')}</p>
+          </section>
         
         {storeFeedback && (
           <div className={`mb-4 p-3 rounded-xl text-sm flex items-center gap-2 ${
@@ -1172,7 +1190,7 @@ function doPost(e) {
                 className="w-full border border-border bg-surface text-foreground p-2.5 rounded-lg focus:ring-1 focus:ring-primary outline-none" 
               />
             </div>
-            <div>
+            <div hidden={!isBrazil}>
               <label className="block text-sm font-medium text-foreground mb-1">CNPJ</label>
               <input 
                 maxLength={20} 
@@ -1191,7 +1209,7 @@ function doPost(e) {
                 onChange={e => setPhone(e.target.value)} 
                 onBlur={() => triggerImmediateSave({ phone: phone.trim() })}
                 className="w-full border border-border bg-surface text-foreground p-2.5 rounded-lg focus:ring-1 focus:ring-primary outline-none" 
-                placeholder="(00) 00000-0000" 
+                placeholder={isBrazil ? '(00) 00000-0000' : 'Telefone com código do país'}
               />
             </div>
             <div>
@@ -1496,9 +1514,9 @@ function doPost(e) {
         <form onSubmit={handleSaveDailyGoal} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-foreground mb-1">Meta Diária de Vendas (R$)</label>
+              <label className="block text-sm font-semibold text-foreground mb-1">Meta Diária de Vendas ({currencySymbol})</label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-muted-foreground font-semibold text-sm">R$</span>
+                <span className="absolute left-3 top-2.5 text-muted-foreground font-semibold text-sm">{currencySymbol}</span>
                 <input 
                   type="number" 
                   step="0.01" 
@@ -1745,7 +1763,7 @@ function doPost(e) {
                   </div>
                 </div>
                 <div className="text-2xl font-black text-foreground tracking-tight">
-                  {reportMetrics.loading ? '...' : `R$ ${reportMetrics.inflow.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  {reportMetrics.loading ? '...' : `${formatMoney(reportMetrics.inflow)}`}
                 </div>
                 <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
                   Total das vendas, incluindo fiado
@@ -1755,11 +1773,11 @@ function doPost(e) {
               <div className={`${simpleViewMode ? 'hidden' : ''} mt-4 pt-3 border-t border-border space-y-1 text-[11px] text-muted-foreground`}>
                 <div className="flex justify-between">
                   <span>💵 Em dinheiro vivo:</span>
-                  <strong className="text-muted-foreground">R$ {reportMetrics.cashInflow.toFixed(2)}</strong>
+                  <strong className="text-muted-foreground">{formatMoney(reportMetrics.cashInflow)}</strong>
                 </div>
                 <div className="flex justify-between">
                   <span>💳 No cartão / máq.:</span>
-                  <strong className="text-muted-foreground">R$ {reportMetrics.cardInflow.toFixed(2)}</strong>
+                  <strong className="text-muted-foreground">{formatMoney(reportMetrics.cardInflow)}</strong>
                 </div>
                 <div className="flex justify-between text-muted-foreground">
                   <span>🛒 Total de vendas:</span>
@@ -1780,7 +1798,7 @@ function doPost(e) {
                   </div>
                 </div>
                 <div className="text-2xl font-black text-foreground tracking-tight">
-                  {reportMetrics.loading ? '...' : `R$ ${reportMetrics.outflow.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  {reportMetrics.loading ? '...' : `${formatMoney(reportMetrics.outflow)}`}
                 </div>
                 <p className="text-xs text-rose-300/80 mt-1">
                   {languageMode === 'basic' ? 'O que você pagou em mercadorias' : 'Gastos em compras e reposições'}
@@ -1794,7 +1812,7 @@ function doPost(e) {
                 </div>
                 <div className="flex justify-between">
                   <span>🚚 Pagos a fornecedores:</span>
-                  <strong className="text-rose-300">R$ {reportMetrics.outflow.toFixed(2)}</strong>
+                  <strong className="text-rose-300">{formatMoney(reportMetrics.outflow)}</strong>
                 </div>
                 <div className="flex justify-between text-muted-foreground">
                   <span>🏷️ Custo do estoque:</span>
@@ -1815,7 +1833,7 @@ function doPost(e) {
                   </div>
                 </div>
                 <div className={`text-2xl font-black tracking-tight ${reportMetrics.balance >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-400'}`}>
-                  {reportMetrics.loading ? '...' : `R$ ${reportMetrics.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  {reportMetrics.loading ? '...' : `${formatMoney(reportMetrics.balance)}`}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   Diferença entre o total vendido e as compras registradas.
@@ -1854,7 +1872,7 @@ function doPost(e) {
                   </div>
                 </div>
                 <div className="text-2xl font-black text-foreground tracking-tight">
-                  {reportMetrics.loading ? '...' : `R$ ${reportMetrics.fiadoInflow.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  {reportMetrics.loading ? '...' : `${formatMoney(reportMetrics.fiadoInflow)}`}
                 </div>
                 <p className="text-xs text-purple-700 dark:text-purple-300/80 mt-1">
                   {languageMode === 'basic' ? 'Compras anotadas na caderneta' : 'Vendas faturadas a prazo'}
@@ -2015,7 +2033,7 @@ function doPost(e) {
                    >
                      <option value="todas">Todas as Formas</option>
                      <option value="cash">Apenas Dinheiro Vivo</option>
-                     <option value="card">Cartão e Pix</option>
+                     <option value="card">{isBrazil ? 'Cartão e Pix' : 'Cartão'}</option>
                      <option value="fiado">Apenas Fiado / Caderneta</option>
                    </select>
                 </div>
@@ -2339,7 +2357,7 @@ function doPost(e) {
                       </span>
                       {log.valor > 0 && (
                         <span className="font-mono text-[11px] text-emerald-600 font-bold">
-                          R$ {log.valor.toFixed(2)}
+                          {formatMoney(log.valor)}
                         </span>
                       )}
                     </div>

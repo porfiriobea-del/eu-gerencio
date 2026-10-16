@@ -328,3 +328,17 @@ test('sales persist machine Pix fees, keep direct Pix free and validate card sur
  await store.updateDoc(settingsRef,{pixRate:10});
  assert.equal(machine.feeAmount,0.49);
 });
+
+test('shop currency persists independently of language without converting product values',async t=>{
+ const ref=store.doc(store.db,'settings','owner'),before=await store.getDoc(ref);
+ t.after(async()=>{if(before.exists())await store.setDoc(ref,before.data());else await store.deleteDoc(ref);});
+ const productRef=store.doc(store.db,'products','currency-product');
+ await store.setDoc(productRef,{ownerId:'owner',name:'Original',type:'comum',stock:5,basePrice:100,unitCost:40});
+ await api.updateSettings({currency:'USD'});
+ await api.updateSettings({language:'es'});
+ assert.equal((await store.getDoc(ref)).data().currency,'USD');
+ assert.equal((await store.getDoc(ref)).data().language,'es');
+ assert.equal((await store.getDoc(productRef)).data().basePrice,100);assert.equal((await store.getDoc(productRef)).data().unitCost,40);
+ await assert.rejects(api.updateSettings({currency:'GBP'}),/BRL, USD ou EUR/);
+ assert.equal((await store.getDoc(ref)).data().currency,'USD');
+});

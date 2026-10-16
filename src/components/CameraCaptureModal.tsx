@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import { isValidStockQuantity } from '../lib/productUnits';
 import { useState, useRef, useEffect } from 'react';
@@ -40,6 +41,8 @@ export function CameraCaptureModal({
   onRecognized,
   onSelectForEdit
 }: CameraCaptureModalProps) {
+  const { formatMoney, currencySymbol } = useCurrency();
+
   const [mode, setMode] = useState<'camera' | 'preview'>('camera');
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -599,10 +602,10 @@ export function CameraCaptureModal({
                   {/* Preço de Venda */}
                   <div>
                     <label className="block text-xs font-bold text-foreground mb-1">
-                      Preço de Venda {editCategory.toLowerCase().includes('cigar') ? 'do Avulso' : ''} (R$) *
+                      Preço de Venda {editCategory.toLowerCase().includes('cigar') ? 'do Avulso' : ''} ({currencySymbol}) *
                     </label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">R$</span>
+                      <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">{currencySymbol}</span>
                       <input
                         type="number"
                         step="0.01"
@@ -618,10 +621,10 @@ export function CameraCaptureModal({
                   {/* Custo Unitário */}
                   <div>
                     <label className="block text-xs font-bold text-foreground mb-1">
-                      Custo ({editCategory.toLowerCase().includes('cigar') ? 'por carteira' : 'unitário'}) (R$)
+                      Custo ({editCategory.toLowerCase().includes('cigar') ? 'por carteira' : 'unitário'}) ({currencySymbol})
                     </label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">R$</span>
+                      <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">{currencySymbol}</span>
                       <input
                         type="number"
                         step="0.01"

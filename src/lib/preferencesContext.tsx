@@ -1,3 +1,5 @@
+import { CurrencyContext } from './useCurrency';
+import { normalizeCurrency, getCurrencySymbol, type StoreCurrency } from './currency';
 import { syncDocumentLanguage } from './browserTranslation';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
@@ -99,6 +101,10 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'payment.pixHelp': 'Incide somente sobre o Pix processado pela maquininha, sempre absorvida pela loja; Pix direto na conta é isento.',
     'payment.surchargeHelp': 'O acréscimo vale só para crédito, débito e voucher. A taxa do Pix na maquininha fica com a loja; Pix direto é sem taxa.',
     'payment.pixFees': 'Taxas do Pix na maquininha',
+    'currency.title': 'Moeda do estabelecimento',
+    'currency.warning': 'Os valores não serão convertidos, só o símbolo muda.',
+    'currency.cardHelp': 'O acréscimo vale apenas para crédito, débito e voucher.',
+    'currency.help': 'A escolha vale para toda a loja e não muda quando você troca o idioma.',
     'payment.fees': 'Taxas pagas pela loja',
     'catalog.fileHelp': 'PDF: até 3 MB. Fotos: JPEG, PNG ou WebP. Até 200 produtos por vez. Estoque inicial opcional. Preços não encontrados ficam em branco.',
     'catalog.unchecked': 'Nenhum registro selecionado. Selecione os cadastros e confirme eventuais coincidências.',
@@ -255,6 +261,10 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'payment.pixHelp': 'Vale apenas para Pix pago na maquininha; a loja paga essa taxa e o Pix direto na conta não tem taxa.',
     'payment.surchargeHelp': 'O acréscimo vale só para crédito, débito e voucher. A taxa do Pix na maquininha fica com a loja; Pix direto é sem taxa.',
     'payment.pixFees': 'Taxas do Pix na maquininha',
+    'currency.title': 'Moeda da loja',
+    'currency.warning': 'Os valores não serão convertidos, só o símbolo muda.',
+    'currency.cardHelp': 'O acréscimo vale apenas para crédito, débito e voucher.',
+    'currency.help': 'A escolha vale para toda a loja e não muda quando você troca o idioma.',
     'payment.fees': 'Taxas pagas pela loja',
     'catalog.fileHelp': 'PDF: até 3 MB. Fotos: JPEG, PNG ou WebP. Até 200 produtos por vez. Estoque inicial opcional. Preços não encontrados ficam em branco.',
     'catalog.unchecked': 'Nenhum produto selecionado. Marque os desejados e revise os avisos de duplicidade.',
@@ -411,6 +421,10 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'payment.pixHelp': 'Só vale para Pix na maquininha. A loja paga a taxa; no Pix direto na conta, não há taxa.',
     'payment.surchargeHelp': 'O acréscimo vale só para crédito, débito e voucher. A taxa do Pix na maquininha fica com a loja; Pix direto é sem taxa.',
     'payment.pixFees': 'Taxas do Pix na maquininha',
+    'currency.title': 'Moeda da loja',
+    'currency.warning': 'Os valores não serão convertidos, só o símbolo muda.',
+    'currency.cardHelp': 'O acréscimo vale apenas para crédito, débito e voucher.',
+    'currency.help': 'A escolha vale para toda a loja e não muda quando você troca o idioma.',
     'payment.fees': 'Taxas pagas pela loja',
     'catalog.fileHelp': 'PDF: até 3 MB. Fotos: JPEG, PNG ou WebP. Até 200 produtos por vez. Estoque inicial opcional. Preços não encontrados ficam em branco.',
     'catalog.unchecked': 'Nenhum produto marcado. Marque os que quer salvar. Os repetidos precisam da sua confirmação.',
@@ -552,6 +566,7 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
 };
 
 export interface PreferencesContextType {
+  currency: StoreCurrency;
   language: Language;
   setLanguage: (lang: Language) => void;
   languageMode: LanguageMode;
@@ -683,6 +698,12 @@ function cachePreference(key: string, value: string): void {
 const PreferencesContext = createContext<PreferencesContextType | undefined>(undefined);
 
 export function PreferencesProvider({ children }: { children: React.ReactNode }) {
+  const [currency, setCurrency] = useState<StoreCurrency>('BRL');
+  useEffect(() => {
+    const reset = () => setCurrency('BRL');
+    window.addEventListener('auth-user-changed', reset);
+    return () => window.removeEventListener('auth-user-changed', reset);
+  }, []);
   const [language, setLanguageState] = useState<Language>(() => {
     const value = cachedPreference('app_lang');
     return value === 'en' || value === 'es' ? value : 'pt';
@@ -718,6 +739,7 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
     const receive = (event: Event) => {
       const data = (event as CustomEvent).detail;
       if (!data || typeof data !== 'object') return;
+      if ('currency' in data) setCurrency(normalizeCurrency(data.currency));
       if (data.theme) setThemePresetState(normalizeThemePreset(data.theme));
       if (typeof data.darkMode === 'boolean') setDarkModeState(data.darkMode);
       if (['technical','neutral','basic'].includes(data.languageMode)) {
@@ -821,7 +843,7 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
 
   // Vocabulary translation according to the active language mode
   const v = (key: string, fallback?: string): string => {
-    return VOCABULARY[languageMode]?.[key] || fallback || key;
+    return (VOCABULARY[languageMode]?.[key] || fallback || key).replace(/R\$/g, getCurrencySymbol({currency,language}));
   };
 
   // Consistent entity naming helper (never mix "produto", "item", "mercadoria" in the same mode)
@@ -836,8 +858,10 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
   };
 
   return (
+    <CurrencyContext.Provider value={{currency,language}}>
     <PreferencesContext.Provider
       value={{
+        currency,
         language,
         setLanguage,
         languageMode,
@@ -859,6 +883,7 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
     >
       {children}
     </PreferencesContext.Provider>
+    </CurrencyContext.Provider>
   );
 }
 

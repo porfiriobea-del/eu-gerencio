@@ -1,3 +1,4 @@
+import { formatMoney, type MoneyOptions } from './currency';
 import { differenceInCalendarDays, parseISO, isValid, addDays, format } from 'date-fns';
 
 export interface ExpirationStatus {
@@ -172,7 +173,8 @@ export function getQuickExpirationDates() {
 export function suggestPromoDiscount(
   basePrice: number,
   unitCost: number = 0,
-  daysLeft: number | null = null
+  daysLeft: number | null = null,
+  moneyOptions: MoneyOptions = {}
 ): {
   discountPercent: number;
   promoPrice: number;
@@ -228,7 +230,7 @@ export function suggestPromoDiscount(
     if (safePrice < price) {
       calculatedPromoPrice = safePrice;
       suggestedPercent = Number((((price - safePrice) / price) * 100).toFixed(0));
-      reason = `Desconto limitado a ${suggestedPercent}% para proteger o custo de compra (R$ ${cost.toFixed(2)})`;
+      reason = `Desconto limitado a ${suggestedPercent}% para proteger o custo de compra (${formatMoney(cost,moneyOptions)})`;
     }
   }
 

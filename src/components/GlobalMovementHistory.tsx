@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { usePreferences } from '../lib/preferencesContext';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
@@ -11,6 +12,8 @@ import { Movement } from '../types';
 import { Link } from 'react-router-dom';
 
 export function GlobalMovementHistory() {
+  const { formatMoney, currencySymbol } = useCurrency();
+
   const { v, simpleViewMode } = usePreferences();
   const [movements, setMovements] = useState<Movement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -379,7 +382,7 @@ export function GlobalMovementHistory() {
                       <div className="flex items-center sm:flex-col sm:items-end justify-between shrink-0 pl-11 sm:pl-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-border/40">
                         {m.amount !== undefined && m.amount > 0 && (
                           <span className="text-xs sm:text-sm font-bold text-foreground font-mono">
-                            R$ {m.amount.toFixed(2)}
+                            {formatMoney(m.amount)}
                           </span>
                         )}
                         {m.quantity !== undefined && m.amount === undefined && (

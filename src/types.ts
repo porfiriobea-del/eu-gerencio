@@ -214,6 +214,7 @@ export interface Purchase {
 }
 
 export interface Settings {
+  currency?: 'BRL' | 'USD' | 'EUR';
   googleSheetsWebhookUrl?: string;
   googleSheetsWebhookEnabled?: boolean;
   customCategories?: string[];

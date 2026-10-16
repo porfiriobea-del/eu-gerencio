@@ -17,21 +17,21 @@ let desktop=false;const mediaListeners=new Set();
 window.matchMedia=()=>({get matches(){return desktop;},addEventListener(_event,fn){mediaListeners.add(fn);},removeEventListener(_event,fn){mediaListeners.delete(fn);}});
 const cache=new URL('../node_modules/.cache/',import.meta.url);await mkdir(cache,{recursive:true});const dir=await mkdtemp(new URL('pos-cart-',cache));
 const names=['getProductSalesTotals','subscribeProducts','subscribeCustomers','addCustomer','recordSale','subscribeTodaySales','saveCashClosure','subscribeCashClosures','subscribeSettings'];
-await build({entryPoints:[new URL('../src/pages/POS.tsx',import.meta.url).pathname],bundle:true,packages:'external',format:'esm',platform:'node',jsx:'automatic',outfile:`${dir}/POS.mjs`,plugins:[{name:'mock-business',setup(b){
+await build({stdin:{contents:"export {default} from './src/pages/POS'; export {CurrencyContext} from './src/lib/useCurrency';",resolveDir:new URL('..',import.meta.url).pathname,loader:'tsx'},bundle:true,packages:'external',format:'esm',platform:'node',jsx:'automatic',outfile:`${dir}/POS.mjs`,plugins:[{name:'mock-business',setup(b){
  b.onResolve({filter:/\/(api|preferencesContext|employeeContext|categories|PocketTip)$/},args=>({path:args.path.split('/').at(-1),namespace:'pos-test'}));
  b.onLoad({filter:/.*/,namespace:'pos-test'},args=>({loader:'js',contents:args.path==='api'?names.map(name=>`export const ${name}=(...args)=>globalThis.__posApi.${name}(...args);`).join('\n'):args.path==='preferencesContext'?"export const usePreferences=()=>({v:(k,f)=>f||k,entityName:()=> 'Produto',languageMode:'neutral',isBasicMode:false,simpleViewMode:false});":args.path==='employeeContext'?"export const useEmployee=()=>({currentEmployee:null,openSwitchModal(){}});":args.path==='categories'?"export const getAllCategories=()=>['Bebidas','Cigarros'];":"export const PocketTip=()=>null;"}));
 }}]});
-const {default:POS}=await import(pathToFileURL(`${dir}/POS.mjs`).href);
+const {default:POS,CurrencyContext}=await import(pathToFileURL(`${dir}/POS.mjs`).href);
 const standard={id:'p1',name:'Suco',category:'Bebidas',type:'comum',stock:10,basePrice:5,unitCost:1,unitsPerPackage:1,safetyStock:0,dailyAverageSales:0,replacementDays:3};
 const cigarettes={...standard,id:'p2',name:'Cigarro',category:'Cigarros',type:'cigarro',stockUnit:'carteira',stock:20,unitsPerPackage:10,unitCost:10,basePrice:20,pricePack:180,priceCart:20,priceHalfCart:11,priceUnit:2};
 function setup(onSale=async()=>{},isDesktop=false,feeSettings={}){
  desktop=isDesktop;
  globalThis.__posApi={getProductSalesTotals:async()=>globalThis.__posRanking||{},subscribeProducts(cb){cb([standard,cigarettes]);return()=>{};},subscribeCustomers(cb){cb([]);return()=>{};},subscribeTodaySales(cb){cb([]);return()=>{};},subscribeCashClosures(cb){cb([]);return()=>{};},subscribeSettings(cb){cb({enableCardFees:false,...feeSettings});return()=>{};},recordSale:onSale};
- return render(React.createElement(React.Fragment,null,React.createElement(POS),React.createElement(AppToast)));
+ return render(React.createElement(CurrencyContext.Provider,{value:{currency:feeSettings.currency||'BRL',language:feeSettings.language||'pt'}},React.createElement(React.Fragment,null,React.createElement(POS),React.createElement(AppToast))));
 }
 afterEach(()=>{cleanup();localStorage.clear();delete globalThis.__posApi;delete globalThis.__posRanking;});
 after(async()=>{await rm(dir,{recursive:true,force:true});dom.window.close();for(const [name,value]of previous){if(value)Object.defineProperty(globalThis,name,value);else delete globalThis[name];}delete globalThis.IS_REACT_ACT_ENVIRONMENT;});
-const addStandard=ui=>fireEvent.click(ui.getByRole('button',{name:/Vender.*5\.00/}));
+const addStandard=ui=>fireEvent.click(ui.getByRole('button',{name:/Vender.*5[.,]00/}));
 const openCart=ui=>fireEvent.click(ui.getByRole('button',{name:/Abrir carrinho/}));
 
 test('mobile cart stays in a small floating icon and badge updates after rapid additions',async()=>{
@@ -118,3 +118,18 @@ test('product names retain the stored text and explicitly opt out of browser tra
   assert.equal(name.textContent,standard.name);assert.equal(name.getAttribute('translate'),'no');assert.ok(name.classList.contains('notranslate'));
  }finally{standard.name=original;}
 });
+
+
+for(const [currency,language] of [['USD','en'],['EUR','es']]){
+ test(`foreign currency checkout formats ${currency} and hides Pix without changing the price`,async()=>{
+  let sale;
+  const ui=setup(async value=>{sale=value;},false,{currency,language});
+  addStandard(ui);openCart(ui);fireEvent.click(ui.getByRole('button',{name:'Finalizar Compra / Receber'}));
+  assert.equal(ui.queryByRole('button',{name:'Pix (direto na conta)'}),null);
+  assert.equal(ui.queryByRole('button',{name:'Pix na maquininha'}),null);
+  assert.equal(ui.queryAllByText(/Pix/).filter(node=>!node.closest('[hidden]')).length,0);
+  fireEvent.click(ui.getByRole('button',{name:/Cartão$/}));
+  await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Confirmar'}));});
+  assert.equal(sale.total,5);assert.equal(sale.paymentMethod,'debit');
+ });
+}

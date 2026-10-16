@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { formatProductStock } from '../lib/productUnits';
 import { usePreferences } from '../lib/preferencesContext';
 import { showToast, showActionError } from '../lib/actionFeedback';
@@ -19,6 +20,8 @@ import {
 import { Movement, MovementType, Employee, Product } from '../types';
 
 export default function Movements() {
+  const { formatMoney, currencySymbol, isBrazil } = useCurrency();
+
   const { v, simpleViewMode } = usePreferences();
   const { 
     currentEmployee, 
@@ -168,7 +171,7 @@ export default function Movements() {
   const handleExportCSV = () => {
     if (filteredMovements.length === 0) return;
 
-    const headers = ['Data e Hora', 'Funcionário', 'Cargo', 'Tipo', 'Descrição', 'Valor (R$)', 'Quantidade'];
+    const headers = ['Data e Hora', 'Funcionário', 'Cargo', 'Tipo', 'Descrição', ("Valor (" + currencySymbol + ")"), 'Quantidade'];
     const rows = filteredMovements.map(m => [
       new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'medium' }).format(m.timestamp),
       `"${m.employeeName.replace(/"/g, '""')}"`,
@@ -551,7 +554,7 @@ export default function Movements() {
                 <ShoppingCart className="w-4 h-4 text-blue-500" />
               </div>
               <p className="text-xl sm:text-2xl font-bold font-heading text-blue-600 dark:text-blue-400">
-                R$ {metrics.salesTotal.toFixed(2)}
+                {formatMoney(metrics.salesTotal)}
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {metrics.salesCount} vendas realizadas
@@ -748,7 +751,7 @@ export default function Movements() {
                         )}
                         {m.amount !== undefined && (
                           <span className="text-xs sm:text-sm font-bold text-primary bg-palette-1 px-3 py-1 rounded-xl border border-primary/20">
-                            R$ {m.amount.toFixed(2)}
+                            {formatMoney(m.amount)}
                           </span>
                         )}
                       </div>
@@ -1179,7 +1182,7 @@ export default function Movements() {
                   type="text"
                   value={empPhone}
                   onChange={(e) => setEmpPhone(e.target.value)}
-                  placeholder="(11) 99999-9999"
+                  placeholder={isBrazil ? '(11) 99999-9999' : 'Telefone com código do país'}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-muted/30 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
                 />
               </div>

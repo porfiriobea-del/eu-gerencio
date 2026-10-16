@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { formatProductStock } from '../lib/productUnits';
 import { usePreferences } from '../lib/preferencesContext';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -7,10 +8,11 @@ import type { Product } from '../types';
 
 export interface CartItem { product: Product; format: string; quantity: number; price: number; stockDeduction: number }
 interface Props { items: CartItem[]; total: number; busy?: boolean; onQuantity: (index: number, delta: number) => void; onRemove: (index: number) => void; onCheckout: () => void; onFiado: () => void }
-const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const storageKey = 'eu_gerencio_pos_cart_pinned';
 
 export function CartDrawer({ items, total, busy = false, onQuantity, onRemove, onCheckout, onFiado }: Props) {
+  const { formatMoney, currencySymbol } = useCurrency(); const money = formatMoney;
+
   const { v } = usePreferences();
   const [pinned, setPinned] = useState(() => { try { return localStorage.getItem(storageKey) !== 'false'; } catch { return true; } });
   const [desktop, setDesktop] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1024px)').matches);

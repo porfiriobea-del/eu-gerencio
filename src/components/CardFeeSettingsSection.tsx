@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { usePreferences } from '../lib/preferencesContext';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import { useState, useEffect } from 'react';
@@ -11,6 +12,8 @@ interface CardFeeSettingsSectionProps {
 }
 
 export function CardFeeSettingsSection({ settings, onSave, isSaving = false }: CardFeeSettingsSectionProps) {
+  const { formatMoney, isBrazil } = useCurrency();
+
   const { v } = usePreferences();
   const [enableCardFees, setEnableCardFees] = useState(settings?.enableCardFees ?? true);
   const [creditCardRate, setCreditCardRate] = useState<number>(settings?.creditCardRate ?? 3.5);
@@ -186,7 +189,7 @@ export function CardFeeSettingsSection({ settings, onSave, isSaving = false }: C
             </div>
 
             {/* PIX */}
-            <div className="p-3.5 rounded-xl border border-border bg-surface">
+            <div hidden={!isBrazil} className="p-3.5 rounded-xl border border-border bg-surface">
               <label htmlFor="pix-machine-rate" className="block text-xs font-bold text-foreground mb-1">
                 {v('payment.pixRate', 'Taxa do Pix na maquininha')}
               </label>
@@ -227,7 +230,7 @@ export function CardFeeSettingsSection({ settings, onSave, isSaving = false }: C
                 />
                 <span className="absolute right-2.5 top-2 text-muted-foreground font-bold text-sm">%</span>
               </div>
-              <span className="text-[11px] text-muted-foreground mt-1 block">Alimentação, Refeição, etc.</span>
+              <span className="text-[11px] text-muted-foreground mt-1 block">{isBrazil ? 'Alimentação, Refeição, etc.' : 'Voucher'}</span>
             </div>
           </div>
         </div>
@@ -298,7 +301,7 @@ export function CardFeeSettingsSection({ settings, onSave, isSaving = false }: C
                   Repassar Taxinha para o Cliente (Acréscimo no Cartão)
                 </span>
                 <span className="text-[11px] text-muted-foreground leading-relaxed block mt-0.5">
-                  {v('payment.surchargeHelp', 'O acréscimo vale só para crédito, débito e voucher. A taxa do Pix na maquininha fica com a loja; Pix direto é sem taxa.')}
+                  {isBrazil ? v('payment.surchargeHelp', 'O acréscimo vale só para crédito, débito e voucher. A taxa do Pix na maquininha fica com a loja; Pix direto é sem taxa.') : v('currency.cardHelp', 'O acréscimo vale apenas para crédito, débito e voucher.')}
                 </span>
               </div>
             </label>
@@ -308,28 +311,28 @@ export function CardFeeSettingsSection({ settings, onSave, isSaving = false }: C
         {/* Demonstração Prática Transparente (Simulação em Tempo Real) */}
         <div className="p-4 rounded-xl bg-muted/30 border border-border">
           <span className="text-xs font-bold text-foreground block mb-2">
-            Simulação transparente: como fica uma venda de R$ 100,00 com suas taxas atuais:
+            Simulação transparente: como fica uma venda de {formatMoney(100)} com suas taxas atuais:
           </span>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div className="p-3 rounded-lg bg-surface border border-border/80 flex items-center justify-between">
               <div>
                 <span className="font-semibold text-foreground block">No Crédito ({creditCardRate}%):</span>
-                <span className="text-muted-foreground text-[11px]">Taxinha da maquininha: R$ {sampleCreditDiscount.toFixed(2).replace('.', ',')}</span>
+                <span className="text-muted-foreground text-[11px]">Taxinha da maquininha: {formatMoney(sampleCreditDiscount)}</span>
               </div>
               <div className="text-right">
                 <span className="text-[10px] text-muted-foreground block">Você recebe líquido:</span>
-                <strong className="text-emerald-600 font-bold text-sm">R$ {sampleCreditNet.toFixed(2).replace('.', ',')}</strong>
+                <strong className="text-emerald-600 font-bold text-sm">{formatMoney(sampleCreditNet)}</strong>
               </div>
             </div>
 
             <div className="p-3 rounded-lg bg-surface border border-border/80 flex items-center justify-between">
               <div>
                 <span className="font-semibold text-foreground block">No Débito ({debitCardRate}%):</span>
-                <span className="text-muted-foreground text-[11px]">Taxinha da maquininha: R$ {sampleDebitDiscount.toFixed(2).replace('.', ',')}</span>
+                <span className="text-muted-foreground text-[11px]">Taxinha da maquininha: {formatMoney(sampleDebitDiscount)}</span>
               </div>
               <div className="text-right">
                 <span className="text-[10px] text-muted-foreground block">Você recebe líquido:</span>
-                <strong className="text-emerald-600 font-bold text-sm">R$ {sampleDebitNet.toFixed(2).replace('.', ',')}</strong>
+                <strong className="text-emerald-600 font-bold text-sm">{formatMoney(sampleDebitNet)}</strong>
               </div>
             </div>
           </div>

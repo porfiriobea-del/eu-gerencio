@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { showToast, showActionError, withActionDeadline } from '../lib/actionFeedback';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -23,6 +24,8 @@ interface ExportPeriodModalProps {
 }
 
 export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEndDate }: ExportPeriodModalProps) {
+  const { formatMoney, currencySymbol } = useCurrency();
+
   const { languageMode, v } = usePreferences();
   const [startDate, setStartDate] = useState(() => defaultStartDate || format(subDays(new Date(), 7), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(() => defaultEndDate || format(new Date(), 'yyyy-MM-dd'));
@@ -378,7 +381,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                     <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-600" />
                   </div>
                   <div className="text-base sm:text-lg font-black text-emerald-800 dark:text-emerald-200 mt-1">
-                    R$ {totalInflow.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {formatMoney(totalInflow)}
                   </div>
                   <div className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5">
                     {sales.length} vendas
@@ -392,7 +395,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                     <ArrowUpRight className="w-3.5 h-3.5 text-rose-600" />
                   </div>
                   <div className="text-base sm:text-lg font-black text-rose-800 dark:text-rose-200 mt-1">
-                    R$ {totalOutflow.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {formatMoney(totalOutflow)}
                   </div>
                   <div className="text-[10px] text-rose-600 dark:text-rose-400 mt-0.5">
                     {purchases.length} compras
@@ -414,7 +417,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                   <div className={`text-base sm:text-lg font-black mt-1 ${
                     balance >= 0 ? 'text-emerald-800 dark:text-emerald-200' : 'text-amber-800 dark:text-amber-200'
                   }`}>
-                    R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {formatMoney(balance)}
                   </div>
                   <div className="text-[10px] text-muted-foreground mt-0.5">
                     {balance >= 0 ? 'Sobra livre' : 'Reposição'}
@@ -428,7 +431,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                     <Users className="w-3.5 h-3.5 text-purple-600" />
                   </div>
                   <div className="text-base sm:text-lg font-black text-purple-800 dark:text-purple-200 mt-1">
-                    R$ {fiadoInflow.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {formatMoney(fiadoInflow)}
                   </div>
                   <div className="text-[10px] text-purple-600 dark:text-purple-400 mt-0.5">
                     A receber

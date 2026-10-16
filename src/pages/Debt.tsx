@@ -1,3 +1,4 @@
+import { useCurrency } from '../lib/useCurrency';
 import { usePreferences } from '../lib/preferencesContext';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import React, { useState, useEffect, useMemo } from 'react';
@@ -30,6 +31,8 @@ interface LedgerItem {
 }
 
 export default function Debt() {
+  const { formatMoney, currencySymbol, isBrazil } = useCurrency();
+
   const { v } = usePreferences();
   const { currentEmployee } = useEmployee();
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -269,7 +272,7 @@ export default function Debt() {
         <div>
           <h1 className="text-2xl font-bold font-heading text-foreground">{v('debt.title')}</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            {v('debt.balance')}: <span className="font-bold text-red-600 dark:text-red-400">R$ {totalDebt.toFixed(2)}</span> ({customers.length} cliente{customers.length !== 1 ? 's' : ''})
+            {v('debt.balance')}: <span className="font-bold text-red-600 dark:text-red-400">{formatMoney(totalDebt)}</span> ({customers.length} cliente{customers.length !== 1 ? 's' : ''})
           </p>
         </div>
 
@@ -357,11 +360,11 @@ export default function Debt() {
                   <td className="p-4 text-right font-bold text-sm">
                     {c.totalDebt > 0 ? (
                       <span className="text-red-600 dark:text-red-400 font-mono">
-                        R$ {c.totalDebt.toFixed(2)}
+                        {formatMoney(c.totalDebt)}
                       </span>
                     ) : (
                       <span className="text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
-                        Sem débitos (R$ 0,00)
+                        Sem débitos ({formatMoney(0)})
                       </span>
                     )}
                   </td>
@@ -480,7 +483,7 @@ export default function Debt() {
                   Dívida Atual
                 </span>
                 <p className="text-base sm:text-lg font-bold text-red-600 dark:text-red-400 font-mono mt-0.5">
-                  R$ {selectedCustomer.totalDebt.toFixed(2)}
+                  {formatMoney(selectedCustomer.totalDebt)}
                 </p>
               </div>
 
@@ -489,7 +492,7 @@ export default function Debt() {
                   Total em Compras
                 </span>
                 <p className="text-base sm:text-lg font-bold text-blue-600 dark:text-blue-400 font-mono mt-0.5">
-                  R$ {customerStats.totalPurchases.toFixed(2)}
+                  {formatMoney(customerStats.totalPurchases)}
                 </p>
               </div>
 
@@ -498,7 +501,7 @@ export default function Debt() {
                   Total Pago
                 </span>
                 <p className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">
-                  R$ {customerStats.totalPayments.toFixed(2)}
+                  {formatMoney(customerStats.totalPayments)}
                 </p>
               </div>
 
@@ -507,7 +510,7 @@ export default function Debt() {
                   Dívida Inicial
                 </span>
                 <p className="text-base sm:text-lg font-bold text-foreground font-mono mt-0.5">
-                  R$ {customerStats.initialDebt.toFixed(2)}
+                  {formatMoney(customerStats.initialDebt)}
                 </p>
               </div>
             </div>
@@ -651,7 +654,7 @@ export default function Debt() {
                             </div>
                           </div>
 
-                          {/* Value (R$) */}
+                          {/* Valor da transação */}
                           <div className="text-right sm:text-right shrink-0 pl-12 sm:pl-0">
                             <span className={`text-base font-bold font-mono ${
                               isSale
@@ -660,7 +663,7 @@ export default function Debt() {
                                 ? 'text-emerald-600 dark:text-emerald-400'
                                 : 'text-foreground'
                             }`}>
-                              {isSale ? `+ R$ ${item.amount.toFixed(2)}` : isPayment ? `- R$ ${item.amount.toFixed(2)}` : `R$ ${item.amount.toFixed(2)}`}
+                              {isSale ? `+ ${formatMoney(item.amount)}` : isPayment ? `- ${formatMoney(item.amount)}` : `${formatMoney(item.amount)}`}
                             </span>
                             <span className="block text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
                               {isSale ? 'Acréscimo na Dívida' : isPayment ? 'Abatimento' : 'Saldo Inicial'}
@@ -749,12 +752,12 @@ export default function Debt() {
                 <input 
                   value={formData.phone} 
                   onChange={e => setFormData({...formData, phone: e.target.value})} 
-                  placeholder="(11) 98765-4321"
+                  placeholder={isBrazil ? '(11) 98765-4321' : 'Telefone com código do país'}
                   className="w-full border border-border bg-surface text-foreground p-2.5 rounded-xl text-sm focus:outline-hidden focus:border-primary" 
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1.5">Dívida Anterior Já Existente (R$)</label>
+                <label className="block text-xs font-semibold text-foreground mb-1.5">Dívida Anterior Já Existente ({currencySymbol})</label>
                 <input 
                   type="number" 
                   step="0.01" 
@@ -805,11 +808,11 @@ export default function Debt() {
           <div className="bg-surface rounded-2xl w-full max-w-md p-6 border border-border shadow-xl">
             <h2 className="text-xl font-bold font-heading text-foreground mb-1">{v('debt.pay')}</h2>
             <p className="text-muted-foreground text-xs mb-5">
-              Cliente: <span className="font-semibold text-foreground notranslate normal-case" translate="no">{selectedCustomer.name}</span> (Dívida total pendente: <span className="font-bold text-red-600">R$ {selectedCustomer.totalDebt.toFixed(2)}</span>)
+              Cliente: <span className="font-semibold text-foreground notranslate normal-case" translate="no">{selectedCustomer.name}</span> (Dívida total pendente: <span className="font-bold text-red-600">{formatMoney(selectedCustomer.totalDebt)}</span>)
             </p>
             <form onSubmit={handlePay} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-foreground mb-1.5">Valor do Pagamento (R$)</label>
+                <label className="block text-xs font-semibold text-foreground mb-1.5">Valor do Pagamento ({currencySymbol})</label>
                 <input 
                   type="number" 
                   step="0.01" 
@@ -825,7 +828,7 @@ export default function Debt() {
                     onClick={() => setPayAmount(selectedCustomer.totalDebt)}
                     className="text-[11px] text-primary hover:underline font-semibold cursor-pointer"
                   >
-                    Pagar valor total (R$ {selectedCustomer.totalDebt.toFixed(2)})
+                    Pagar valor total ({formatMoney(selectedCustomer.totalDebt)})
                   </button>
                   {selectedCustomer.totalDebt > 10 && (
                     <>
@@ -849,7 +852,7 @@ export default function Debt() {
                   className="w-full border border-border p-2.5 rounded-xl bg-surface text-foreground text-sm focus:outline-hidden focus:border-primary font-semibold"
                 >
                   <option value="cash">Dinheiro em Espécie</option>
-                  <option value="card">Cartão / Pix</option>
+                  <option value="card">{isBrazil ? 'Cartão / Pix' : 'Cartão'}</option>
                 </select>
               </div>
               <div className="flex justify-end gap-2.5 mt-6 pt-4 border-t border-border">
@@ -906,7 +909,7 @@ export default function Debt() {
               <div className="flex justify-between items-center text-xs pt-1 border-t border-border/60">
                 <span className="text-muted-foreground">Dívida pendente atual:</span>
                 <span className={`font-mono font-bold ${customerToDelete.totalDebt > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600'}`}>
-                  R$ {customerToDelete.totalDebt.toFixed(2)}
+                  {formatMoney(customerToDelete.totalDebt)}
                 </span>
               </div>
             </div>
@@ -915,7 +918,7 @@ export default function Debt() {
               <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-200 text-xs mb-5 flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Atenção:</strong> Este cliente possui uma dívida em aberto de <strong>R$ {customerToDelete.totalDebt.toFixed(2)}</strong>. Ao excluir, essa dívida deixará de constar no balanço de fiados.
+                  <strong>Atenção:</strong> Este cliente possui uma dívida em aberto de <strong>{formatMoney(customerToDelete.totalDebt)}</strong>. Ao excluir, essa dívida deixará de constar no balanço de fiados.
                 </span>
               </div>
             )}

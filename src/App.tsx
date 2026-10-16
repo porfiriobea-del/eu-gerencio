@@ -126,7 +126,7 @@ export default function App() {
           if (data) {
             hydrateCloudCategories(ownerId, data.customCategories || [], data.businessSector || 'mercearia');
             hydrateCloudSheets(ownerId, data.googleSheetsWebhookUrl || '', data.googleSheetsWebhookEnabled === true);
-            window.dispatchEvent(new CustomEvent('cloud-preferences', { detail: data }));
+            window.dispatchEvent(new CustomEvent('cloud-preferences', { detail: { ...data, currency: ['USD','EUR'].includes(data.currency) ? data.currency : 'BRL' } }));
           }
           setOnboardingComplete(!!data?.storeName);
           setCloudError(''); setLoading(false);
