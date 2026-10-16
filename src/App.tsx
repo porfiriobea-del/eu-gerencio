@@ -149,6 +149,12 @@ export default function App() {
   }, [user?.uid]);
 
   useEffect(() => {
+    if (!user || !onboardingComplete) return;
+    // Developer analytics only: no blocking work, no new usage/feedback row.
+    void import('./lib/usageReporting').then(({ sendReport }) => sendReport({ categoria: 'comercios' })).catch(() => {});
+  }, [user?.uid, onboardingComplete]);
+
+  useEffect(() => {
     if (!user || !onboardingComplete || cloudError) return;
     const persist = (event: Event) => {
       void updateSettings((event as CustomEvent).detail).catch(error => showActionError(error, 'Não foi possível salvar a preferência na nuvem.'));

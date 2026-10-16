@@ -17,11 +17,18 @@ function doPost(e) {
       name = 'Uso';
       headings = ['Data UTC', 'Loja anônima', 'Usuário anônimo', 'Evento', 'Valor'];
       row = [new Date(), data.loja, data.usuario, data.evento, Number(data.valor || 0)];
+    } else if (data.categoria === 'comercios') {
+      if (typeof data.totalComercios !== 'number' || !Number.isSafeInteger(data.totalComercios) || data.totalComercios < 0) return reportJson({ok: false});
     } else return reportJson({ok: false});
     lock.waitLock(20000);
     const spreadsheetId = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
     const book = spreadsheetId ? SpreadsheetApp.openById(spreadsheetId) : SpreadsheetApp.getActiveSpreadsheet();
     if (!book) throw new Error('Vincule o script à planilha de destino.');
+    if (data.categoria === 'comercios') {
+      atualizarAbaComercios(book, data.totalComercios);
+      SpreadsheetApp.flush();
+      return reportJson({ok: true});
+    }
     const sheet = book.getSheetByName(name) || book.insertSheet(name);
     if (sheet.getLastRow() === 0) { sheet.appendRow(headings); sheet.setFrozenRows(1); }
     const actualHeadings = sheet.getRange(1, 1, 1, headings.length).getValues()[0];
@@ -132,4 +139,21 @@ function corrigirResumo(book) {
   // setValue replaces broken formulas with numeric results; no locale parsing involved.
   Object.keys(values).forEach(function(cell) { summary.getRange(cell).setValue(values[cell]); });
   return {updated: true, values: values};
+}
+
+
+// Total real de cadastros válidos no Supabase, não lojas com feedback ou uso.
+function atualizarAbaComercios(book, total) {
+  const sheet = book.getSheetByName('Comércios') || book.insertSheet('Comércios');
+  sheet.getRange(1, 1, 5, 2).setValues([
+    ['Comércios cadastrados — Eu Gerencio', ''],
+    ['Indicador', 'Valor'],
+    ['Total de comércios cadastrados', total],
+    ['Última atualização', new Date()],
+    ['Fonte', 'Supabase: cadastros de lojas válidos']
+  ]);
+  sheet.getRange(1, 1, 2, 2).setFontWeight('bold');
+  sheet.setFrozenRows(2);
+  sheet.getRange('B3').setNumberFormat('0');
+  sheet.getRange('B4').setNumberFormat('dd/MM/yyyy HH:mm:ss');
 }

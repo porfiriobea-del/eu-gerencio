@@ -41,6 +41,16 @@ export async function enviarParaPlanilha(req: Request, res: Response) {
       const valor = req.body.valor ?? 0;
       if (typeof valor !== 'number' || !Number.isFinite(valor) || valor < 0) return skip();
       Object.assign(payload, { categoria: 'uso', evento: req.body.evento, valor });
+    } else if (req.body?.categoria === 'comercios') {
+      // Count in the database, never trust a total provided by the browser.
+      const countResponse = await fetch(`${base}/rest/v1/rpc/eu_registered_stores_count`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: '{}', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)])
+      });
+      if (!countResponse.ok) return skip();
+      const total = await countResponse.json();
+      if (typeof total !== 'number' || !Number.isSafeInteger(total) || total < 0) return skip();
+      Object.assign(payload, { categoria: 'comercios', totalComercios: total });
     } else return skip();
     const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, signal: controller.signal, body: JSON.stringify(payload) });
     const responseBody = await response.text();
