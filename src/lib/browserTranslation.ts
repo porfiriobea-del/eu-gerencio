@@ -18,7 +18,7 @@ export function protectTranslatedDom(onRepair?: () => void): void {
   Object.defineProperty(prototype, patchKey, { value: true });
 }
 
-export function syncDocumentLanguage(language: 'pt' | 'en' | 'es'): () => void {
+export function syncDocumentLanguage(language: 'pt' | 'pt-BR' | 'en' | 'es'): () => void {
   const expected = language === 'pt' ? 'pt-BR' : language;
   const restore = () => { if (document.documentElement.lang !== expected) document.documentElement.lang = expected; };
   restore();

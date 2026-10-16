@@ -483,7 +483,7 @@ export default function POS() {
             <input 
               value={search} 
               onChange={e => setSearch(e.target.value)} 
-              placeholder={`Buscar ${entityName().toLowerCase()} por nome...`} 
+              placeholder={v('ui.search', 'Buscar produto por nome...')}
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-surface text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary shadow-xs"
             />
           </div>
@@ -500,7 +500,7 @@ export default function POS() {
             className="px-3.5 py-2.5 bg-palette-1 text-primary hover:bg-palette-1/80 border border-primary/30 rounded-xl font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs shrink-0 text-sm"
           >
             <Lock className="w-4 h-4" />
-            <span>Fechar Caixa</span>
+            <span>{v('ui.closeCash', "Fechar Caixa")}</span>
             <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-bold">
               {todaySales.length}
             </span>
@@ -702,7 +702,7 @@ export default function POS() {
       {isCheckoutOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs">
           <div role="dialog" aria-modal="true" aria-label="Finalizar venda" className="max-h-[90dvh] overflow-y-auto bg-surface rounded-2xl w-full max-w-md p-6 shadow-2xl border border-border">
-            <h2 className="text-2xl font-bold mb-4 text-foreground border-b border-border pb-3">Finalizar Venda</h2>
+            <h2 className="text-2xl font-bold mb-4 text-foreground border-b border-border pb-3">{v('ui.checkout', "Finalizar Venda")}</h2>
             
             {/* Active Operator info */}
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-muted/40 border border-border text-xs mb-4">
@@ -727,21 +727,21 @@ export default function POS() {
             
             <fieldset disabled={isCompletingSale} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">Forma de Pagamento</label>
+                <label className="block text-sm font-medium text-foreground mb-2">{v('ui.paymentMethod', "Forma de Pagamento")}</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button 
                     onClick={() => { setPaymentType('cash'); setAmountReceived(finalTotal); }} 
                     className={`py-3 rounded-xl border font-bold text-sm transition-all cursor-pointer flex flex-col items-center justify-center gap-1 shadow-2xs ${paymentType === 'cash' ? 'bg-palette-1 border-primary text-primary ring-2 ring-primary/20' : 'bg-surface border-border hover:bg-muted text-foreground'}`}
                   >
                     <span className="text-base">💵</span>
-                    <span>Dinheiro</span>
+                    <span>{v('ui.cash', "Dinheiro")}</span>
                   </button>
                   <button 
                     onClick={() => { setPaymentType('card'); setCardMethod('debit'); }}
                     className={`py-3 rounded-xl border font-bold text-sm transition-all cursor-pointer flex flex-col items-center justify-center gap-1 shadow-2xs ${paymentType === 'card' && !['pix', 'pix_machine'].includes(cardMethod) ? 'bg-palette-1 border-primary text-primary ring-2 ring-primary/20' : 'bg-surface border-border hover:bg-muted text-foreground'}`}
                   >
                     <span className="text-base">💳</span>
-                    <span>Cartão</span>
+                    <span>{v('ui.card', "Cartão")}</span>
                   </button>
                   <button hidden={!isBrazil} type="button" onClick={() => { setPaymentType('card'); setCardMethod('pix'); }}
                     className={`rounded-xl border py-3 text-sm font-bold ${paymentType === 'card' && cardMethod === 'pix' ? 'border-primary bg-palette-1 text-primary' : 'border-border bg-surface'}`}>
@@ -1066,7 +1066,7 @@ export default function POS() {
             </fieldset>
 
             <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border">
-              <button disabled={isCompletingSale} onClick={() => setIsCheckoutOpen(false)} className="px-6 py-3 border border-border rounded-xl hover:bg-muted font-medium text-muted-foreground cursor-pointer disabled:opacity-50">Cancelar</button>
+              <button disabled={isCompletingSale} onClick={() => setIsCheckoutOpen(false)} className="px-6 py-3 border border-border rounded-xl hover:bg-muted font-medium text-muted-foreground cursor-pointer disabled:opacity-50">{v('ui.cancel', "Cancelar")}</button>
               <button 
                 onClick={handleCheckout} 
                 disabled={isCompletingSale || (

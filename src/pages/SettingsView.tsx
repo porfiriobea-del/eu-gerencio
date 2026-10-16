@@ -1,3 +1,4 @@
+import { formatDate, normalizeLanguage, languageLocales } from '../lib/language';
 import { useCurrency } from '../lib/useCurrency';
 import { saleFee, pixTotals } from '../lib/paymentFees';
 import { PaymentSummary } from '../components/PaymentSummary';
@@ -222,7 +223,7 @@ function doPost(e) {
         ...(overrides?.currency ? { currency: overrides.currency } : {}),
         businessSector: overrides?.businessSector ?? businessSector,
         customCategories: overrides?.customCategories ?? categoriesList,
-        language: overrides?.language ?? language, fontSize: overrides?.fontSize ?? fontSize, simpleViewMode: overrides?.simpleViewMode ?? simpleViewMode,
+        fontSize: overrides?.fontSize ?? fontSize, simpleViewMode: overrides?.simpleViewMode ?? simpleViewMode,
         googleSheetsWebhookUrl: sheetsWebhookUrl, googleSheetsWebhookEnabled: sheetsEnabled,
         storeName: overrides?.storeName !== undefined ? overrides.storeName : (storeName.trim() || settings?.storeName || 'Meu Comércio'),
         cnpj: overrides?.cnpj !== undefined ? overrides.cnpj : (cnpj.trim() || settings?.cnpj || ''),
@@ -727,7 +728,7 @@ function doPost(e) {
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base font-bold text-foreground">Salvamento automático</h2>
+              <h2 className="text-base font-bold text-foreground">{v('ui.autosave', "Salvamento automático")}</h2>
               <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Salva todas as ações automaticamente + cada 4 min
@@ -788,7 +789,7 @@ function doPost(e) {
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base sm:text-lg font-bold text-foreground">Personalização e Tema</h2>
+                <h2 className="text-base sm:text-lg font-bold text-foreground">{v('ui.personalization', "Personalização e Tema")}</h2>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
                   Menu Suspenso
                 </span>
@@ -889,7 +890,7 @@ function doPost(e) {
                           </span>
                         )}
                       </div>
-                      <h4 className="text-sm font-bold text-foreground mb-1 notranslate normal-case" translate="no">{mode.name}</h4>
+                      <h4 className="text-sm font-bold text-foreground mb-1 notranslate normal-case" translate="no">{v('mode.' + mode.id, mode.name)}</h4>
                       <p className="text-xs text-muted-foreground mb-3 leading-relaxed notranslate normal-case" translate="no">{simpleViewMode ? mode.tagline : mode.description}</p>
                     </div>
 
@@ -1015,9 +1016,9 @@ function doPost(e) {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {[
-                { id: 'pt', label: 'Português (Brasil)', flag: '🇧🇷' },
-                { id: 'en', label: 'English (US)', flag: '🇺🇸' },
-                { id: 'es', label: 'Español (Latam)', flag: '🇪🇸' },
+                { id: 'pt-BR', label: 'Português (Brasil)', flag: '🇧🇷' },
+                { id: 'en', label: 'English', flag: '🇺🇸' },
+                { id: 'es', label: 'Español', flag: '🇪🇸' },
               ].map((item) => (
                 <button
                   key={item.id}
@@ -1078,7 +1079,7 @@ function doPost(e) {
 
       {/* Dados do Comércio */}
       <div className="bg-surface p-6 rounded-2xl shadow-sm border border-border mb-6">
-        <h2 className="text-lg font-bold mb-4 border-b border-border pb-2 text-foreground">Dados do Comércio</h2>
+        <h2 className="text-lg font-bold mb-4 border-b border-border pb-2 text-foreground">{v('ui.storeData', "Dados do Comércio")}</h2>
           <section className="mb-4">
             <label htmlFor="store-currency" className="block text-sm font-semibold">{v('currency.title', 'Moeda da loja')}</label>
             <select id="store-currency" value={settings?.currency || currency} className="mt-2 min-h-11 w-full rounded-xl border border-border bg-surface p-3" onChange={async event => {
@@ -1180,7 +1181,7 @@ function doPost(e) {
         <form onSubmit={handleSaveStoreData} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Nome do Comércio *</label>
+              <label className="block text-sm font-medium text-foreground mb-1">{v('ui.storeName', "Nome do Comércio *")}</label>
               <input 
                 required 
                 maxLength={100} 
@@ -1202,7 +1203,7 @@ function doPost(e) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Celular</label>
+              <label className="block text-sm font-medium text-foreground mb-1">{v('ui.phone', "Celular")}</label>
               <input 
                 maxLength={20} 
                 value={phone} 
@@ -2022,7 +2023,7 @@ function doPost(e) {
               <div className="bg-surface border border-border rounded-xl p-3.5 flex flex-col">
                 <div className="flex items-center gap-2 mb-1">
                   <CreditCard className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-                  <h3 className="text-xs font-bold text-foreground">Forma de Pagamento</h3>
+                  <h3 className="text-xs font-bold text-foreground">{v('ui.paymentMethod', "Forma de Pagamento")}</h3>
                 </div>
                 <p className="text-[11px] text-muted-foreground mb-3">Filtrar por meio de recebimento</p>
                 <div className="mt-auto">
@@ -2362,7 +2363,7 @@ function doPost(e) {
                       )}
                     </div>
                     <div className="text-[10px] text-muted-foreground shrink-0 font-mono">
-                      {new Date(log.timestamp).toLocaleTimeString('pt-BR')}
+                      {new Date(log.timestamp).toLocaleTimeString(languageLocales[normalizeLanguage(language)])}
                     </div>
                   </div>
                 ))}
@@ -2463,7 +2464,7 @@ function doPost(e) {
                 disabled={isDeletingAccount}
                 className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors cursor-pointer"
               >
-                Cancelar
+                {v('ui.cancel', "Cancelar")}
               </button>
               <button
                 type="button"

@@ -67,8 +67,8 @@ export function CartDrawer({ items, total, busy = false, onQuantity, onRemove, o
       </article>)}
     </div>
     <footer className="shrink-0 space-y-3 border-t border-border p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <div className="flex items-center justify-between"><span>Total a pagar</span><strong className="text-2xl">{money(total)}</strong></div>
-      <button type="button" disabled={!items.length || busy} onClick={() => checkout(onCheckout)} className="w-full rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground disabled:opacity-50">Finalizar Compra / Receber</button>
+      <div className="flex items-center justify-between"><span>{v('ui.cartTotal', "Total a pagar")}</span><strong className="text-2xl">{money(total)}</strong></div>
+      <button type="button" disabled={!items.length || busy} onClick={() => checkout(onCheckout)} className="w-full rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground disabled:opacity-50">{v('ui.receive', "Finalizar Compra / Receber")}</button>
       <button type="button" disabled={!items.length || busy} onClick={() => checkout(onFiado)} className="w-full rounded-xl border border-amber-500/40 px-3 py-2 text-sm font-semibold disabled:opacity-50">Vender no Fiado</button>
     </footer>
   </div>;

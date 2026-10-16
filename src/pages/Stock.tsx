@@ -1,3 +1,4 @@
+import { formatDate, normalizeLanguage, languageLocales } from '../lib/language';
 import { ProductImage } from '../components/ProductImage';
 import { useCurrency } from '../lib/useCurrency';
 import { formatProductStock } from '../lib/productUnits';
@@ -703,11 +704,11 @@ export default function Stock() {
         </div>
         <div className="grid w-full gap-2 sm:grid-cols-3">
           <button type="button" onClick={() => setIsCameraModalOpen(true)}
-            className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-emerald-700">📸 Cadastrar por Foto (IA)</button>
+            className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-emerald-700">{v('ui.photo', "📸 Cadastrar por Foto (IA)")}</button>
           <button type="button" onClick={() => openModal()}
             className="flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-sm font-semibold hover:bg-muted"><Plus className="h-4 w-4" />{v('entity.new', 'Novo Produto')}</button>
           <button type="button" onClick={() => setIsCatalogImportOpen(true)}
-            className="rounded-xl border border-border bg-surface px-4 py-3 text-sm font-semibold hover:bg-muted">📁 Importar Catálogo (PDF ou Foto da Galeria)</button>
+            className="rounded-xl border border-border bg-surface px-4 py-3 text-sm font-semibold hover:bg-muted">{v('ui.import', "📁 Importar Catálogo (PDF ou Foto da Galeria)")}</button>
         </div>
       </div>
 
@@ -826,7 +827,7 @@ export default function Stock() {
       </div>
 
       {/* Banner de Alerta de Produtos Duplicados (se houver) */}
-      <button type="button" onClick={() => setShowDuplicateReview(true)} className="mb-3 rounded-xl border border-border px-4 py-2 text-sm font-semibold">Verificar duplicados</button>
+      <button type="button" onClick={() => setShowDuplicateReview(true)} className="mb-3 rounded-xl border border-border px-4 py-2 text-sm font-semibold">{v('ui.duplicates', "Verificar duplicados")}</button>
 
       {duplicateAnalysis.totalDuplicates > 0 && (
         <div className="p-4 sm:p-5 rounded-2xl bg-rose-500/10 border-2 border-rose-500/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
@@ -890,7 +891,7 @@ export default function Stock() {
         <div className="flex-1 flex flex-col sm:flex-row gap-3">
           <input 
             type="text"
-            placeholder={`Buscar ${entityName().toLowerCase()} por nome...`}
+            placeholder={v('ui.searchStock', 'Buscar produtos por nome...')}
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-surface text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
@@ -901,7 +902,7 @@ export default function Stock() {
             onChange={e => setSelectedCategory(e.target.value)}
             className="px-3 py-2.5 rounded-xl border border-border bg-surface text-foreground text-sm cursor-pointer"
           >
-            <option value="Todas">Todas as categorias</option>
+            <option value="Todas">{v('ui.categories', "Todas as categorias")}</option>
             {categories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
@@ -1286,13 +1287,13 @@ export default function Stock() {
                           className="text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer"
                         >
                           <Calendar className="w-3 h-3" />
-                          <span>{p.initialStockDate ? format(new Date(p.initialStockDate + 'T12:00:00'), 'dd/MM/yyyy') : 'Definir'}</span>
+                          <span>{p.initialStockDate ? formatDate(p.initialStockDate + 'T12:00:00', normalizeLanguage(language)) : 'Definir'}</span>
                           <Edit2 className="w-2.5 h-2.5" />
                         </button>
                       </div>
                       <div className="flex justify-between items-center text-muted-foreground">
                         <span>{v('stock.min', 'Quando Pedir Mais (Mínimo)')}:</span>
-                        <strong className="text-foreground">{reorderPoint.toLocaleString('pt-BR', {maximumFractionDigits: 2})} {p.type === 'cigarro' ? 'carteiras' : 'un.'} (reserva: {p.safetyStock})</strong>
+                        <strong className="text-foreground">{reorderPoint.toLocaleString(languageLocales[normalizeLanguage(language)], {maximumFractionDigits: 2})} {p.type === 'cigarro' ? 'carteiras' : 'un.'} (reserva: {p.safetyStock})</strong>
                       </div>
                       <div className="flex justify-between items-center text-muted-foreground">
                         <span>{v('stock.max', 'Limite para Não Sobrar (Máximo)')}:</span>
@@ -1399,7 +1400,7 @@ export default function Stock() {
                 <th className="p-3.5 font-semibold text-muted-foreground">{v('stock.min', 'Mínimo')} / {v('stock.max', 'Máximo')}</th>
                 <th className="p-3.5 font-semibold text-muted-foreground">{v('purchases.suggestion', 'Sugestão de Compra')}</th>
                 <th className="p-3.5 font-semibold text-muted-foreground text-center">{v('stock.status', 'Status')}</th>
-                <th className="p-3.5 font-semibold text-muted-foreground text-right">Ações</th>
+                <th className="p-3.5 font-semibold text-muted-foreground text-right">{v('ui.actions', "Ações")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
@@ -1524,7 +1525,7 @@ export default function Stock() {
                       >
                         <Calendar className="w-3 h-3 text-primary group-hover:scale-110 transition-transform" />
                         <span className="font-semibold text-foreground group-hover:text-primary">
-                          {p.initialStockDate ? format(new Date(p.initialStockDate + 'T12:00:00'), 'dd/MM/yyyy') : 'Não informada'}
+                          {p.initialStockDate ? formatDate(p.initialStockDate + 'T12:00:00', normalizeLanguage(language)) : 'Não informada'}
                         </span>
                         <Edit2 className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100 text-primary" />
                       </button>
@@ -1569,7 +1570,7 @@ export default function Stock() {
                       </div>
                       <div className="mt-0.5">
                         <span className="text-muted-foreground">Ponto Repor: </span>
-                        <span className="font-semibold text-foreground">{reorderPoint.toLocaleString('pt-BR', {maximumFractionDigits: 2})} {p.type === 'cigarro' ? 'carteiras' : 'un.'}</span>
+                        <span className="font-semibold text-foreground">{reorderPoint.toLocaleString(languageLocales[normalizeLanguage(language)], {maximumFractionDigits: 2})} {p.type === 'cigarro' ? 'carteiras' : 'un.'}</span>
                       </div>
                       <div className="mt-0.5 text-primary font-bold">
                         <span>Estoque Máximo: </span>
@@ -2949,13 +2950,13 @@ export default function Stock() {
                     onClick={() => setIsModalOpen(false)} 
                     className="px-4 py-2.5 border border-border rounded-xl hover:bg-muted text-muted-foreground font-medium cursor-pointer"
                   >
-                    Cancelar
+                    {v('ui.cancel', "Cancelar")}
                   </button>
                   <button 
                     type="submit" disabled={isSavingProduct}
                     className="px-5 py-2.5 bg-primary text-white rounded-xl hover:opacity-90 font-bold cursor-pointer shadow-sm"
                   >
-                    Salvar Produto
+                    {v('ui.saveProduct', "Salvar Produto")}
                   </button>
                 </div>
               </div>
@@ -3113,7 +3114,7 @@ export default function Stock() {
                 onClick={() => setEditingInitialStockProduct(null)}
                 className="px-4 py-2.5 border border-border rounded-xl hover:bg-muted text-muted-foreground font-medium text-sm cursor-pointer"
               >
-                Cancelar
+                {v('ui.cancel', "Cancelar")}
               </button>
               <button
                 type="button"
@@ -3228,7 +3229,7 @@ export default function Stock() {
                 onClick={() => setIsMonthlyTurnoverOpen(false)}
                 className="px-4 py-2.5 border border-border rounded-xl hover:bg-muted text-muted-foreground font-medium text-sm cursor-pointer"
               >
-                Cancelar
+                {v('ui.cancel', "Cancelar")}
               </button>
               <button
                 type="button"
@@ -3298,7 +3299,7 @@ export default function Stock() {
                 disabled={isDeleting}
                 className="px-4 py-2 border border-border rounded-xl hover:bg-muted text-foreground font-medium text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Cancelar
+                {v('ui.cancel', "Cancelar")}
               </button>
               <button
                 type="button"
@@ -3439,7 +3440,7 @@ export default function Stock() {
                 disabled={isBulkDeleting}
                 className="px-4 py-2 border border-border rounded-xl hover:bg-muted text-foreground font-medium text-sm cursor-pointer disabled:opacity-50"
               >
-                Cancelar
+                {v('ui.cancel', "Cancelar")}
               </button>
               <button
                 type="button"
@@ -3462,7 +3463,7 @@ export default function Stock() {
 
       {duplicateRequest && <ProductDuplicateDialog matches={duplicateRequest.matches} quantity={duplicateRequest.quantity} isMerge={duplicateRequest.isMerge} onDecision={duplicateRequest.resolve} />}
       {showDuplicateReview && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"><section role="dialog" aria-modal="true" aria-label="Verificar duplicados" className="max-h-[85vh] w-full max-w-2xl overflow-auto rounded-2xl border border-border bg-surface p-6">
-        <div className="mb-4 flex justify-between"><h2 className="text-lg font-bold">Verificar duplicados</h2><button type="button" onClick={() => setShowDuplicateReview(false)}>Fechar</button></div>
+        <div className="mb-4 flex justify-between"><h2 className="text-lg font-bold">{v('ui.duplicates', "Verificar duplicados")}</h2><button type="button" onClick={() => setShowDuplicateReview(false)}>{v('ui.close', "Fechar")}</button></div>
         <p className="mb-4 text-sm text-muted-foreground">A mesclagem soma o estoque e mantém nome, preços e medidas do primeiro produto. O segundo fica arquivado para preservar o histórico.</p>
         {!duplicateAnalysis.duplicateGroups.size && <p>Nenhum par suspeito encontrado.</p>}
         {duplicatePairs.map(([key, { target, source }]) => <div key={key} className="mb-3 rounded-xl border border-border p-3"><strong className="notranslate normal-case" translate="no">{target.name} — estoque {formatProductStock(target)}</strong><div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span className="notranslate normal-case" translate="no">{source.name} — {formatProductStock(source)}</span><button type="button" disabled={!!mergingPair || source.type !== target.type} onClick={async () => {

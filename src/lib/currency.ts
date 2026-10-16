@@ -1,7 +1,7 @@
 export type StoreCurrency = 'BRL' | 'USD' | 'EUR';
-export type MoneyLanguage = 'pt' | 'en' | 'es';
+export type MoneyLanguage = 'pt' | 'pt-BR' | 'en' | 'es';
 export interface MoneyOptions { currency?: StoreCurrency; language?: MoneyLanguage }
-export const moneyLocales = {pt:'pt-BR',en:'en-US',es:'es-ES'} as const;
+export const moneyLocales = {pt:'pt-BR','pt-BR':'pt-BR',en:'en-US',es:'es-ES'} as const;
 export function normalizeCurrency(value: unknown): StoreCurrency { return value === 'USD' || value === 'EUR' ? value : 'BRL'; }
 export function moneyLocale(language?: string): string { return moneyLocales[language as MoneyLanguage] || moneyLocales.pt; }
 const currencyFormatters = new Map<string, Intl.NumberFormat>();

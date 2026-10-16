@@ -1,3 +1,4 @@
+import { syncUserLanguage } from './lib/userLanguage';
 import { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { initAuth, googleSignIn } from './lib/auth';
@@ -141,6 +142,11 @@ export default function App() {
     });
     return () => { active = false; generation++; unsubscribeAuth(); unsubscribeSettings?.(); };
   }, [retryLoad]);
+
+  useEffect(() => {
+    if (!user) return;
+    return syncUserLanguage(user.uid);
+  }, [user?.uid]);
 
   useEffect(() => {
     if (!user || !onboardingComplete || cloudError) return;

@@ -13,6 +13,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT=true;
 const React=await import('react');const{render,cleanup,act}=await import('@testing-library/react');
 const cache=new URL('../node_modules/.cache/',import.meta.url);await mkdir(cache,{recursive:true});const dir=await mkdtemp(new URL('cloud-startup-',cache));
 const content={
+ userLanguage:'export const syncUserLanguage=()=>()=>{};',
  auth:"export const initAuth=(success)=>{let active=true;queueMicrotask(()=>{if(active)void success({uid:'owner',email:'owner@test.invalid'});});return()=>{active=false;};};export const googleSignIn=async()=>{};",
  cloudStore:"export const db={};export const doc=(...args)=>args;export const verifyCloudIdentity=async()=>{if(globalThis.__bootError)throw new Error(globalThis.__bootError);};export const getDoc=async()=>({exists:()=>!!globalThis.__bootProfile,data:()=>globalThis.__bootProfile});export const onSnapshot=(_ref,callback,onError)=>{globalThis.__bootOnError=onError;callback({exists:()=>!!globalThis.__bootProfile,data:()=>globalThis.__bootProfile});return()=>{};};",
  api:"export const checkAndAcceptPendingInvitation=async()=>null;export const getStoreInvitationById=async()=>null;export const getEffectiveOwnerId=()=> 'owner';export const setActiveStoreSession=()=>{};export const updateSettings=async()=>{};",

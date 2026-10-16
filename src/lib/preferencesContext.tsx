@@ -1,9 +1,11 @@
+import { resolveVocabulary } from './interfaceLanguages';
 import { CurrencyContext } from './useCurrency';
 import { normalizeCurrency, getCurrencySymbol, type StoreCurrency } from './currency';
 import { syncDocumentLanguage } from './browserTranslation';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-export type Language = 'pt' | 'en' | 'es';
+import { normalizeLanguage, readDeviceLanguage, saveDeviceLanguage, type Language } from './language';
+export type { Language } from './language';
 export type FontSize = 'normal' | 'large' | 'xlarge';
 export type LanguageMode = 'technical' | 'neutral' | 'basic';
 export { THEME_STYLES, normalizeThemePreset } from './interfaceThemes';
@@ -590,7 +592,7 @@ export interface PreferencesContextType {
 }
 
 const TRANSLATIONS: Record<Language, Record<string, string>> = {
-  pt: {
+  'pt-BR': {
     // Navigation
     'nav.home': 'Início',
     'nav.pos': 'Caixa',
@@ -609,7 +611,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     'settings.customization.desc': 'Ajuste o modo de linguagem, tema visual, escala de leitura e idioma.',
     'settings.langMode': 'Sistema Personalizado de Linguagem',
     'settings.langMode.desc': 'Escolha como o sistema se comunica com você em todas as telas.',
-    'settings.language': 'Idioma Global do Sistema',
+    'settings.language': 'Idioma da sua conta',
     'settings.accessibility': 'Acessibilidade de Leitura',
     'settings.accessibility.desc': 'Aumente o tamanho das fontes e espaçamentos para facilitar a leitura.',
     'settings.themes': 'Temas e Estilos Visuais',
@@ -642,7 +644,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     'settings.customization.desc': 'Adjust language mode, visual theme, reading scale, and language.',
     'settings.langMode': 'Custom Language & Vocabulary Mode',
     'settings.langMode.desc': 'Choose how the system words metrics, stock and financial concepts.',
-    'settings.language': 'System Language',
+    'settings.language': 'Your account language',
     'settings.accessibility': 'Reading Accessibility',
     'settings.accessibility.desc': 'Increase font size and spacing for comfortable reading.',
     'settings.themes': 'Themes & Visual Styles',
@@ -674,7 +676,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     'settings.customization.desc': 'Configura el modo de lenguaje, tema visual, tamaño de letra e idioma.',
     'settings.langMode': 'Sistema Personalizado de Lenguaje',
     'settings.langMode.desc': 'Elige cómo el sistema expresa los conceptos de gestión y stock.',
-    'settings.language': 'Idioma del Sistema',
+    'settings.language': 'Idioma de tu cuenta',
     'settings.accessibility': 'Accesibilidad de Lectura',
     'settings.accessibility.desc': 'Aumenta el tamaño de letra para una lectura descansada.',
     'settings.themes': 'Temas y Estilos Visuales',
@@ -707,10 +709,17 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
     window.addEventListener('auth-user-changed', reset);
     return () => window.removeEventListener('auth-user-changed', reset);
   }, []);
-  const [language, setLanguageState] = useState<Language>(() => {
-    const value = cachedPreference('app_lang');
-    return value === 'en' || value === 'es' ? value : 'pt';
-  });
+  const [language, setLanguageState] = useState<Language>(() => readDeviceLanguage());
+  useEffect(() => {
+    const receive = (event: Event) => setLanguageState(normalizeLanguage((event as CustomEvent).detail));
+    const reset = () => setLanguageState('pt-BR');
+    window.addEventListener('user-language-loaded', receive);
+    window.addEventListener('auth-user-changed', reset);
+    return () => {
+      window.removeEventListener('user-language-loaded', receive);
+      window.removeEventListener('auth-user-changed', reset);
+    };
+  }, []);
 
   useEffect(() => syncDocumentLanguage(language), [language]);
 
@@ -753,7 +762,7 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
           cachePreference('app_simple_view_mode', String(data.languageMode === 'basic'));
         }
       }
-      if (['pt','en','es'].includes(data.language)) setLanguageState(data.language);
+      // Language is user-scoped; shop snapshots must never override it.
       if (['normal','large','xlarge'].includes(data.fontSize)) setFontSizeState(data.fontSize);
       if (typeof data.simpleViewMode === 'boolean') {
         setSimpleViewModeState(data.simpleViewMode);
@@ -800,9 +809,10 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
   }, [themePreset, darkMode]);
 
   const setLanguage = (lang: Language) => {
-    setLanguageState(lang);
-    cachePreference('app_lang', lang);
-    persistPreference({ language: lang });
+    const selected = normalizeLanguage(lang);
+    setLanguageState(selected);
+    saveDeviceLanguage(selected);
+    window.dispatchEvent(new CustomEvent('user-language-change', { detail: selected }));
   };
 
   const setLanguageMode = (mode: LanguageMode) => {
@@ -841,23 +851,17 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
   };
 
   const t = (key: string): string => {
-    return TRANSLATIONS[language]?.[key] || TRANSLATIONS.pt[key] || key;
+    return TRANSLATIONS[language]?.[key] || TRANSLATIONS['pt-BR'][key] || '';
   };
 
   // Vocabulary translation according to the active language mode
   const v = (key: string, fallback?: string): string => {
-    return (VOCABULARY[languageMode]?.[key] || fallback || key).replace(/R\$/g, getCurrencySymbol({currency,language}));
+    return resolveVocabulary(language, languageMode, key, VOCABULARY[languageMode], fallback).replace(/R\$/g, getCurrencySymbol({currency,language}));
   };
 
   // Consistent entity naming helper (never mix "produto", "item", "mercadoria" in the same mode)
   const entityName = (plural: boolean = false): string => {
-    if (languageMode === 'technical') {
-      return plural ? 'Mercadorias' : 'Mercadoria';
-    }
-    if (languageMode === 'basic') {
-      return plural ? 'Itens' : 'Item';
-    }
-    return plural ? 'Produtos' : 'Produto';
+    return v(plural ? 'entity.plural' : 'entity.singular');
   };
 
   return (

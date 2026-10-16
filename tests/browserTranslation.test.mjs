@@ -81,6 +81,6 @@ test('long dates use a Portuguese month regardless of the machine default locale
  const date=new Date(2026,9,13,12);
  assert.equal(date.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'}),'13 de outubro de 2026');
  const dashboard=readFileSync(new URL('../src/pages/Dashboard.tsx',import.meta.url),'utf8');
- assert.ok(dashboard.includes("new Date().toLocaleDateString('pt-BR'"));
+ assert.ok(dashboard.includes("new Date().toLocaleDateString(languageLocales[normalizeLanguage(language)]"));
  assert.ok(!dashboard.includes("dd 'de' MMMM 'de' yyyy"));
 });

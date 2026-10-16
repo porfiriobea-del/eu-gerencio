@@ -1,3 +1,4 @@
+import { formatDate, normalizeLanguage, languageLocales } from '../lib/language';
 import { useCurrency } from '../lib/useCurrency';
 import { saleFee, paymentLabel } from '../lib/paymentFees';
 import { PaymentSummary } from '../components/PaymentSummary';
@@ -17,7 +18,7 @@ import { VisualReportsPanel } from '../components/VisualReportsPanel';
 import { MonthlyProfitChart } from '../components/MonthlyProfitChart';
 
 export default function Dashboard() {
-  const { formatMoney, currencySymbol } = useCurrency();
+  const { formatMoney, currencySymbol, language } = useCurrency();
 
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
   const [products, setProducts] = useState<Product[]>([]);
@@ -112,9 +113,9 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div id="dashboard-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Início - Resumo do Dia</h1>
+          <h1 className="text-2xl font-bold text-foreground">{v('ui.homeTitle', "Início - Resumo do Dia")}</h1>
           <span className="text-xs text-muted-foreground">
-            {new Date().toLocaleDateString('pt-BR', {day: 'numeric', month: 'long', year: 'numeric'})}
+            {new Date().toLocaleDateString(languageLocales[normalizeLanguage(language)], {day: 'numeric', month: 'long', year: 'numeric'})}
           </span>
         </div>
 
@@ -128,7 +129,7 @@ export default function Dashboard() {
             title="Conheça os principais botões do aplicativo com o tour guiado interativo"
           >
             <Compass className="w-4 h-4" />
-            <span>Tour Guiado</span>
+            <span>{v('ui.tour', "Tour Guiado")}</span>
           </button>
         </div>
       </div>
@@ -154,7 +155,7 @@ export default function Dashboard() {
               <p className="text-xs text-muted-foreground mt-0.5">
                 {languageMode === 'basic' 
                   ? 'Veja de forma direta quanto dinheiro entrou, quanto saiu e o que sobrou no seu bolso hoje.'
-                  : `Movimentações registradas em ${format(new Date(), "dd/MM/yyyy")}`}
+                  : `Movimentações registradas em ${formatDate(new Date(), normalizeLanguage(language))}`}
               </p>
             </div>
           </div>
@@ -167,7 +168,7 @@ export default function Dashboard() {
               title="Exportar relatório do comércio por período personalizado"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>Exportar por Período</span>
+              <span>{v('ui.export', "Exportar por Período")}</span>
             </button>
             <Link
               to="/configuracoes"
@@ -408,8 +409,8 @@ export default function Dashboard() {
       <div className="bg-surface rounded-xl shadow-sm border border-border p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-lg font-bold text-foreground">Vendas Recentes de Hoje</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Mostrando os produtos vendidos em cada transação</p>
+            <h3 className="text-lg font-bold text-foreground">{v('ui.recentSales', "Vendas Recentes de Hoje")}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">{v('ui.salesHelp', "Mostrando os produtos vendidos em cada transação")}</p>
           </div>
           <span className="text-xs font-semibold px-2.5 py-1 bg-palette-1 text-primary rounded-full">
             {sales.length} {sales.length === 1 ? 'venda hoje' : 'vendas hoje'}
@@ -417,17 +418,17 @@ export default function Dashboard() {
         </div>
 
         {sales.length === 0 ? (
-          <p className="text-muted-foreground text-sm py-4 text-center">Nenhuma venda registrada hoje.</p>
+          <p className="text-muted-foreground text-sm py-4 text-center">{v('ui.noSales', "Nenhuma venda registrada hoje.")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="p-3 text-muted-foreground font-medium w-20">Hora</th>
-                  <th className="p-3 text-muted-foreground font-medium">Itens Vendidos</th>
-                  <th className="p-3 text-muted-foreground font-medium w-28">Pagamento</th>
-                  <th className="p-3 text-muted-foreground font-medium text-right w-28">Valor Total</th>
-                  <th className="p-3 text-muted-foreground font-medium text-center w-24">Ações</th>
+                  <th className="p-3 text-muted-foreground font-medium w-20">{v('ui.time', "Hora")}</th>
+                  <th className="p-3 text-muted-foreground font-medium">{v('ui.soldItems', "Itens Vendidos")}</th>
+                  <th className="p-3 text-muted-foreground font-medium w-28">{v('ui.payment', "Pagamento")}</th>
+                  <th className="p-3 text-muted-foreground font-medium text-right w-28">{v('ui.total', "Valor Total")}</th>
+                  <th className="p-3 text-muted-foreground font-medium text-center w-24">{v('ui.actions', "Ações")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -488,7 +489,7 @@ export default function Dashboard() {
                           className="p-1.5 text-muted-foreground hover:text-primary hover:bg-palette-1 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 text-xs font-medium"
                         >
                           <Eye className="w-4 h-4" />
-                          <span className="hidden sm:inline">Ver Itens</span>
+                          <span className="hidden sm:inline">{v('ui.viewItems', "Ver Itens")}</span>
                         </button>
                       </td>
                     </tr>
@@ -609,9 +610,9 @@ export default function Dashboard() {
                   <ShoppingBag className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-foreground">Detalhes da Venda</h3>
+                  <h3 className="text-lg font-bold text-foreground">{v('ui.saleDetails', "Detalhes da Venda")}</h3>
                   <p className="text-xs text-muted-foreground">
-                    Registrada às {format(new Date(selectedSale.createdAt), 'HH:mm - dd/MM/yyyy')}
+                    Registrada às {new Date(selectedSale.createdAt).toLocaleString(languageLocales[normalizeLanguage(language)])}
                   </p>
                 </div>
               </div>
@@ -650,7 +651,7 @@ export default function Dashboard() {
               <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Produtos Vendidos:</h4>
               
               {loadingItems ? (
-                <div className="py-6 text-center text-sm text-muted-foreground">Carregando itens...</div>
+                <div className="py-6 text-center text-sm text-muted-foreground">{v('ui.loadingItems', "Carregando itens...")}</div>
               ) : saleItems.length > 0 ? (
                 <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
                   {saleItems.map((item, idx) => (
@@ -683,7 +684,7 @@ export default function Dashboard() {
                 onClick={() => setSelectedSale(null)}
                 className="px-4 py-2 bg-muted text-foreground font-medium rounded-xl hover:bg-muted/80 text-sm cursor-pointer"
               >
-                Fechar
+                {v('ui.close', "Fechar")}
               </button>
             </div>
           </div>

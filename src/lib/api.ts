@@ -123,7 +123,7 @@ export const saveStoreProfile = async (profile: {storeName: string, cnpj: string
   try {
     const initial: Settings = {
       ...profile,
-      currency: 'BRL', language: 'pt', fontSize: 'normal', simpleViewMode: profile.languageMode === 'basic',
+      currency: 'BRL', fontSize: 'normal', simpleViewMode: profile.languageMode === 'basic',
       theme: 'standard',
       darkMode: false,
       defaultMargin: 30,
