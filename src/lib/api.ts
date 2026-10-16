@@ -1,3 +1,4 @@
+import { calculatePayment, paymentLabel } from './paymentFees';
 import { soldBaseQuantity } from './productSalesRanking';
 import { findDuplicateProducts, isDuplicateProduct } from './duplicateDetector';
 import { supabase } from './supabase';
@@ -539,10 +540,15 @@ export const recordSale = withActionDeadline(async (
   const saleRef = doc(collection(db, 'sales'));
   const itemRefs = items.map(() => doc(collection(db, `sales/${saleRef.id}/saleItems`)));
   if (!items.length || !Number.isFinite(sale.total) || sale.total <= 0) throw new Error('Venda inválida.');
+  if (items.some(item => !Number.isFinite(item.price) || item.price <= 0)) throw new Error('Preço de venda inválido.');
+  if (items.some(item => !Number.isSafeInteger(item.quantity) || item.quantity <= 0)) throw new Error('Quantidade inválida.');
   try {
     await runTransaction(db, async transaction => {
       const ids = [...new Set(items.map(item => item.productId))];
       const snapshots = await Promise.all(ids.map(id => transaction.get(doc(db, 'products', id))));
+      const feeSettings = await transaction.get(doc(db, 'settings', uid));
+      const payment = calculatePayment(items.reduce((sum,item) => sum + item.price * item.quantity, 0), sale.paymentMethod || (sale.type === 'card' ? 'debit' : sale.type), feeSettings.exists() ? feeSettings.data() as Settings : null);
+      if (Math.abs(payment.total - sale.total) > 0.001) throw new Error('O valor ou a taxa mudou. Confira o pagamento antes de confirmar.');
       const customer = sale.type === 'fiado' && sale.customerId ? await transaction.get(doc(db, 'customers', sale.customerId)) : null;
       const deductions = new Map<string, number>();
       const stockProducts = new Map<string, Product>();
@@ -581,7 +587,7 @@ export const recordSale = withActionDeadline(async (
           ? `${item.name} — Venda: ${formatCigaretteStock(Math.round(productFormatUnits(product, item.format) * 20) * item.quantity / 20)}; estoque agora ${formatProductStock(product, balances.get(item.productId)!)}`
           : `${item.quantity}x ${item.name} (${item.format})`;
       }).join('; ');
-      transaction.set(saleRef, { ...sale, itemsSummary: confirmedSummary || summary, employeeId: empId, employeeName: empName, ownerId: uid, createdAt: now });
+      transaction.set(saleRef, { ...sale, ...payment, itemsSummary: confirmedSummary || summary, employeeId: empId, employeeName: empName, ownerId: uid, createdAt: now });
       items.forEach((item, index) => transaction.set(itemRefs[index], {
         ...item, stockAfter: balances.get(item.productId), unitCost: stockProducts.get(item.productId)!.unitCost * (item.stockDeduction ?? (productFormatUnits(stockProducts.get(item.productId)!, item.format))), ownerId: uid, createdAt: now
       }));
@@ -589,7 +595,7 @@ export const recordSale = withActionDeadline(async (
 
     reportUsage('venda', uid, sale.total);
     if (sale.type === 'fiado') reportUsage('fiado_lancado', uid, sale.total);
-    const typeLabel = sale.paymentMethod === 'pix' ? 'PIX' : sale.type === 'cash' ? 'Dinheiro' : sale.type === 'card' ? 'Cartão' : 'Fiado';
+    const typeLabel = paymentLabel(sale);
     const totalQuantity = items.reduce((acc, it) => acc + (it.quantity || 1), 0);
 
     recordMovement({

@@ -131,9 +131,14 @@ export interface Sale {
   id?: string;
   total: number;
   type: 'cash' | 'card' | 'fiado';
-  paymentMethod?: 'cash' | 'debit' | 'credit' | 'pix' | 'voucher' | 'fiado';
+  paymentMethod?: 'cash' | 'debit' | 'credit' | 'pix' | 'pix_machine' | 'voucher' | 'fiado';
   customerId?: string;
   itemsSummary?: string;
+  subtotal?: number;
+  feeRate?: number;
+  feeAmount?: number;
+  surchargeAmount?: number;
+  netTotal?: number;
   employeeId?: string;
   employeeName?: string;
   ownerId: string;
@@ -231,7 +236,7 @@ export interface Settings {
   enableCardFees?: boolean;
   creditCardRate?: number; // % taxa cartão de crédito (ex: 3.5%)
   debitCardRate?: number; // % taxa cartão de débito (ex: 1.5%)
-  pixRate?: number; // % taxa Pix (ex: 0%)
+  pixRate?: number; // % taxa somente do Pix na maquininha; Pix direto é isento.
   voucherRate?: number; // % taxa vale/alimentação (ex: 2.0%)
   otherFeesRate?: number; // % outras taxas
   passCardFeeToCustomer?: boolean; // Se verdadeiro, repassa a taxa para o cliente no valor final

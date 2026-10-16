@@ -27,12 +27,12 @@ const mocks = {
  categories:'export const BUSINESS_SECTORS=[];export const getSavedBusinessSector=()=>"mercearia";export const saveBusinessSector=()=>{};export const getCustomCategories=()=>[];export const setCustomCategories=()=>{};export const saveCustomCategory=()=>{};export const removeCustomCategory=()=>{};export const getAllCategories=()=>["Bebidas"];',
  supabase:'export const GOOGLE_SHEETS_WEBHOOK_URL="";export const getGoogleSheetsWebhookUrl=()=>"";export const setGoogleSheetsWebhookUrl=()=>{};export const testGoogleSheetsWebhook=async()=>({});export const getGoogleSheetsLogs=()=>[];export const clearGoogleSheetsLogs=()=>{};export const isGoogleSheetsWebhookEnabled=()=>false;export const setGoogleSheetsWebhookEnabled=()=>{};'
 };
-for(const name of ['ExportPeriodModal','ThemeSelectorDropdown','CardFeeSettingsSection','FeedbackSection']) mocks[name]=`export const ${name}=()=>null;`;
-await build({stdin:{contents:"export * from './src/lib/preferencesContext'; export * from './src/components/GlobalMovementHistory'; export {default as SettingsView} from './src/pages/SettingsView'; export {CatalogImportModal} from './src/components/CatalogImportModal';",resolveDir:new URL('..',import.meta.url).pathname,loader:'tsx'},bundle:true,packages:'external',platform:'node',format:'esm',jsx:'automatic',outfile:`${dir}/language.mjs`,plugins:[{name:'records',setup(b){
+for(const name of ['ExportPeriodModal','ThemeSelectorDropdown','FeedbackSection']) mocks[name]=`export const ${name}=()=>null;`;
+await build({stdin:{contents:"export * from './src/lib/preferencesContext'; export * from './src/components/GlobalMovementHistory'; export {default as SettingsView} from './src/pages/SettingsView'; export {CatalogImportModal} from './src/components/CatalogImportModal'; export {PaymentSummary} from './src/components/PaymentSummary'; export {CardFeeSettingsSection} from './src/components/CardFeeSettingsSection';",resolveDir:new URL('..',import.meta.url).pathname,loader:'tsx'},bundle:true,packages:'external',platform:'node',format:'esm',jsx:'automatic',outfile:`${dir}/language.mjs`,plugins:[{name:'records',setup(b){
  b.onResolve({filter:/.*/},args=>{const name=args.path.split('/').at(-1);return mocks[name]?{path:name,namespace:'mock-records'}:undefined;});
  b.onLoad({filter:/.*/,namespace:'mock-records'},args=>({contents:mocks[args.path],loader:'js'}));
 }}]});
-const {PreferencesProvider,usePreferences,GlobalMovementHistory,VOCABULARY,SettingsView,CatalogImportModal}=await import(pathToFileURL(`${dir}/language.mjs`));
+const {PaymentSummary,CardFeeSettingsSection,PreferencesProvider,usePreferences,GlobalMovementHistory,VOCABULARY,SettingsView,CatalogImportModal}=await import(pathToFileURL(`${dir}/language.mjs`));
 let prefs;
 function Controls(){prefs=usePreferences();return React.createElement('div',null,['technical','neutral','basic'].map(mode=>React.createElement('button',{key:mode,onClick:()=>prefs.setLanguageMode(mode)},mode)),React.createElement('output',null,`${prefs.languageMode}/${prefs.simpleViewMode}/${prefs.v('debt.balance')}`));}
 function setup(){return render(React.createElement(MemoryRouter,null,React.createElement(PreferencesProvider,null,React.createElement(Controls),React.createElement(GlobalMovementHistory))));}
@@ -83,7 +83,7 @@ test('Settings uses compact sections in simple mode and autosaves the current la
  const advanced=ui.getByText('Mais opções: planilhas e cópias de segurança').closest('details');
  assert.equal(advanced.open,false);
  assert.ok(ui.getByText('Total vendido'));
- assert.ok(ui.getByText('Vendas menos compras'));
+ assert.ok(ui.getByText('Vendas menos compras e taxas'));
  // Preferences are expanded only when requested.
  fireEvent.click(ui.getByText('Personalização e Tema'));
  fireEvent.click(ui.getByRole('button',{name:/Neutro \(Comercial\)/}));
@@ -115,5 +115,19 @@ test('catalog save action and validation use the active language mode',()=>{
   fireEvent.click(ui.getByRole('button',{name:action}));
   assert.ok(ui.getByRole('alert').textContent.startsWith(prefix));
   assert.ok(ui.getByRole('dialog'));cleanup();
+ }
+});
+
+
+test('Pix fee settings and report labels exist in all language modes and change during the session',()=>{
+ for(const mode of ['technical','neutral','basic']){
+  localStorage.setItem('app_lang_mode',mode);
+  const ui=render(React.createElement(PreferencesProvider,null,React.createElement(Controls),React.createElement(CardFeeSettingsSection,{settings:{enableCardFees:true,pixRate:0.49},onSave:async()=>{}}),React.createElement(PaymentSummary,{sales:[{type:'card',paymentMethod:'pix',total:100},{type:'card',paymentMethod:'pix_machine',total:100,feeAmount:0.49}]})));
+  assert.ok(ui.getByText('Taxa do Pix na maquininha'));
+  assert.ok(ui.getByText(VOCABULARY[mode]['payment.pixHelp']));
+  assert.ok(ui.getByText('Pix (direto na conta)'));assert.ok(ui.getByText('Pix na maquininha'));
+  fireEvent.click(ui.getByRole('button',{name:'basic'}));
+  assert.ok(ui.getByText(VOCABULARY.basic['payment.pixHelp']));
+  cleanup();
  }
 });

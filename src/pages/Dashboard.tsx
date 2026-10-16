@@ -1,3 +1,5 @@
+import { saleFee, paymentLabel } from '../lib/paymentFees';
+import { PaymentSummary } from '../components/PaymentSummary';
 import { formatProductStock } from '../lib/productUnits';
 import { getReorderPoint } from '../lib/stockSuggestions';
 import { useState, useEffect } from 'react';
@@ -97,6 +99,7 @@ export default function Dashboard() {
   };
 
   const totalSales = sales.reduce((sum, sale) => sum + sale.total, 0);
+  const feesPaid = sales.reduce((sum,sale) => sum + saleFee(sale), 0);
   const totalDebt = customers.reduce((sum, c) => sum + c.totalDebt, 0);
   const goal = settings?.dailyGoal || 500;
   
@@ -238,18 +241,18 @@ export default function Dashboard() {
           </div>
 
           {/* Card 3: O que sobrou hoje */}
-          <div className={`bg-card border ${totalSales - todayPurchasesSpent >= 0 ? 'border-emerald-200 dark:border-emerald-900/40' : 'border-amber-200 dark:border-amber-900/40'} rounded-xl p-4 flex flex-col justify-between shadow-xs`}>
+          <div className={`bg-card border ${totalSales - todayPurchasesSpent - feesPaid >= 0 ? 'border-emerald-200 dark:border-emerald-900/40' : 'border-amber-200 dark:border-amber-900/40'} rounded-xl p-4 flex flex-col justify-between shadow-xs`}>
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className={`text-xs font-bold uppercase tracking-wide ${totalSales - todayPurchasesSpent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                <span className={`text-xs font-bold uppercase tracking-wide ${totalSales - todayPurchasesSpent - feesPaid >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
                   {v('reports.balance')}
                 </span>
-                <div className={`p-1.5 rounded-lg ${totalSales - todayPurchasesSpent >= 0 ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400'}`}>
+                <div className={`p-1.5 rounded-lg ${totalSales - todayPurchasesSpent - feesPaid >= 0 ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400'}`}>
                   <Wallet className="w-4 h-4" />
                 </div>
               </div>
-              <div className={`text-2xl font-black ${totalSales - todayPurchasesSpent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                R$ {(totalSales - todayPurchasesSpent).toFixed(2)}
+              <div className={`text-2xl font-black ${totalSales - todayPurchasesSpent - feesPaid >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                R$ {(totalSales - todayPurchasesSpent - feesPaid).toFixed(2)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Diferença entre o total vendido e as compras registradas.
@@ -302,6 +305,7 @@ export default function Dashboard() {
       </div>
 
       {/* GRÁFICO DE LUCRO MENSAL (VENDAS − CUSTOS DE COMPRA) */}
+      <PaymentSummary sales={sales} />
       <div id="dashboard-monthly-profit">
         <MonthlyProfitChart />
       </div>
@@ -468,7 +472,7 @@ export default function Dashboard() {
                           sale.type === 'card' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400' :
                           'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400'
                         }`}>
-                          {sale.type === 'cash' ? 'Dinheiro' : sale.type === 'card' ? 'Cartão' : 'Fiado'}
+                          {paymentLabel(sale)}
                         </span>
                       </td>
                       <td className="p-3 text-right font-bold text-foreground">

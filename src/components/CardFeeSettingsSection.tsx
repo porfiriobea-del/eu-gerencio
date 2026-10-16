@@ -1,3 +1,4 @@
+import { usePreferences } from '../lib/preferencesContext';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import { useState, useEffect } from 'react';
 import { CreditCard, Percent, DollarSign, HelpCircle, ShieldCheck, CheckCircle2, Save, ArrowRight } from 'lucide-react';
@@ -10,6 +11,7 @@ interface CardFeeSettingsSectionProps {
 }
 
 export function CardFeeSettingsSection({ settings, onSave, isSaving = false }: CardFeeSettingsSectionProps) {
+  const { v } = usePreferences();
   const [enableCardFees, setEnableCardFees] = useState(settings?.enableCardFees ?? true);
   const [creditCardRate, setCreditCardRate] = useState<number>(settings?.creditCardRate ?? 3.5);
   const [debitCardRate, setDebitCardRate] = useState<number>(settings?.debitCardRate ?? 1.5);
@@ -185,8 +187,8 @@ export function CardFeeSettingsSection({ settings, onSave, isSaving = false }: C
 
             {/* PIX */}
             <div className="p-3.5 rounded-xl border border-border bg-surface">
-              <label className="block text-xs font-bold text-foreground mb-1">
-                💠 PIX Maquininha / QR
+              <label htmlFor="pix-machine-rate" className="block text-xs font-bold text-foreground mb-1">
+                {v('payment.pixRate', 'Taxa do Pix na maquininha')}
               </label>
               <div className="relative mt-1">
                 <input
@@ -194,6 +196,7 @@ export function CardFeeSettingsSection({ settings, onSave, isSaving = false }: C
                   step="0.01"
                   min="0"
                   max="100"
+                  id="pix-machine-rate"
                   value={pixRate}
                   onChange={(e) => setPixRate(Number(e.target.value))}
                   onBlur={() => onSave({ pixRate: Number(pixRate) })}
@@ -202,7 +205,7 @@ export function CardFeeSettingsSection({ settings, onSave, isSaving = false }: C
                 />
                 <span className="absolute right-2.5 top-2 text-muted-foreground font-bold text-sm">%</span>
               </div>
-              <span className="text-[11px] text-muted-foreground mt-1 block">Normalmente 0% ou ~0.99%</span>
+              <span className="text-[11px] text-muted-foreground mt-1 block">{v('payment.pixHelp', 'Vale apenas para Pix pago na maquininha; a loja paga essa taxa e o Pix direto na conta não tem taxa.')}</span>
             </div>
 
             {/* Vale Refeição / Alimentação / Outras */}
@@ -295,7 +298,7 @@ export function CardFeeSettingsSection({ settings, onSave, isSaving = false }: C
                   Repassar Taxinha para o Cliente (Acréscimo no Cartão)
                 </span>
                 <span className="text-[11px] text-muted-foreground leading-relaxed block mt-0.5">
-                  Permitido por lei: ao cobrar no cartão, a taxa configurada é adicionada ao total para preservar 100% da margem líquida do produto.
+                  {v('payment.surchargeHelp', 'O acréscimo vale só para crédito, débito e voucher. A taxa do Pix na maquininha fica com a loja; Pix direto é sem taxa.')}
                 </span>
               </div>
             </label>

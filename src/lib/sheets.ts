@@ -1,3 +1,4 @@
+import { paymentLabel, saleFee, saleNet } from './paymentFees';
 import { getAccessToken } from "./auth";
 import { format } from "date-fns";
 
@@ -34,8 +35,8 @@ export async function exportToSheets(data: {
 
   // 2. Prepare Data
   const salesData = [
-    ["Data", "Tipo", "Total (R$)"],
-    ...data.sales.map(s => [format(new Date(s.createdAt), "dd/MM/yyyy HH:mm"), s.type === 'cash' ? 'Dinheiro' : s.type === 'card' ? 'Cartão' : 'Fiado', Number(s.total || 0).toFixed(2)])
+    ["Data", "Tipo", "Total (R$)", "Taxa (R$)", "Valor líquido (R$)"],
+    ...data.sales.map(s => [format(new Date(s.createdAt), "dd/MM/yyyy HH:mm"), paymentLabel(s), Number(s.total || 0).toFixed(2), saleFee(s).toFixed(2), saleNet(s).toFixed(2)])
   ];
 
   const purchasesData = [

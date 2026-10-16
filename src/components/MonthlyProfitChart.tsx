@@ -1,3 +1,4 @@
+import { saleFee } from '../lib/paymentFees';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   ResponsiveContainer,
@@ -95,7 +96,7 @@ export function MonthlyProfitChart() {
         const purchasesTotal = mPurchases.reduce((acc, p) => acc + (p.totalCost || 0), 0);
 
         // Diferença = Vendas - Compras (Diferença entre vendas e compras Real das Mercadorias)
-        const profit = salesTotal - purchasesTotal;
+        const profit = salesTotal - purchasesTotal - mSales.reduce((sum,sale) => sum + saleFee(sale), 0);
 
         monthsList.push({
           monthKey,
@@ -136,7 +137,7 @@ export function MonthlyProfitChart() {
 
     const totalSales = monthlyData.reduce((acc, m) => acc + m.sales, 0);
     const totalPurchases = monthlyData.reduce((acc, m) => acc + m.purchases, 0);
-    const totalProfit = totalSales - totalPurchases;
+    const totalProfit = monthlyData.reduce((sum,month) => sum + month.profit, 0);
     const averageProfit = totalProfit / monthlyData.length;
     const positiveMonthsCount = monthlyData.filter(m => m.profit > 0).length;
 
@@ -385,7 +386,7 @@ export function MonthlyProfitChart() {
               <span>
                 {languageMode === 'basic' ? (
                   <>
-                    <strong>Conta simples:</strong> [Total vendido] − [Compras registradas] = <strong className="text-foreground">Diferença entre vendas e compras</strong>.
+                    <strong>Conta simples:</strong> [Total vendido] − [Compras registradas] − [Taxas da maquininha] = <strong className="text-foreground">Diferença entre vendas e compras</strong>.
                   </>
                 ) : (
                   <>
@@ -474,7 +475,7 @@ export function MonthlyProfitChart() {
                       <ReferenceLine y={0} stroke="currentColor" opacity={0.4} strokeWidth={1.5} />
                       <Bar
                         dataKey="profit"
-                        name={languageMode === 'basic' ? 'Vendas menos compras' : 'Diferença entre vendas e compras'}
+                        name={languageMode === 'basic' ? 'Vendas menos compras e taxas' : 'Vendas menos compras e taxas'}
                         radius={[6, 6, 0, 0]}
                         maxBarSize={48}
                       >
@@ -533,7 +534,7 @@ export function MonthlyProfitChart() {
                       <Line
                         type="monotone"
                         dataKey="profit"
-                        name={languageMode === 'basic' ? 'Vendas menos compras' : 'Diferença entre vendas e compras'}
+                        name={languageMode === 'basic' ? 'Vendas menos compras e taxas' : 'Vendas menos compras e taxas'}
                         stroke="#10B981"
                         strokeWidth={3}
                         dot={{ r: 4, fill: '#10B981', strokeWidth: 2, stroke: '#FFFFFF' }}

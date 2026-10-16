@@ -24,9 +24,9 @@ await build({entryPoints:[new URL('../src/pages/POS.tsx',import.meta.url).pathna
 const {default:POS}=await import(pathToFileURL(`${dir}/POS.mjs`).href);
 const standard={id:'p1',name:'Suco',category:'Bebidas',type:'comum',stock:10,basePrice:5,unitCost:1,unitsPerPackage:1,safetyStock:0,dailyAverageSales:0,replacementDays:3};
 const cigarettes={...standard,id:'p2',name:'Cigarro',category:'Cigarros',type:'cigarro',stockUnit:'carteira',stock:20,unitsPerPackage:10,unitCost:10,basePrice:20,pricePack:180,priceCart:20,priceHalfCart:11,priceUnit:2};
-function setup(onSale=async()=>{},isDesktop=false){
+function setup(onSale=async()=>{},isDesktop=false,feeSettings={}){
  desktop=isDesktop;
- globalThis.__posApi={getProductSalesTotals:async()=>globalThis.__posRanking||{},subscribeProducts(cb){cb([standard,cigarettes]);return()=>{};},subscribeCustomers(cb){cb([]);return()=>{};},subscribeTodaySales(cb){cb([]);return()=>{};},subscribeCashClosures(cb){cb([]);return()=>{};},subscribeSettings(cb){cb({enableCardFees:false});return()=>{};},recordSale:onSale};
+ globalThis.__posApi={getProductSalesTotals:async()=>globalThis.__posRanking||{},subscribeProducts(cb){cb([standard,cigarettes]);return()=>{};},subscribeCustomers(cb){cb([]);return()=>{};},subscribeTodaySales(cb){cb([]);return()=>{};},subscribeCashClosures(cb){cb([]);return()=>{};},subscribeSettings(cb){cb({enableCardFees:false,...feeSettings});return()=>{};},recordSale:onSale};
  return render(React.createElement(React.Fragment,null,React.createElement(POS),React.createElement(AppToast)));
 }
 afterEach(()=>{cleanup();localStorage.clear();delete globalThis.__posApi;delete globalThis.__posRanking;});
@@ -63,7 +63,7 @@ test('PIX checkout preserves fractional deductions, waits for confirmation and c
  fireEvent.click(ui.getByRole('button',{name:/Unidade Avulsa \(1 cigarro\)/}));
  openCart(ui);assert.ok(ui.getByText(/Baixa: 1 cigarro/));
  fireEvent.click(ui.getByRole('button',{name:'Finalizar Compra / Receber'}));assert.equal(ui.queryByRole('dialog',{name:/Carrinho/}),null);
- fireEvent.click(ui.getByRole('button',{name:'PIX'}));
+ fireEvent.click(ui.getByRole('button',{name:'Pix (direto na conta)'}));
  await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Confirmar'}));});
  assert.equal(recorded[0].paymentMethod,'pix');assert.equal(recorded[0].total,22);
  assert.deepEqual(recorded[1].map(item=>item.stockDeduction),[1,0.05]);assert.equal(recorded[2][0].newStock,18.95);
@@ -91,3 +91,17 @@ test('POS shows the best seller first and preserves ranking while searching',asy
  fireEvent.change(ui.getByPlaceholderText(/Buscar.*nome/),{target:{value:''}});
  assert.deepEqual(names(),['Cigarro','Suco']);
 });
+
+
+for(const [method,total] of [['Pix (direto na conta)',5],['Pix na maquininha',5],['Crédito',5.5],['Débito',5.5],['Voucher',5.5]]){
+ test(`checkout applies customer surcharges only to cards: ${method}`,async()=>{
+  let saved;
+  const ui=setup(async sale=>{saved=sale;},false,{enableCardFees:true,pixRate:10,creditCardRate:10,debitCardRate:10,voucherRate:10,cardFeeCalculationMode:'surcharge',passCardFeeToCustomer:true});
+  addStandard(ui);openCart(ui);fireEvent.click(ui.getByRole('button',{name:'Finalizar Compra / Receber'}));
+  if(method.startsWith('Pix'))fireEvent.click(ui.getByRole('button',{name:method}));
+  else{fireEvent.click(ui.getByRole('button',{name:/Cartão$/}));fireEvent.click(ui.getByRole('button',{name:method==='Voucher'?'Vale':method}));}
+  await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Confirmar'}));});
+  assert.equal(saved.total,total);
+  assert.equal(saved.paymentMethod,method==='Pix na maquininha'?'pix_machine':method.startsWith('Pix')?'pix':method==='Crédito'?'credit':method==='Débito'?'debit':'voucher');
+ });
+}

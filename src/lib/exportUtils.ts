@@ -1,3 +1,4 @@
+import { paymentLabel, saleFee, saleNet } from './paymentFees';
 import { format } from 'date-fns';
 import { Purchase, Sale, Customer, Product } from '../types';
 
@@ -121,10 +122,11 @@ export function exportFullReportToCSV(data: {
       Number(data.outflow ?? data.purchases.reduce((sum, p) => sum + (p.totalCost || 0), 0)).toFixed(2).replace('.', ','),
       'Desembolsos para reposição de mercadorias'
     ],
+    ['Taxas pagas pela loja', data.sales.reduce((sum,sale) => sum + saleFee(sale), 0).toFixed(2).replace('.', ','), 'Taxas gravadas na data da venda'],
     [
       'O que sobrou para você (Saldo Operacional)',
-      Number(data.balance ?? ((data.inflow ?? data.sales.reduce((sum, s) => sum + (s.total || 0), 0)) - (data.outflow ?? data.purchases.reduce((sum, p) => sum + (p.totalCost || 0), 0)))).toFixed(2).replace('.', ','),
-      'Resultado líquido disponível (Entrou - Saiu)'
+      Number(data.balance ?? ((data.inflow ?? data.sales.reduce((sum, s) => sum + (s.total || 0), 0)) - (data.outflow ?? data.purchases.reduce((sum, p) => sum + (p.totalCost || 0), 0)) - data.sales.reduce((sum,sale) => sum + saleFee(sale), 0))).toFixed(2).replace('.', ','),
+      'Vendas menos compras e taxas; inclui fiado ainda não recebido'
     ],
     [
       'Total em Caderneta (Fiado a Receber no Período)',
@@ -135,19 +137,21 @@ export function exportFullReportToCSV(data: {
     ['========================================'],
     ['1. DETALHAMENTO DE VENDAS REALIZADAS'],
     ['========================================'],
-    ['Data e Hora', 'Forma de Pagamento', 'Itens Vendidos', 'Valor Total (R$)']
+    ['Data e Hora', 'Forma de Pagamento', 'Itens Vendidos', 'Valor Total (R$)', 'Taxa (R$)', 'Valor líquido (R$)']
   ];
 
   let totalSalesAmount = 0;
   data.sales.forEach(s => {
     totalSalesAmount += Number(s.total || 0);
-    const typeLabel = s.type === 'cash' ? 'Dinheiro' : s.type === 'card' ? 'Cartão' : 'Fiado';
+    const typeLabel = paymentLabel(s);
     const itemsText = s.itemsSummary ? `"${s.itemsSummary.replace(/"/g, '""')}"` : '"Venda registrada"';
     rows.push([
       format(new Date(s.createdAt), 'dd/MM/yyyy HH:mm'),
       typeLabel,
       itemsText,
-      Number(s.total || 0).toFixed(2).replace('.', ',')
+      Number(s.total || 0).toFixed(2).replace('.', ','),
+      saleFee(s).toFixed(2).replace('.', ','),
+      saleNet(s).toFixed(2).replace('.', ',')
     ]);
   });
 

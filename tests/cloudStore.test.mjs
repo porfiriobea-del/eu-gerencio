@@ -307,3 +307,24 @@ test('editing cigarette stock canonicalizes floating drift and rejects non-cigar
  await assert.rejects(api.updateProduct('fraction-edit',{stock:0.03}),/Estoque inválido/);
  assert.equal((await store.getDoc(ref)).data().stock,1.9);
 });
+
+test('sales persist machine Pix fees, keep direct Pix free and validate card surcharge against cloud settings',async t=>{
+ const settingsRef=store.doc(store.db,'settings','owner');
+ const previous=await store.getDoc(settingsRef);
+ t.after(async()=>{if(previous.exists())await store.setDoc(settingsRef,previous.data());else await store.deleteDoc(settingsRef);});
+ await store.setDoc(settingsRef,{ownerId:'owner',enableCardFees:true,pixRate:0.49,creditCardRate:3,cardFeeCalculationMode:'surcharge',passCardFeeToCustomer:true});
+ const ref=store.doc(store.db,'products','pix-fee-test');
+ await store.setDoc(ref,{ownerId:'owner',name:'Produto Pix',type:'comum',stock:10,unitCost:50,basePrice:100,unitsPerPackage:1});
+ const item={productId:'pix-fee-test',name:'Produto Pix',format:'Padrão',quantity:1,price:100,unitCost:50,stockDeduction:1};
+ await api.recordSale({total:100,type:'card',paymentMethod:'pix_machine',customerId:''},[item],[]);
+ await api.recordSale({total:100,type:'card',paymentMethod:'pix',customerId:''},[item],[]);
+ await assert.rejects(api.recordSale({total:100,type:'card',paymentMethod:'credit',customerId:''},[item],[]),/taxa mudou/);
+ assert.equal((await store.getDoc(ref)).data().stock,8);
+ await api.recordSale({total:103,type:'card',paymentMethod:'credit',customerId:''},[item],[]);
+ const rows=(await store.getDocs(store.collection(store.db,'sales'))).docs.map(doc=>doc.data()).filter(row=>row.itemsSummary.includes('Produto Pix'));
+ const machine=rows.find(row=>row.paymentMethod==='pix_machine'),direct=rows.find(row=>row.paymentMethod==='pix');
+ assert.equal(machine.total,100);assert.equal(machine.feeAmount,0.49);assert.equal(machine.netTotal,99.51);assert.equal(machine.surchargeAmount,0);
+ assert.equal(direct.total,100);assert.equal(direct.feeAmount,0);assert.equal(direct.netTotal,100);
+ await store.updateDoc(settingsRef,{pixRate:10});
+ assert.equal(machine.feeAmount,0.49);
+});

@@ -1,3 +1,5 @@
+import { saleFee, pixTotals } from '../lib/paymentFees';
+import { PaymentSummary } from '../components/PaymentSummary';
 import { showToast, showActionError, withActionDeadline } from '../lib/actionFeedback';
 import { useState, useEffect, useRef } from 'react';
 import { subscribeSettings, updateSettings, subscribeCustomers, subscribeProducts, getSalesByDateRange, deleteEntireAccountData, getPurchasesByDateRange } from '../lib/api';
@@ -495,6 +497,7 @@ function doPost(e) {
 
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [reportMetrics, setReportMetrics] = useState<{
+    pix: ReturnType<typeof pixTotals>;
     inflow: number;
     cashInflow: number;
     cardInflow: number;
@@ -505,6 +508,7 @@ function doPost(e) {
     purchasesCount: number;
     loading: boolean;
   }>({
+    pix: pixTotals([]),
     inflow: 0,
     cashInflow: 0,
     cardInflow: 0,
@@ -550,9 +554,10 @@ function doPost(e) {
           outflow += p.totalCost || 0;
         });
 
-        const balance = inflow - outflow;
+        const balance = inflow - outflow - filteredSales.reduce((sum,sale) => sum + saleFee(sale), 0);
 
         setReportMetrics({
+          pix: pixTotals(filteredSales),
           inflow,
           cashInflow,
           cardInflow,
@@ -1725,6 +1730,7 @@ function doPost(e) {
             </div>
           )}
 
+          <PaymentSummary totals={reportMetrics.pix} />
           {/* 4 CARDS DE MÉTRICAS COM TRADUÇÃO DESCOMPLICADA */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             {/* Card 1: Dinheiro que entrou */}
@@ -1819,7 +1825,7 @@ function doPost(e) {
               <div className={`${simpleViewMode ? 'hidden' : ''} mt-4 pt-3 border-t border-border space-y-1 text-[11px] text-muted-foreground`}>
                 <div className="flex justify-between">
                   <span>Conta rápida:</span>
-                  <strong className="text-muted-foreground">Vendas − Compras</strong>
+                  <strong className="text-muted-foreground">Vendas − Compras − Taxas</strong>
                 </div>
                 <div className="flex justify-between">
                   <span>Status do caixa:</span>
@@ -2009,7 +2015,7 @@ function doPost(e) {
                    >
                      <option value="todas">Todas as Formas</option>
                      <option value="cash">Apenas Dinheiro Vivo</option>
-                     <option value="card">Apenas Cartão / Máquina</option>
+                     <option value="card">Cartão e Pix</option>
                      <option value="fiado">Apenas Fiado / Caderneta</option>
                    </select>
                 </div>

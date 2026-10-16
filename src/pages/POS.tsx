@@ -1,3 +1,4 @@
+import { calculatePayment } from '../lib/paymentFees';
 import { formatProductStock } from '../lib/productUnits';
 import { rankProductsBySales } from '../lib/productSalesRanking';
 import { CartDrawer, type CartItem } from '../components/CartDrawer';
@@ -64,7 +65,7 @@ export default function POS() {
   
   // Checkout states
   const [paymentType, setPaymentType] = useState<'cash'|'card'|'fiado'>('cash');
-  const [cardMethod, setCardMethod] = useState<'debit'|'credit'|'pix'|'voucher'>('debit');
+  const [cardMethod, setCardMethod] = useState<'debit'|'credit'|'pix'|'pix_machine'|'voucher'>('debit');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [amountReceived, setAmountReceived] = useState<number>(0);
 
@@ -156,30 +157,11 @@ export default function POS() {
 
   // Card Fee logic
   const isCardFeeEnabled = settings?.enableCardFees ?? false;
-  const isSurchargeMode = (settings?.cardFeeCalculationMode === 'surcharge') || (settings?.passCardFeeToCustomer === true);
-  const activeRate = useMemo(() => {
-    if (!isCardFeeEnabled) return 0;
-    if (cardMethod === 'debit') return settings?.debitCardRate ?? 1.5;
-    if (cardMethod === 'credit') return settings?.creditCardRate ?? 3.5;
-    if (cardMethod === 'pix') return settings?.pixRate ?? 0;
-    if (cardMethod === 'voucher') return settings?.voucherRate ?? 2.0;
-    return 0;
-  }, [isCardFeeEnabled, cardMethod, settings]);
-
-  const finalTotal = useMemo(() => {
-    if (paymentType === 'card' && isCardFeeEnabled && isSurchargeMode && activeRate > 0) {
-      // Repasse da taxa ao cliente (acréscimo)
-      return Number((cartTotal * (1 + activeRate / 100)).toFixed(2));
-    }
-    return cartTotal;
-  }, [paymentType, isCardFeeEnabled, isSurchargeMode, activeRate, cartTotal]);
-
-  const estimatedDeduction = useMemo(() => {
-    if (paymentType === 'card' && isCardFeeEnabled && activeRate > 0) {
-      return Number((cartTotal * (activeRate / 100)).toFixed(2));
-    }
-    return 0;
-  }, [paymentType, isCardFeeEnabled, activeRate, cartTotal]);
+  const payment = useMemo(() => calculatePayment(cartTotal, paymentType === 'card' ? cardMethod : paymentType, settings), [cartTotal, paymentType, cardMethod, settings]);
+  const activeRate = payment.feeRate;
+  const finalTotal = payment.total;
+  const estimatedDeduction = payment.feeAmount;
+  const isSurchargeMode = payment.surchargeAmount > 0;
 
   const change = Math.max(0, amountReceived - finalTotal);
 
@@ -399,7 +381,7 @@ export default function POS() {
           <div class="bold">RESUMO DE VENDAS DO DIA:</div>
           <div class="flex mt"><span>Qtd. de Vendas:</span><span class="bold">${todaySales.length}</span></div>
           <div class="flex"><span>Vendas em Dinheiro:</span><span class="bold">R$ ${cashSalesToday.toFixed(2)}</span></div>
-          <div class="flex"><span>Vendas no Cartão:</span><span class="bold">R$ ${cardSalesToday.toFixed(2)}</span></div>
+          <div class="flex"><span>Cartão e Pix:</span><span class="bold">R$ ${cardSalesToday.toFixed(2)}</span></div>
           <div class="flex"><span>Vendas no Fiado:</span><span class="bold">R$ ${fiadoSalesToday.toFixed(2)}</span></div>
           <div class="flex bold" style="font-size: 13px; margin-top: 4px;"><span>TOTAL VENDIDO:</span><span>R$ ${totalSalesToday.toFixed(2)}</span></div>
           <div class="line"></div>
@@ -751,14 +733,17 @@ export default function POS() {
                   </button>
                   <button 
                     onClick={() => { setPaymentType('card'); setCardMethod('debit'); }}
-                    className={`py-3 rounded-xl border font-bold text-sm transition-all cursor-pointer flex flex-col items-center justify-center gap-1 shadow-2xs ${paymentType === 'card' && cardMethod !== 'pix' ? 'bg-palette-1 border-primary text-primary ring-2 ring-primary/20' : 'bg-surface border-border hover:bg-muted text-foreground'}`}
+                    className={`py-3 rounded-xl border font-bold text-sm transition-all cursor-pointer flex flex-col items-center justify-center gap-1 shadow-2xs ${paymentType === 'card' && !['pix', 'pix_machine'].includes(cardMethod) ? 'bg-palette-1 border-primary text-primary ring-2 ring-primary/20' : 'bg-surface border-border hover:bg-muted text-foreground'}`}
                   >
                     <span className="text-base">💳</span>
                     <span>Cartão</span>
                   </button>
                   <button type="button" onClick={() => { setPaymentType('card'); setCardMethod('pix'); }}
                     className={`rounded-xl border py-3 text-sm font-bold ${paymentType === 'card' && cardMethod === 'pix' ? 'border-primary bg-palette-1 text-primary' : 'border-border bg-surface'}`}>
-                    PIX
+                    {v('payment.pixDirect', 'Pix (direto na conta)')}
+                  </button>
+                  <button type="button" onClick={() => { setPaymentType('card'); setCardMethod('pix_machine'); }} className={`rounded-xl border py-3 text-sm font-bold ${paymentType === 'card' && cardMethod === 'pix_machine' ? 'border-primary bg-palette-1 text-primary' : 'border-border bg-surface'}`}>
+                    {v('payment.pixMachine', 'Pix na maquininha')}
                   </button>
                   <button 
                     onClick={() => setPaymentType('fiado')} 
@@ -783,7 +768,7 @@ export default function POS() {
                     </button>
                   </div>
                   
-                  <div className={`grid grid-cols-3 gap-1.5 text-xs ${cardMethod === 'pix' ? 'hidden' : ''}`}>
+                  <div className={`grid grid-cols-3 gap-1.5 text-xs ${['pix','pix_machine'].includes(cardMethod) ? 'hidden' : ''}`}>
                     <button
                       type="button"
                       onClick={() => setCardMethod('debit')}
@@ -815,7 +800,7 @@ export default function POS() {
                         </div>
                       ) : (
                         <div className="text-[11px] text-muted-foreground bg-surface p-2 rounded-lg border border-border/60">
-                          Taxa de {activeRate}% absorvida pela loja: ~R$ {estimatedDeduction.toFixed(2)} • Você recebe: R$ {(cartTotal - estimatedDeduction).toFixed(2)}
+                          Taxa de {activeRate}% absorvida pela loja: ~R$ {estimatedDeduction.toFixed(2)} • Você recebe: R$ {payment.netTotal.toFixed(2)}
                         </div>
                       )}
                     </div>
@@ -1190,7 +1175,7 @@ export default function POS() {
                         </span>
                       </div>
                       <div className="bg-blue-50/60 p-3 rounded-xl border border-blue-200/60">
-                        <span className="text-[11px] font-medium text-blue-700 block">💳 Cartão</span>
+                        <span className="text-[11px] font-medium text-blue-700 block">💳 Cartão e Pix</span>
                         <span className="text-base font-extrabold text-blue-800 block mt-0.5">
                           R$ {cardSalesToday.toFixed(2)}
                         </span>
@@ -1369,7 +1354,7 @@ export default function POS() {
                               <span className="font-bold text-foreground">R$ {c.totalSales.toFixed(2)}</span>
                             </div>
                             <div>
-                              <span className="text-muted-foreground block text-[10px]">Dinheiro / Cartão</span>
+                              <span className="text-muted-foreground block text-[10px]">Dinheiro / Cartão e Pix</span>
                               <span className="font-medium text-foreground">
                                 💵 {c.totalCash.toFixed(2)} | 💳 {c.totalCard.toFixed(2)}
                               </span>

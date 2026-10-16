@@ -1,3 +1,4 @@
+import { PaymentSummary } from './PaymentSummary';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ResponsiveContainer, 
@@ -183,6 +184,7 @@ export function VisualReportsPanel() {
 
   return (
     <div id="visual-reports-panel" className="bg-surface rounded-2xl p-5 md:p-6 shadow-sm border border-border space-y-6">
+      <PaymentSummary sales={salesLast7Days} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border">
         <div className="flex items-center gap-3">
