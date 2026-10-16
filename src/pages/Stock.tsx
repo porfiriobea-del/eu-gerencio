@@ -1,3 +1,4 @@
+import { ProductImage } from '../components/ProductImage';
 import { useCurrency } from '../lib/useCurrency';
 import { formatProductStock } from '../lib/productUnits';
 import { CigarettePurchaseOptions } from '../components/CigarettePurchaseOptions';
@@ -134,6 +135,17 @@ export default function Stock() {
     setLabelReadError(null);
     return () => { labelRequestRef.current++; };
   }, [isModalOpen, editingId]);
+
+  const imageMigrationStarted = useRef(false);
+  const imageMigrationMounted = useRef(true);
+  useEffect(() => { imageMigrationMounted.current = true; return () => { imageMigrationMounted.current = false; }; }, []);
+  useEffect(() => {
+    if (imageMigrationStarted.current || !products.some(product => product.imageUrl?.startsWith('data:image/'))) return;
+    imageMigrationStarted.current = true;
+    void import('../lib/api').then(api => api.migrateProductImages?.(products, () => imageMigrationMounted.current)).catch(() => {
+      if (imageMigrationMounted.current) showToast(v('images.migrationPending', 'As fotos antigas foram mantidas. A transferência para a nuvem será tentada ao abrir o Estoque novamente.'), 'warning');
+    });
+  }, [products, v]);
 
   const handleProductImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1135,7 +1147,7 @@ export default function Stock() {
                       <Check className={`w-4 h-4 stroke-[3] ${isSelected ? 'opacity-100' : 'opacity-0'}`} />
                     </button>
                     {p.imageUrl ? (
-                      <img 
+                      <ProductImage
                         src={p.imageUrl} 
                         alt={p.name} 
                         className={['notranslate', 'normal-case', (`w-12 h-12 rounded-xl object-cover border shadow-2xs shrink-0 ${isDuplicate ? 'border-rose-400 ring-1 ring-rose-400' : 'border-border'}`)].filter(Boolean).join(' ')}
@@ -1430,7 +1442,7 @@ export default function Stock() {
                     <td className="p-3.5">
                       <div className="flex items-center gap-3">
                         {p.imageUrl ? (
-                          <img 
+                          <ProductImage
                             src={p.imageUrl} 
                             alt={p.name} 
                             className={['notranslate', 'normal-case', (`w-12 h-12 rounded-xl object-cover border shadow-2xs shrink-0 ${isDuplicate ? 'border-rose-400 ring-1 ring-rose-400' : 'border-border'}`)].filter(Boolean).join(' ')}

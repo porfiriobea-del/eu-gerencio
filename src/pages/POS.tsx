@@ -1,3 +1,4 @@
+import { ProductImage } from '../components/ProductImage';
 import { useCurrency } from '../lib/useCurrency';
 import { calculatePayment } from '../lib/paymentFees';
 import { formatProductStock } from '../lib/productUnits';
@@ -514,7 +515,7 @@ export default function POS() {
                 {/* Imagem Exata do Produto no Caixa */}
                 <div className="w-full h-28 mb-3 rounded-xl overflow-hidden bg-palette-1/40 border border-border/80 flex items-center justify-center shrink-0">
                   {p.imageUrl ? (
-                    <img 
+                    <ProductImage
                       src={p.imageUrl} 
                       alt={p.name} 
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200 notranslate normal-case"

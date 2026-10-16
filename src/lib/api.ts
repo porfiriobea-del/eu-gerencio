@@ -1,3 +1,4 @@
+import { storeProductImage, isEmbeddedProductImage } from './productImages';
 import { calculatePayment, paymentLabel } from './paymentFees';
 import { soldBaseQuantity } from './productSalesRanking';
 import { findDuplicateProducts, isDuplicateProduct } from './duplicateDetector';
@@ -192,6 +193,7 @@ export const addProduct = withActionDeadline(async (product: Omit<Product, 'id'|
   try {
     const ref = doc(collection(db, path));
     const now = Date.now();
+    product = { ...product, imageUrl: await storeProductImage(product.imageUrl, uid) };
     const cleanProduct = removeUndefinedFields(normalizeCigaretteStock(product) as any);
     await setDoc(ref, {
       ...cleanProduct,
@@ -235,7 +237,8 @@ export const addMultipleProducts = withActionDeadline(async (productsList: Omit<
     const chunk = productsList.slice(i, i + CHUNK_SIZE);
     const batch = writeBatch(db);
 
-    for (const prod of chunk) {
+    for (const original of chunk) {
+      const prod = { ...original, imageUrl: await storeProductImage(original.imageUrl, uid) };
       const ref = doc(collection(db, path));
       const cleanProduct = removeUndefinedFields(normalizeCigaretteStock(prod) as any);
       batch.set(ref, {
@@ -311,6 +314,7 @@ export const adjustProductStock = withProductWriteQueue(async (id: string, indiv
 export const updateProduct = withProductWriteQueue(async (id: string, data: Partial<Product>) => {
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
+  if (data.imageUrl !== undefined) data = { ...data, imageUrl: await storeProductImage(data.imageUrl, uid) };
   try {
     const now = Date.now();
     const changedProduct = await runTransaction(db, async transaction => {
@@ -409,6 +413,7 @@ export const importSupplierCatalog = withActionDeadline(async (products: Catalog
       throw new Error('Confira os nomes, custos, medidas e preços dos produtos antes de importar.');
     }
   }
+  products = await Promise.all(products.map(async product => ({ ...product, ...(product.imageUrl ? { imageUrl: await storeProductImage(product.imageUrl, ownerId) } : {}) })));
   if (options?.draftIds && (options.draftIds.length !== products.length || new Set(options.draftIds).size !== products.length || options.draftIds.some(id => !/^[a-zA-Z0-9_-]{1,160}$/.test(id)))) {
     throw new Error('A revisão do catálogo está inválida. Reabra os produtos antes de cadastrar.');
   }
@@ -1671,4 +1676,28 @@ export async function getProductSalesTotals(products: Product[], signal?: AbortS
     }
     if (rows.length < 1000) return totals;
   }
+}
+
+
+/** Resumable migration: one image at a time; stale photos and stock are never overwritten. */
+export async function migrateProductImages(products: Product[], shouldContinue: () => boolean = () => true): Promise<number> {
+  const ownerId = getEffectiveOwnerId();
+  if (!ownerId) return 0;
+  let migrated = 0;
+  for (const product of products) {
+    if (!shouldContinue() || getEffectiveOwnerId() !== ownerId) break;
+    if (!product.id || !isEmbeddedProductImage(product.imageUrl)) continue;
+    const original = product.imageUrl;
+    const imageUrl = await storeProductImage(original,ownerId);
+    if (!shouldContinue() || getEffectiveOwnerId() !== ownerId) break;
+    const updated = await runTransaction(db,async transaction => {
+      const ref = doc(db,'products',product.id!);
+      const current = await transaction.get(ref);
+      if (!shouldContinue() || getEffectiveOwnerId() !== ownerId || !current.exists() || current.data().ownerId !== ownerId || current.data().imageUrl !== original) return false;
+      transaction.update(ref,{imageUrl,updatedAt:Date.now()});
+      return true;
+    });
+    if (updated) migrated++;
+  }
+  return migrated;
 }
