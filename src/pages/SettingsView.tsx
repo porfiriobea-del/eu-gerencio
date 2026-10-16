@@ -796,7 +796,7 @@ function doPost(e) {
           <div className="flex items-center gap-3">
             {/* Badges de resumo rápido */}
             <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span className="px-2.5 py-1 bg-muted rounded-lg font-medium border border-border/60 text-foreground text-xs">
+              <span className="px-2.5 py-1 bg-muted rounded-lg font-medium border border-border/60 text-foreground text-xs notranslate normal-case" translate="no">
                 {THEME_STYLES.find(t => t.id === themePreset)?.name || 'Padrão / Comum'}
               </span>
               <span className="px-2.5 py-1 bg-muted rounded-lg font-medium border border-border/60 text-foreground text-xs">
@@ -852,7 +852,7 @@ function doPost(e) {
                   </p>
                 </div>
               </div>
-              <span className="self-start sm:self-auto text-[11px] font-bold text-primary px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20">
+              <span className="self-start sm:self-auto text-[11px] font-bold text-primary px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 notranslate normal-case" translate="no">
                 Ativo: {LANGUAGE_MODE_INFOS.find(m => m.id === languageMode)?.name}
               </span>
             </div>
@@ -883,8 +883,8 @@ function doPost(e) {
                           </span>
                         )}
                       </div>
-                      <h4 className="text-sm font-bold text-foreground mb-1">{mode.name}</h4>
-                      <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{simpleViewMode ? mode.tagline : mode.description}</p>
+                      <h4 className="text-sm font-bold text-foreground mb-1 notranslate normal-case" translate="no">{mode.name}</h4>
+                      <p className="text-xs text-muted-foreground mb-3 leading-relaxed notranslate normal-case" translate="no">{simpleViewMode ? mode.tagline : mode.description}</p>
                     </div>
 
                     <div className="pt-2.5 border-t border-border/60 text-[11px] space-y-1.5">
@@ -918,7 +918,7 @@ function doPost(e) {
                     <Sparkles className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="text-xs font-bold text-foreground block">
+                    <span className="text-xs font-bold text-foreground block notranslate normal-case" translate="no">
                       Comparativo de termos ({LANGUAGE_MODE_INFOS.find(m => m.id === languageMode)?.name})
                     </span>
                     <span className="text-[11px] text-muted-foreground">
@@ -1227,7 +1227,7 @@ function doPost(e) {
                       }`}
                     >
                       <div className="flex items-center justify-between font-bold text-xs mb-0.5">
-                        <span>{s.name}</span>
+                        <span className="notranslate normal-case" translate="no">{s.name}</span>
                         {isSelected && <Check className="w-3.5 h-3.5" />}
                       </div>
                       <p className="text-[11px] text-muted-foreground line-clamp-1">{s.tagline}</p>
@@ -1382,11 +1382,11 @@ function doPost(e) {
         {/* Status Atual do Operador */}
         <div className="mb-4 p-3.5 rounded-xl border border-border bg-muted/30 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white text-xs ${currentEmployee?.color || 'bg-primary'}`}>
+            <div className={['notranslate', 'normal-case', (`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white text-xs ${currentEmployee?.color || 'bg-primary'}`)].filter(Boolean).join(' ')} translate="no">
               {currentEmployee ? currentEmployee.name.charAt(0).toUpperCase() : 'P'}
             </div>
             <div>
-              <p className="text-xs font-bold text-foreground">
+              <p className="text-xs font-bold text-foreground notranslate normal-case" translate="no">
                 {currentEmployee ? `Operador Ativo: ${currentEmployee.name}` : 'Modo Proprietário / Gerente'}
               </p>
               <p className="text-[11px] text-muted-foreground">
@@ -1440,11 +1440,11 @@ function doPost(e) {
                   title="Clique para gerenciar, excluir ou mudar de funcionário com senha"
                 >
                   <div className="flex items-center gap-2.5 overflow-hidden flex-1">
-                    <div className={`w-8 h-8 rounded-lg ${emp.color || 'bg-primary'} text-white font-bold flex items-center justify-center text-xs shrink-0`}>
+                    <div className={['notranslate', 'normal-case', (`w-8 h-8 rounded-lg ${emp.color || 'bg-primary'} text-white font-bold flex items-center justify-center text-xs shrink-0`)].filter(Boolean).join(' ')} translate="no">
                       {emp.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="overflow-hidden flex-1">
-                      <p className="text-xs font-bold text-foreground truncate">{emp.name}</p>
+                      <p className="text-xs font-bold text-foreground truncate notranslate normal-case" translate="no">{emp.name}</p>
                       <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                         <span className="truncate">{emp.role}</span>
                         <span>•</span>

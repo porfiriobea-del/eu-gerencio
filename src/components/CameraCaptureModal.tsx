@@ -545,8 +545,8 @@ export function CameraCaptureModal({
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
                       placeholder="Ex: Coca-Cola 2L ou Cerveja Heineken 330ml"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary"
-                    />
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary notranslate normal-case"
+                     translate="no"/>
                   </div>
 
                   {/* Categoria */}

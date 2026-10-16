@@ -1135,8 +1135,8 @@ export default function Stock() {
                       <img 
                         src={p.imageUrl} 
                         alt={p.name} 
-                        className={`w-12 h-12 rounded-xl object-cover border shadow-2xs shrink-0 ${isDuplicate ? 'border-rose-400 ring-1 ring-rose-400' : 'border-border'}`} 
-                      />
+                        className={['notranslate', 'normal-case', (`w-12 h-12 rounded-xl object-cover border shadow-2xs shrink-0 ${isDuplicate ? 'border-rose-400 ring-1 ring-rose-400' : 'border-border'}`)].filter(Boolean).join(' ')}
+                       translate="no"/>
                     ) : (
                       <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${isDuplicate ? 'bg-rose-100 text-rose-600 border border-rose-300' : 'bg-palette-1 text-primary border border-primary/20'}`}>
                         <Package className="w-6 h-6 opacity-80" />
@@ -1145,7 +1145,7 @@ export default function Stock() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <h3 className="font-bold text-base text-foreground leading-snug truncate" title={p.name}>
+                        <h3 className="font-bold text-base text-foreground leading-snug truncate notranslate normal-case" title={p.name} translate="no">
                           {p.name}
                         </h3>
                         {isDuplicate && (
@@ -1430,8 +1430,8 @@ export default function Stock() {
                           <img 
                             src={p.imageUrl} 
                             alt={p.name} 
-                            className={`w-12 h-12 rounded-xl object-cover border shadow-2xs shrink-0 ${isDuplicate ? 'border-rose-400 ring-1 ring-rose-400' : 'border-border'}`} 
-                          />
+                            className={['notranslate', 'normal-case', (`w-12 h-12 rounded-xl object-cover border shadow-2xs shrink-0 ${isDuplicate ? 'border-rose-400 ring-1 ring-rose-400' : 'border-border'}`)].filter(Boolean).join(' ')}
+                           translate="no"/>
                         ) : (
                           <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${isDuplicate ? 'bg-rose-100 text-rose-600 border border-rose-300' : 'bg-palette-1 text-primary border border-primary/20'}`}>
                             <Package className="w-5 h-5 opacity-70" />
@@ -1439,7 +1439,7 @@ export default function Stock() {
                         )}
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-foreground truncate">{p.name}</span>
+                            <span className="font-semibold text-foreground truncate notranslate normal-case" translate="no">{p.name}</span>
                             {isDuplicate && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-600 text-white shadow-2xs shrink-0 animate-pulse">
                                 <AlertTriangle className="w-3 h-3" />
@@ -1774,8 +1774,8 @@ export default function Stock() {
                     value={formData.name} 
                     onChange={e => setFormData({...formData, name: e.target.value})} 
                     placeholder="Ex: Coca-Cola 350ml, Sabonete Dove..."
-                    className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground" 
-                  />
+                    className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground notranslate normal-case"
+                   translate="no"/>
                   {findDuplicateProducts(formData, products, editingId || undefined).length > 0 && (
                     <div className="mt-2 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2 animate-in fade-in">
                       <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
@@ -2967,7 +2967,7 @@ export default function Stock() {
               <div>
                 <span className="text-xs font-semibold text-primary uppercase tracking-wider block">Atualização Mensal</span>
                 <h2 className="text-xl font-bold text-foreground mt-0.5">Estoque Inicial & Data Base</h2>
-                <p className="text-sm font-medium text-muted-foreground mt-0.5">{editingInitialStockProduct.name}</p>
+                <p className="text-sm font-medium text-muted-foreground mt-0.5 notranslate normal-case" translate="no">{editingInitialStockProduct.name}</p>
               </div>
               <button 
                 onClick={() => setEditingInitialStockProduct(null)} 
@@ -3255,7 +3255,7 @@ export default function Stock() {
 
             <div className="p-4 bg-muted/60 rounded-xl border border-border space-y-2">
               <div className="font-bold text-foreground text-sm flex items-center justify-between">
-                <span>{productToDelete.name}</span>
+                <span className="notranslate normal-case" translate="no">{productToDelete.name}</span>
                 <span className="text-xs font-semibold px-2 py-0.5 rounded bg-palette-1 text-primary">
                   {productToDelete.category}
                 </span>
@@ -3386,7 +3386,7 @@ export default function Stock() {
                 return (
                   <div key={id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs">
                     <div className="truncate pr-2">
-                      <span className="font-bold text-foreground">{prod.name}</span>
+                      <span className="font-bold text-foreground notranslate normal-case" translate="no">{prod.name}</span>
                       <span className="text-muted-foreground ml-1.5 text-[11px]">({prod.category})</span>
                     </div>
                     <div className="shrink-0 flex items-center gap-2">
@@ -3450,7 +3450,7 @@ export default function Stock() {
         <div className="mb-4 flex justify-between"><h2 className="text-lg font-bold">Verificar duplicados</h2><button type="button" onClick={() => setShowDuplicateReview(false)}>Fechar</button></div>
         <p className="mb-4 text-sm text-muted-foreground">A mesclagem soma o estoque e mantém nome, preços e medidas do primeiro produto. O segundo fica arquivado para preservar o histórico.</p>
         {!duplicateAnalysis.duplicateGroups.size && <p>Nenhum par suspeito encontrado.</p>}
-        {duplicatePairs.map(([key, { target, source }]) => <div key={key} className="mb-3 rounded-xl border border-border p-3"><strong>{target.name} — estoque {formatProductStock(target)}</strong><div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span>{source.name} — {formatProductStock(source)}</span><button type="button" disabled={!!mergingPair || source.type !== target.type} onClick={async () => {
+        {duplicatePairs.map(([key, { target, source }]) => <div key={key} className="mb-3 rounded-xl border border-border p-3"><strong className="notranslate normal-case" translate="no">{target.name} — estoque {formatProductStock(target)}</strong><div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span className="notranslate normal-case" translate="no">{source.name} — {formatProductStock(source)}</span><button type="button" disabled={!!mergingPair || source.type !== target.type} onClick={async () => {
           setMergingPair(source.id!);
           try { await mergeProducts(target.id!, source.id!); showToast('✓ Produtos mesclados!'); }
           catch (error) { showActionError(error, error instanceof Error ? error.message : 'Não foi possível mesclar.'); }

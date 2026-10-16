@@ -33,7 +33,7 @@ export function ProductPricingCard({ product, isSaving, onUpdatePrice }: Product
           <button key={margin} type="button" disabled={isSaving || !product.id || price === null}
             onClick={() => price !== null && product.id && onUpdatePrice(product.id, field, price)}
             aria-label={`Aplicar margem de ${margin}%${field !== 'basePrice' ? ` no formato ${formats.find(format => format.key === field)?.label}` : ''} de ${product.name}`}
-            className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:hover:bg-slate-800">
+            className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:hover:bg-slate-800 notranslate normal-case" translate="no">
             <span>Sugestão {margin}%</span><span className="text-right font-bold tabular-nums text-blue-700 dark:text-blue-400">{price === null ? 'Informe o custo' : currency(price)}</span>
           </button>
         );
@@ -41,9 +41,9 @@ export function ProductPricingCard({ product, isSaving, onUpdatePrice }: Product
     </div>
   );
   return (
-    <article aria-label={`Precificação de ${product.name}`} className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 text-foreground shadow-sm dark:border-slate-800 dark:bg-slate-950">
+    <article aria-label={`Precificação de ${product.name}`} className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 text-foreground shadow-sm dark:border-slate-800 dark:bg-slate-950 notranslate normal-case" translate="no">
       <header className="mb-4 flex flex-wrap items-start justify-between gap-2">
-        <div><h3 className="text-base font-bold">{product.name}</h3><p className="mt-1 text-sm font-medium text-blue-700 dark:text-blue-400">{product.category || 'Sem categoria'}</p></div>
+        <div><h3 className="text-base font-bold notranslate normal-case" translate="no">{product.name}</h3><p className="mt-1 text-sm font-medium text-blue-700 dark:text-blue-400">{product.category || 'Sem categoria'}</p></div>
         {isSaving && <span role="status" className="text-xs text-muted-foreground">Salvando preço...</span>}
       </header>
       {fractional ? (
@@ -52,7 +52,7 @@ export function ProductPricingCard({ product, isSaving, onUpdatePrice }: Product
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {formats.map(format => (
               <section key={format.key} className="min-w-0 rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900/40">
-                <h4 className="font-bold">{format.label}</h4><p className="mb-3 text-xs text-muted-foreground">{format.description}</p>
+                <h4 className="font-bold">{format.label}</h4><p className="mb-3 text-xs text-muted-foreground notranslate normal-case" translate="no">{format.description}</p>
                 <PriceDetails cost={format.cost} price={format.price} />
                 {suggestions(format.cost, format.key)}
               </section>

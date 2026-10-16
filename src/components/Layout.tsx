@@ -230,7 +230,7 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
               </nav>
               <div className="mt-4 space-y-2 border-t border-border pt-4">
                 <button type="button" id="sidebar-employee-mode-btn" onClick={() => { setMenuOpen(false); openSwitchModal(); }} className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm hover:bg-muted">
-                  <Users className="h-5 w-5 shrink-0 text-primary" /><span className="min-w-0"><span className="block truncate font-medium">{currentEmployee ? currentEmployee.name : 'Modo do Funcionário'}</span><span className="block text-xs text-muted-foreground">{currentEmployee ? 'Colaborador em turno' : 'Trocar com senha • Equipe'}</span></span>
+                  <Users className="h-5 w-5 shrink-0 text-primary" /><span className="min-w-0"><span className="block truncate font-medium notranslate normal-case" translate="no">{currentEmployee ? currentEmployee.name : 'Modo do Funcionário'}</span><span className="block text-xs text-muted-foreground">{currentEmployee ? 'Colaborador em turno' : 'Trocar com senha • Equipe'}</span></span>
                 </button>
                 <button type="button" onClick={() => { setMenuOpen(false); setShowInviteModal(true); }} className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3.5 py-3 text-sm text-primary hover:bg-muted"><MailPlus className="h-5 w-5" />{t('nav.invite')}</button>
                 <button type="button" onClick={logout} className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3.5 py-3 text-sm text-red-600 hover:bg-muted"><LogOut className="h-5 w-5" />{t('nav.logout')}</button>
@@ -308,7 +308,7 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
             </button>
 
               </div>
-              {storeSession?.isEmployee && <div className="mt-4 rounded-xl bg-muted p-3 text-xs text-muted-foreground"><Briefcase className="mb-1 h-4 w-4" />Sub-conta: {storeSession.employeeName || 'Funcionário'}</div>}
+              {storeSession?.isEmployee && <div className="mt-4 rounded-xl bg-muted p-3 text-xs text-muted-foreground notranslate normal-case" translate="no"><Briefcase className="mb-1 h-4 w-4" />Sub-conta: {storeSession.employeeName || 'Funcionário'}</div>}
               {!isOnline && <p className="mt-4 text-xs text-muted-foreground">Sem conexão. Aguarde o retorno da internet para sincronizar os registros.</p>}
               {isOnline && wasOffline && <button type="button" onClick={syncNow} className="mt-3 flex min-h-[44px] items-center gap-2 rounded-xl px-3 text-sm hover:bg-muted"><RefreshCw className="h-4 w-4" />Sincronizar agora</button>}
             </div>

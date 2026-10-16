@@ -242,9 +242,9 @@ export default function App() {
             <div className="p-3.5 mb-6 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-left">
               <p className="text-xs font-bold text-emerald-950 dark:text-emerald-100 flex items-center gap-1.5">
                 <span>🏢 Convite da Loja:</span>
-                <span className="underline">{pendingInvite.storeName || 'Estabelecimento'}</span>
+                <span className="underline notranslate normal-case" translate="no">{pendingInvite.storeName || 'Estabelecimento'}</span>
               </p>
-              <p className="text-xs text-foreground font-semibold mt-1">
+              <p className="text-xs text-foreground font-semibold mt-1 notranslate normal-case" translate="no">
                 Olá, {pendingInvite.name}! ({pendingInvite.role})
               </p>
               <p className="text-[11px] text-[#444444] mt-1 leading-snug">

@@ -465,7 +465,7 @@ export function VisualReportsPanel() {
                               const p = payload[0].payload as TopProductData;
                               return (
                                 <div className="bg-surface border border-border p-2.5 rounded-xl shadow-lg text-xs space-y-1">
-                                  <p className="font-bold text-foreground">{p.name}</p>
+                                  <p className="font-bold text-foreground notranslate normal-case" translate="no">{p.name}</p>
                                   <div className="text-primary font-semibold">
                                     Total vendido: {p.totalQuantity} unidades
                                   </div>
@@ -506,7 +506,7 @@ export function VisualReportsPanel() {
                           }`}>
                             {idx + 1}º
                           </span>
-                          <span className="font-medium text-foreground truncate" title={prod.name}>
+                          <span className="font-medium text-foreground truncate notranslate normal-case" title={prod.name} translate="no">
                             {prod.name}
                           </span>
                         </div>

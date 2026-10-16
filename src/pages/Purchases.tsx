@@ -618,7 +618,7 @@ export default function Purchases() {
                       return (
                         <tr key={p.id} className="hover:bg-muted/20 transition-colors">
                           <td className="p-3.5">
-                            <div className="font-semibold text-foreground text-sm leading-snug">
+                            <div className="font-semibold text-foreground text-sm leading-snug notranslate normal-case" translate="no">
                               {p.name}
                             </div>
                             <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
@@ -764,7 +764,7 @@ export default function Purchases() {
                         className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer shrink-0"
                       />
                       <div className="min-w-0">
-                        <h4 className={`font-bold text-sm truncate ${isChecked ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                        <h4 className={['notranslate', 'normal-case', (`font-bold text-sm truncate ${isChecked ? 'line-through text-muted-foreground' : 'text-foreground'}`)].filter(Boolean).join(' ')} translate="no">
                           {p.name}
                         </h4>
                         <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
@@ -903,7 +903,7 @@ export default function Purchases() {
                           </td>
 
                           <td className="p-3">
-                            <div className="font-semibold text-foreground text-sm">
+                            <div className="font-semibold text-foreground text-sm notranslate normal-case" translate="no">
                               {item.productName}
                             </div>
                             {item.category && (
@@ -1013,7 +1013,7 @@ export default function Purchases() {
               {/* Product summary card */}
               <div className="bg-muted/40 p-3 rounded-xl border border-border/60 flex justify-between items-center text-xs">
                 <div>
-                  <span className="font-bold text-sm text-foreground block">{selectedProduct.name}</span>
+                  <span className="font-bold text-sm text-foreground block notranslate normal-case" translate="no">{selectedProduct.name}</span>
                   <span className="text-muted-foreground">
                     Categoria: {selectedProduct.category} • Estoque atual: <strong>{formatProductStock(selectedProduct)}</strong>
                   </span>
@@ -1340,7 +1340,7 @@ export default function Purchases() {
                         onChange={e => setUpdateProductExpiration(e.target.checked)}
                         className="w-3.5 h-3.5 rounded text-primary focus:ring-primary cursor-pointer"
                       />
-                      <span>Atualizar validade no cadastro geral de <strong>{selectedProduct.name}</strong></span>
+                      <span>Atualizar validade no cadastro geral de <strong className="notranslate normal-case" translate="no">{selectedProduct.name}</strong></span>
                     </label>
                   )}
                 </div>
@@ -1576,7 +1576,7 @@ export default function Purchases() {
               />
             </div>
 
-            <div className="max-h-72 overflow-y-auto space-y-1.5 divide-y divide-border/50">
+            <div className="max-h-72 overflow-y-auto space-y-1.5 divide-y divide-border/50 notranslate normal-case" translate="no">
               {products
                 .filter(p => p.name.toLowerCase().includes(pickerSearch.toLowerCase()) || p.category.toLowerCase().includes(pickerSearch.toLowerCase()))
                 .slice(0, 30)
@@ -1590,7 +1590,7 @@ export default function Purchases() {
                     className="p-2.5 rounded-xl hover:bg-palette-1/50 transition-colors cursor-pointer flex justify-between items-center text-xs"
                   >
                     <div>
-                      <span className="font-semibold text-foreground block">{p.name}</span>
+                      <span className="font-semibold text-foreground block notranslate normal-case" translate="no">{p.name}</span>
                       <span className="text-muted-foreground text-[11px]">{p.category} • Estoque atual: {formatProductStock(p)}</span>
                     </div>
                     <div className="text-right">
@@ -1618,7 +1618,7 @@ export default function Purchases() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs">
           <div className="bg-surface rounded-2xl w-full max-w-sm p-6 shadow-2xl border border-border">
             <h3 className="text-lg font-bold text-foreground">Excluir Registro de Compra?</h3>
-            <p className="text-xs text-muted-foreground mt-1 mb-4">
+            <p className="text-xs text-muted-foreground mt-1 mb-4 notranslate normal-case" translate="no">
               Você está prestes a excluir a compra de <strong>{purchaseToDelete.quantity} un.</strong> de "{purchaseToDelete.productName}".
             </p>
 

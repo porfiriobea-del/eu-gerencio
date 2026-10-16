@@ -111,7 +111,7 @@ export default function Dashboard() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Início - Resumo do Dia</h1>
           <span className="text-xs text-muted-foreground">
-            {format(new Date(), "dd 'de' MMMM 'de' yyyy")}
+            {new Date().toLocaleDateString('pt-BR', {day: 'numeric', month: 'long', year: 'numeric'})}
           </span>
         </div>
 
@@ -385,7 +385,7 @@ export default function Dashboard() {
                 return (
                   <li key={p.id} className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
                     <div>
-                      <span className="font-medium text-foreground">{p.name}</span>
+                      <span className="font-medium text-foreground notranslate normal-case" translate="no">{p.name}</span>
                       <span className="text-xs text-muted-foreground ml-2">({formatProductStock(p)} atuais / máx: {maxStockVal})</span>
                     </div>
                     <span className="text-red-500 font-semibold bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded text-xs">
@@ -435,14 +435,14 @@ export default function Dashboard() {
                       <td className="p-3 font-mono text-xs text-muted-foreground font-medium">
                         {format(new Date(sale.createdAt), 'HH:mm')}
                       </td>
-                      <td className="p-3">
+                      <td className="p-3 notranslate normal-case" translate="no">
                         {sale.itemsSummary ? (
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-medium text-foreground text-sm leading-snug">
+                            <span className="font-medium text-foreground text-sm leading-snug notranslate normal-case" translate="no">
                               {sale.itemsSummary}
                             </span>
                             {customer && (
-                              <span className="text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/40 px-2 py-0.5 rounded font-medium">
+                              <span className="text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/40 px-2 py-0.5 rounded font-medium notranslate normal-case" translate="no">
                                 Fiado: {customer.name}
                               </span>
                             )}
@@ -453,7 +453,7 @@ export default function Dashboard() {
                               Venda registrada
                             </span>
                             {customer && (
-                              <span className="text-xs text-orange-600 bg-orange-50 px-2 py-0.5 rounded font-medium">
+                              <span className="text-xs text-orange-600 bg-orange-50 px-2 py-0.5 rounded font-medium notranslate normal-case" translate="no">
                                 Fiado: {customer.name}
                               </span>
                             )}
@@ -635,7 +635,7 @@ export default function Dashboard() {
               {selectedSale.customerId && (
                 <div className="col-span-2 border-t border-border/50 pt-2">
                   <span className="text-muted-foreground block">Cliente (Fiado):</span>
-                  <span className="font-bold text-orange-600 dark:text-orange-400">
+                  <span className="font-bold text-orange-600 dark:text-orange-400 notranslate normal-case" translate="no">
                     {customers.find(c => c.id === selectedSale.customerId)?.name || 'Cliente'}
                   </span>
                 </div>
@@ -643,7 +643,7 @@ export default function Dashboard() {
             </div>
 
             {/* Lista dos Itens */}
-            <div className="space-y-2 mb-6">
+            <div className="space-y-2 mb-6 notranslate normal-case" translate="no">
               <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Produtos Vendidos:</h4>
               
               {loadingItems ? (
@@ -653,7 +653,7 @@ export default function Dashboard() {
                   {saleItems.map((item, idx) => (
                     <div key={idx} className="flex justify-between items-center p-2.5 bg-surface border border-border rounded-xl text-sm">
                       <div>
-                        <div className="font-medium text-foreground">{item.name}</div>
+                        <div className="font-medium text-foreground notranslate normal-case" translate="no">{item.name}</div>
                         <div className="text-xs text-muted-foreground">
                           {item.format} • {item.quantity} un. x R$ {item.price.toFixed(2)}
                         </div>
@@ -666,7 +666,7 @@ export default function Dashboard() {
                 </div>
               ) : selectedSale.itemsSummary ? (
                 <div className="p-4 bg-surface border border-border rounded-xl">
-                  <p className="text-sm font-medium text-foreground">{selectedSale.itemsSummary}</p>
+                  <p className="text-sm font-medium text-foreground notranslate normal-case" translate="no">{selectedSale.itemsSummary}</p>
                 </div>
               ) : (
                 <div className="py-4 text-center text-xs text-muted-foreground">

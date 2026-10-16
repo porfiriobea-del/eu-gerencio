@@ -76,3 +76,11 @@ test('React can navigate away and use browser back after a translator replaces a
   assert.ok(container.textContent.includes('Nome original do produto'));
  }finally{if(root)await React.act(async()=>root.unmount());Object.assign(globalThis,saved);dom.window.close();}
 });
+
+test('long dates use a Portuguese month regardless of the machine default locale',()=>{
+ const date=new Date(2026,9,13,12);
+ assert.equal(date.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'}),'13 de outubro de 2026');
+ const dashboard=readFileSync(new URL('../src/pages/Dashboard.tsx',import.meta.url),'utf8');
+ assert.ok(dashboard.includes("new Date().toLocaleDateString('pt-BR'"));
+ assert.ok(!dashboard.includes("dd 'de' MMMM 'de' yyyy"));
+});

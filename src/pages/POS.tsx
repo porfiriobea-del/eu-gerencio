@@ -513,9 +513,9 @@ export default function POS() {
                     <img 
                       src={p.imageUrl} 
                       alt={p.name} 
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200 notranslate normal-case"
                       loading="lazy"
-                    />
+                     translate="no"/>
                   ) : (
                     <div className="flex flex-col items-center justify-center text-primary/40 p-2">
                       <Package className="w-8 h-8 mb-1" />
@@ -524,7 +524,7 @@ export default function POS() {
                   )}
                 </div>
 
-                <h3 className="font-semibold text-foreground leading-tight text-sm line-clamp-2">{p.name}</h3>
+                <h3 className="font-semibold text-foreground leading-tight text-sm line-clamp-2 notranslate normal-case" translate="no">{p.name}</h3>
                 <div className="mt-1 flex items-center justify-between gap-1 flex-wrap">
                   <span className="text-[10px] font-semibold text-primary bg-palette-1 px-1.5 py-0.5 rounded">
                     {p.category}
@@ -704,7 +704,7 @@ export default function POS() {
               <div className="flex items-center gap-2 overflow-hidden">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
                 <span className="text-muted-foreground">Operador:</span>
-                <span className="font-bold text-foreground truncate">
+                <span className="font-bold text-foreground truncate notranslate normal-case" translate="no">
                   {currentEmployee ? currentEmployee.name : 'Proprietário'}
                 </span>
                 {currentEmployee?.role && (
@@ -920,8 +920,8 @@ export default function POS() {
                           value={newCustomerName}
                           onChange={(e) => setNewCustomerName(e.target.value)}
                           placeholder="Ex: Seu Zé Pedreiro, Dona Maria da Esquina..."
-                          className="w-full px-3 py-2 rounded-xl border border-border bg-surface text-foreground text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
-                        />
+                          className="w-full px-3 py-2 rounded-xl border border-border bg-surface text-foreground text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 notranslate normal-case"
+                         translate="no"/>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
@@ -1019,7 +1019,7 @@ export default function POS() {
                               ➕ [+ Cadastrar Novo Cliente Agora nesta Compra]
                             </option>
                             {customers.map(c => (
-                              <option key={c.id} value={c.id}>
+                              <option key={c.id} value={c.id} className="notranslate normal-case" translate="no">
                                 {c.name} {c.totalDebt > 0 ? `(Já deve R$ ${c.totalDebt.toFixed(2)})` : '(Sem dívida)'}
                               </option>
                             ))}
@@ -1069,8 +1069,8 @@ export default function POS() {
                   !selectedCustomerId && 
                   (!isCreatingNewCustomer || !newCustomerName.trim()))
                 }
-                className="px-6 py-3 bg-primary text-white rounded-xl hover:opacity-90 font-bold flex items-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
-              >
+                className="px-6 py-3 bg-primary text-white rounded-xl hover:opacity-90 font-bold flex items-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm notranslate normal-case"
+               translate="no">
                 <Check className="w-5 h-5"/> 
                 {paymentType === 'fiado' && isCreatingNewCustomer && newCustomerName.trim()
                   ? `Confirmar Fiado para ${newCustomerName}`

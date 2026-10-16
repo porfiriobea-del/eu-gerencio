@@ -471,7 +471,7 @@ export default function Movements() {
               </span>
               <div className="text-left">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold truncate max-w-[130px]">{currentEmployee.name}</span>
+                  <span className="text-xs font-bold truncate max-w-[130px] notranslate normal-case" translate="no">{currentEmployee.name}</span>
                   <span className="text-[10px] bg-emerald-500 text-white font-bold px-1.5 py-0.2 rounded uppercase">Em Turno</span>
                 </div>
                 {activeShiftDuration && (
@@ -657,7 +657,7 @@ export default function Movements() {
                 <option value="all">Todos os Funcionários</option>
                 <option value="owner">Proprietário / Gerente</option>
                 {employees.map(emp => (
-                  <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>
+                  <option key={emp.id} value={emp.id} className="notranslate normal-case" translate="no">{emp.name} ({emp.role})</option>
                 ))}
               </select>
 
@@ -724,7 +724,7 @@ export default function Movements() {
                           {/* Operator Tag */}
                           <span className="inline-flex items-center gap-1 text-xs font-semibold text-foreground bg-muted/60 px-2 py-0.5 rounded-md border border-border">
                             <span className="w-2 h-2 rounded-full bg-primary/70"></span>
-                            <span>{m.employeeName}</span>
+                            <span className="notranslate normal-case" translate="no">{m.employeeName}</span>
                             {m.employeeRole && (
                               <span className="text-muted-foreground text-[10px]">({m.employeeRole})</span>
                             )}
@@ -732,7 +732,7 @@ export default function Movements() {
                         </div>
 
                         {/* Description */}
-                        <p className="text-xs sm:text-sm font-medium text-foreground leading-relaxed">
+                        <p className="text-xs sm:text-sm font-medium text-foreground leading-relaxed notranslate normal-case" translate="no">
                           {m.description}
                         </p>
                       </div>
@@ -820,11 +820,11 @@ export default function Movements() {
                       {/* Card Header: Avatar & Status */}
                       <div className="flex items-start justify-between gap-3 mb-4">
                         <div className="flex items-center gap-3">
-                          <div className={`w-12 h-12 rounded-2xl ${emp.color || 'bg-primary'} text-white font-bold flex items-center justify-center text-lg shadow-xs`}>
+                          <div className={['notranslate', 'normal-case', (`w-12 h-12 rounded-2xl ${emp.color || 'bg-primary'} text-white font-bold flex items-center justify-center text-lg shadow-xs`)].filter(Boolean).join(' ')} translate="no">
                             {emp.name.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <h3 className="font-bold text-base text-foreground">
+                            <h3 className="font-bold text-base text-foreground notranslate normal-case" translate="no">
                               {emp.name}
                             </h3>
                             <p className="text-xs text-muted-foreground">
@@ -1002,7 +1002,7 @@ export default function Movements() {
                 />
                 <datalist id="products-datalist">
                   {products.map(p => (
-                    <option key={p.id} value={p.name}>
+                    <option key={p.id} value={p.name} className="notranslate normal-case" translate="no">
                       Estoque atual: {formatProductStock(p)}
                     </option>
                   ))}
@@ -1056,7 +1056,7 @@ export default function Movements() {
                 />
               </div>
 
-              <div className="p-3 rounded-xl bg-palette-1 border border-primary/20 text-xs text-muted-foreground">
+              <div className="p-3 rounded-xl bg-palette-1 border border-primary/20 text-xs text-muted-foreground notranslate normal-case" translate="no">
                 <span className="font-semibold text-foreground">Operador responsável:</span>{' '}
                 {currentEmployee ? `${currentEmployee.name} (${currentEmployee.role})` : 'Proprietário / Gerente'}
               </div>
@@ -1129,8 +1129,8 @@ export default function Movements() {
                   value={empName}
                   onChange={(e) => setEmpName(e.target.value)}
                   placeholder="Ex: Maria Atendente, Carlos Repositor..."
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-muted/30 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                />
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-muted/30 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 notranslate normal-case"
+                 translate="no"/>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1237,7 +1237,7 @@ export default function Movements() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2 text-primary font-bold text-sm">
                 <Lock className="w-4 h-4" />
-                <span>Senha de {selectedEmpForLogin.name}</span>
+                <span className="notranslate normal-case" translate="no">Senha de {selectedEmpForLogin.name}</span>
               </div>
               <button 
                 onClick={() => setSelectedEmpForLogin(null)}
@@ -1247,7 +1247,7 @@ export default function Movements() {
               </button>
             </div>
 
-            <p className="text-xs text-muted-foreground mb-3">
+            <p className="text-xs text-muted-foreground mb-3 notranslate normal-case" translate="no">
               {isSettingNewPinOnLogin
                 ? 'Este colaborador ainda não tem senha cadastrada. Digite uma senha para ele e confirme para entrar:'
                 : `Digite a senha de ${selectedEmpForLogin.name} para confirmar a mudança de operador:`}
@@ -1317,7 +1317,7 @@ export default function Movements() {
               <span>Excluir Funcionário</span>
             </div>
             <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
-              Tem certeza que deseja excluir <strong>{empToDelete.name}</strong> ({empToDelete.role}) da equipe? Ele será removido permanentemente do estabelecimento.
+              Tem certeza que deseja excluir <strong className="notranslate normal-case" translate="no">{empToDelete.name}</strong> ({empToDelete.role}) da equipe? Ele será removido permanentemente do estabelecimento.
             </p>
             <div className="flex items-center gap-2">
               <button

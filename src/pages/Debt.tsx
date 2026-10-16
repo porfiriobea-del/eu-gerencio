@@ -330,11 +330,11 @@ export default function Debt() {
                 >
                   <td className="p-4 font-semibold text-foreground">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-palette-1 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-palette-1 text-primary flex items-center justify-center font-bold text-xs shrink-0 notranslate normal-case" translate="no">
                         {c.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <span className="block leading-tight text-foreground hover:text-primary transition-colors">
+                        <span className="block leading-tight text-foreground hover:text-primary transition-colors notranslate normal-case" translate="no">
                           {c.name}
                         </span>
                         <span className="text-[11px] text-muted-foreground font-normal">
@@ -438,12 +438,12 @@ export default function Debt() {
             {/* Modal Header */}
             <div className="p-5 sm:p-6 border-b border-border bg-muted/30 flex items-start justify-between gap-3 shrink-0">
               <div className="flex items-center gap-3.5 overflow-hidden">
-                <div className="w-12 h-12 rounded-2xl bg-palette-1 text-primary flex items-center justify-center font-bold text-lg shrink-0 border border-primary/20 shadow-xs">
+                <div className="w-12 h-12 rounded-2xl bg-palette-1 text-primary flex items-center justify-center font-bold text-lg shrink-0 border border-primary/20 shadow-xs notranslate normal-case" translate="no">
                   {selectedCustomer.name.charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-lg sm:text-xl font-bold font-heading text-foreground truncate">
+                    <h2 className="text-lg sm:text-xl font-bold font-heading text-foreground truncate notranslate normal-case" translate="no">
                       {selectedCustomer.name}
                     </h2>
                     <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider">
@@ -612,7 +612,7 @@ export default function Debt() {
                             </div>
 
                             {/* Details: Day, Hour, and Operator */}
-                            <div>
+                            <div className="notranslate normal-case" translate="no">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className={`text-xs font-bold ${
                                   isSale
@@ -632,7 +632,7 @@ export default function Debt() {
                               </div>
 
                               {/* Summary / Items of the purchase */}
-                              <p className="text-xs text-foreground/90 mt-1 leading-relaxed">
+                              <p className="text-xs text-foreground/90 mt-1 leading-relaxed notranslate normal-case" translate="no">
                                 {item.description}
                               </p>
 
@@ -640,7 +640,7 @@ export default function Debt() {
                               {item.employeeName && (
                                 <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
                                   <span>Registrado por:</span>
-                                  <span className="font-semibold text-foreground">{item.employeeName}</span>
+                                  <span className="font-semibold text-foreground notranslate normal-case" translate="no">{item.employeeName}</span>
                                   {item.paymentMethod && (
                                     <span className="ml-1 text-[10px] px-1.5 py-0.2 bg-muted rounded border border-border">
                                       {item.paymentMethod === 'cash' ? 'Dinheiro' : 'Cartão'}
@@ -697,7 +697,7 @@ export default function Debt() {
                   <span>Excluir Cliente</span>
                 </button>
                 <span className="text-xs text-muted-foreground hidden md:inline">
-                  Ficha de <span className="font-bold text-foreground">{selectedCustomer.name}</span>
+                  Ficha de <span className="font-bold text-foreground notranslate normal-case" translate="no">{selectedCustomer.name}</span>
                 </span>
               </div>
 
@@ -741,8 +741,8 @@ export default function Debt() {
                   value={formData.name} 
                   onChange={e => setFormData({...formData, name: e.target.value})} 
                   placeholder="Ex: João da Padaria, Dona Maria..."
-                  className="w-full border border-border bg-surface text-foreground p-2.5 rounded-xl text-sm focus:outline-hidden focus:border-primary" 
-                />
+                  className="w-full border border-border bg-surface text-foreground p-2.5 rounded-xl text-sm focus:outline-hidden focus:border-primary notranslate normal-case"
+                 translate="no"/>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-foreground mb-1.5">Telefone (opcional)</label>
@@ -805,7 +805,7 @@ export default function Debt() {
           <div className="bg-surface rounded-2xl w-full max-w-md p-6 border border-border shadow-xl">
             <h2 className="text-xl font-bold font-heading text-foreground mb-1">{v('debt.pay')}</h2>
             <p className="text-muted-foreground text-xs mb-5">
-              Cliente: <span className="font-semibold text-foreground">{selectedCustomer.name}</span> (Dívida total pendente: <span className="font-bold text-red-600">R$ {selectedCustomer.totalDebt.toFixed(2)}</span>)
+              Cliente: <span className="font-semibold text-foreground notranslate normal-case" translate="no">{selectedCustomer.name}</span> (Dívida total pendente: <span className="font-bold text-red-600">R$ {selectedCustomer.totalDebt.toFixed(2)}</span>)
             </p>
             <form onSubmit={handlePay} className="space-y-4">
               <div>
@@ -895,7 +895,7 @@ export default function Debt() {
             <div className="bg-muted/40 rounded-2xl p-4 border border-border/80 space-y-2 mb-5">
               <div className="flex justify-between items-center text-xs">
                 <span className="text-muted-foreground">Nome:</span>
-                <span className="font-bold text-foreground">{customerToDelete.name}</span>
+                <span className="font-bold text-foreground notranslate normal-case" translate="no">{customerToDelete.name}</span>
               </div>
               {customerToDelete.phone && (
                 <div className="flex justify-between items-center text-xs">

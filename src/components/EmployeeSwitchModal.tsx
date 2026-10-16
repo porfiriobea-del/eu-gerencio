@@ -309,12 +309,12 @@ export const EmployeeSwitchModal: React.FC = () => {
           currentEmployee ? (
             <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 mb-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
               <div className="flex items-center gap-3 overflow-hidden">
-                <div className={`w-11 h-11 rounded-2xl ${currentEmployee.color || 'bg-emerald-500'} text-white font-bold flex items-center justify-center shadow-xs text-base shrink-0`}>
+                <div className={['notranslate', 'normal-case', (`w-11 h-11 rounded-2xl ${currentEmployee.color || 'bg-emerald-500'} text-white font-bold flex items-center justify-center shadow-xs text-base shrink-0`)].filter(Boolean).join(' ')} translate="no">
                   {currentEmployee.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="overflow-hidden">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-foreground text-sm sm:text-base truncate">
+                    <span className="font-bold text-foreground text-sm sm:text-base truncate notranslate normal-case" translate="no">
                       {currentEmployee.name}
                     </span>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-white tracking-wide uppercase">
@@ -371,12 +371,12 @@ export const EmployeeSwitchModal: React.FC = () => {
           <div className="p-5 rounded-2xl bg-palette-1 border border-primary/30 mb-4 animate-in fade-in duration-200">
             <div className="flex items-center justify-between mb-3 border-b border-primary/20 pb-3">
               <div className="flex items-center gap-2.5">
-                <div className={`w-9 h-9 rounded-xl ${selectedToLogin.color || 'bg-primary'} text-white font-bold flex items-center justify-center text-sm shadow-2xs shrink-0`}>
+                <div className={['notranslate', 'normal-case', (`w-9 h-9 rounded-xl ${selectedToLogin.color || 'bg-primary'} text-white font-bold flex items-center justify-center text-sm shadow-2xs shrink-0`)].filter(Boolean).join(' ')} translate="no">
                   {selectedToLogin.name.charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <h3 className="font-bold text-sm text-foreground flex items-center gap-1.5">
-                    <span>Mudar para: {selectedToLogin.name}</span>
+                    <span className="notranslate normal-case" translate="no">Mudar para: {selectedToLogin.name}</span>
                   </h3>
                   <p className="text-[11px] text-muted-foreground">{selectedToLogin.role}</p>
                 </div>
@@ -396,7 +396,7 @@ export const EmployeeSwitchModal: React.FC = () => {
             </div>
 
             <div className="mb-4">
-              <p className="text-xs text-foreground/90 font-medium">
+              <p className="text-xs text-foreground/90 font-medium notranslate normal-case" translate="no">
                 {settingNewPinForEmp 
                   ? '🔒 Este colaborador ainda não tem senha configurada. Defina uma senha para ele agora para confirmar a troca:'
                   : `🔑 Digite a senha individual de ${selectedToLogin.name} para confirmar a mudança de operador:`}
@@ -511,10 +511,10 @@ export const EmployeeSwitchModal: React.FC = () => {
           <div className="p-5 rounded-2xl bg-red-500/10 border border-red-500/30 mb-5 animate-in fade-in duration-200">
             <div className="flex items-center gap-2 text-red-700 dark:text-red-300 font-bold text-sm mb-2">
               <AlertTriangle className="w-4 h-4 text-red-600" />
-              <span>Excluir Funcionário: {employeeToDelete.name}?</span>
+              <span className="notranslate normal-case" translate="no">Excluir Funcionário: {employeeToDelete.name}?</span>
             </div>
             <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
-              Tem certeza que deseja remover <strong>{employeeToDelete.name}</strong> ({employeeToDelete.role}) da equipe? Ele será excluído permanentemente do sistema e não terá mais acesso às trocas de operador.
+              Tem certeza que deseja remover <strong className="notranslate normal-case" translate="no">{employeeToDelete.name}</strong> ({employeeToDelete.role}) da equipe? Ele será excluído permanentemente do sistema e não terá mais acesso às trocas de operador.
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -764,12 +764,12 @@ export const EmployeeSwitchModal: React.FC = () => {
                     >
                       {/* Avatar e Dados do Funcionário */}
                       <div className="flex items-center gap-3 overflow-hidden flex-1">
-                        <div className={`w-10 h-10 rounded-2xl ${emp.color || 'bg-primary'} text-white font-bold flex items-center justify-center text-sm shrink-0 shadow-2xs group-hover:scale-105 transition-transform`}>
+                        <div className={['notranslate', 'normal-case', (`w-10 h-10 rounded-2xl ${emp.color || 'bg-primary'} text-white font-bold flex items-center justify-center text-sm shrink-0 shadow-2xs group-hover:scale-105 transition-transform`)].filter(Boolean).join(' ')} translate="no">
                           {emp.name.charAt(0).toUpperCase()}
                         </div>
                         <div className="overflow-hidden flex-1">
                           <p className="text-sm font-bold text-foreground truncate flex items-center gap-1.5">
-                            <span>{emp.name}</span>
+                            <span className="notranslate normal-case" translate="no">{emp.name}</span>
                             {isCurrent && (
                               <span className="text-[10px] bg-emerald-500 text-white px-1.5 py-0.2 rounded-full font-bold">
                                 Ativo

@@ -220,8 +220,8 @@ export function GlobalMovementHistory() {
 
               {/* Ticker / Preview curto da última ação */}
               {latestMovement ? (
-                <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[280px] sm:max-w-md">
-                  <span className="font-semibold text-foreground/80">{latestMovement.employeeName || 'Operador'}:</span>{' '}
+                <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[280px] sm:max-w-md notranslate normal-case" translate="no">
+                  <span className="font-semibold text-foreground/80 notranslate normal-case" translate="no">{latestMovement.employeeName || 'Operador'}:</span>{' '}
                   {latestMovement.description}
                 </p>
               ) : (
@@ -355,7 +355,7 @@ export function GlobalMovementHistory() {
 
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-bold text-xs text-foreground truncate">
+                            <span className="font-bold text-xs text-foreground truncate notranslate normal-case" translate="no">
                               {m.employeeName || 'Operador'}
                             </span>
                             {m.employeeRole && (
@@ -369,7 +369,7 @@ export function GlobalMovementHistory() {
                             </span>
                           </div>
 
-                          <p className="text-xs text-foreground/90 mt-0.5 line-clamp-2 leading-relaxed">
+                          <p className="text-xs text-foreground/90 mt-0.5 line-clamp-2 leading-relaxed notranslate normal-case" translate="no">
                             {m.description}
                           </p>
                         </div>

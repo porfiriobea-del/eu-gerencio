@@ -105,3 +105,16 @@ for(const [method,total] of [['Pix (direto na conta)',5],['Pix na maquininha',5]
   assert.equal(saved.paymentMethod,method==='Pix na maquininha'?'pix_machine':method.startsWith('Pix')?'pix':method==='Crédito'?'credit':method==='Débito'?'debit':'voucher');
  });
 }
+
+test('product names retain the stored text and explicitly opt out of browser translation in POS and cart',()=>{
+ const original=standard.name;
+ try{
+  standard.name='Orange Light — Café São João';
+  const ui=setup();
+  const heading=ui.getByRole('heading',{name:standard.name});
+  assert.equal(heading.textContent,standard.name);assert.equal(heading.getAttribute('translate'),'no');assert.ok(heading.classList.contains('notranslate'));
+  addStandard(ui);openCart(ui);
+  const name=ui.getAllByText(standard.name).find(node=>node!==heading);
+  assert.equal(name.textContent,standard.name);assert.equal(name.getAttribute('translate'),'no');assert.ok(name.classList.contains('notranslate'));
+ }finally{standard.name=original;}
+});
