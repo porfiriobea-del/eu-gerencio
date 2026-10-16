@@ -116,3 +116,8 @@ test('a saved usage row stays confirmed even when summary cannot be updated', ()
  assert.equal(rows.length,2);
  assert.equal(rows[1][4],10);
 });
+
+test('Apps Script accepts anonymous screen-error events in the Uso sheet',()=>{
+ const {result,rows}=run({categoria:'uso',evento:'erro_tela',valor:0});
+ assert.equal(result.ok,true);assert.equal(rows[1][3],'erro_tela');assert.equal(rows[1][4],0);
+});

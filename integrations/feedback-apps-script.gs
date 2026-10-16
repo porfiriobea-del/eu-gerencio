@@ -13,7 +13,7 @@ function doPost(e) {
       headings = ['ID', 'Data UTC', 'Loja anônima', 'Usuário anônimo', 'Nota', 'Tipo', 'Mensagem', 'Contato'];
       if (!/^feedback_[a-f0-9]{64}$/.test(data.id || '')) return reportJson({ok: false});
       row = [data.id, new Date(), data.loja, data.usuario, data.nota == null || data.nota === '' ? '' : Number(data.nota), data.tipo, data.mensagem, data.contato || ''];
-    } else if (data.categoria === 'uso' && ['venda','produto_cadastrado','foto_ia','fiado_lancado','compra_registrada'].indexOf(data.evento) >= 0) {
+    } else if (data.categoria === 'uso' && ['venda','produto_cadastrado','foto_ia','fiado_lancado','compra_registrada', 'erro_tela'].indexOf(data.evento) >= 0) {
       name = 'Uso';
       headings = ['Data UTC', 'Loja anônima', 'Usuário anônimo', 'Evento', 'Valor'];
       row = [new Date(), data.loja, data.usuario, data.evento, Number(data.valor || 0)];

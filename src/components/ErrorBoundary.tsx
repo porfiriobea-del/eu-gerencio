@@ -1,3 +1,4 @@
+import { reportScreenError } from '../lib/screenErrorReporting';
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
@@ -22,6 +23,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught error:', error, errorInfo);
+    reportScreenError(error);
   }
 
   private handleReload = () => {
@@ -50,9 +52,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </h2>
             
             <p className="text-sm text-gray-600 mb-6">
-              {isNetwork
-                ? 'O aplicativo está operando em modo offline. Seus dados continuam seguros e salvos localmente no seu aparelho.'
-                : 'Não se preocupe, seus dados estão seguros. Recarregue a página para continuar normalmente.'}
+              Recarregue a página para continuar normalmente.
             </p>
 
             <button

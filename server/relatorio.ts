@@ -37,7 +37,7 @@ export async function enviarParaPlanilha(req: Request, res: Response) {
         id: `feedback_${createHash('sha256').update(id).digest('hex')}` });
       if (feedback.contact?.trim()) payload.contato = feedback.contact.trim();
     } else if (req.body?.categoria === 'uso') {
-      if (!['venda', 'produto_cadastrado', 'foto_ia', 'fiado_lancado', 'compra_registrada'].includes(req.body.evento)) return skip();
+      if (!['venda', 'produto_cadastrado', 'foto_ia', 'fiado_lancado', 'compra_registrada', 'erro_tela'].includes(req.body.evento)) return skip();
       const valor = req.body.valor ?? 0;
       if (typeof valor !== 'number' || !Number.isFinite(valor) || valor < 0) return skip();
       Object.assign(payload, { categoria: 'uso', evento: req.body.evento, valor });

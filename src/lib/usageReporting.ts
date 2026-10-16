@@ -1,5 +1,5 @@
 import { auth } from './firebase';
-export type UsageEvent = 'venda' | 'produto_cadastrado' | 'foto_ia' | 'fiado_lancado' | 'compra_registrada';
+export type UsageEvent = 'venda' | 'produto_cadastrado' | 'foto_ia' | 'fiado_lancado' | 'compra_registrada' | 'erro_tela';
 export async function anonymousCode(kind: 'loja' | 'usuario', id: string): Promise<string> {
   const bytes = new TextEncoder().encode(`${kind}:${id}`);
   const digest = await crypto.subtle.digest('SHA-256', bytes);

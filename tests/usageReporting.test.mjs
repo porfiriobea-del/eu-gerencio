@@ -19,18 +19,18 @@ before(async () => {
 afterEach(() => { auth.currentUser = { uid: 'user-id', getIdToken: async () => 'test-token' }; });
 after(async () => { await rm(dir, { recursive: true, force: true }); delete globalThis.__usageAuth; });
 
-test('all five usage events use relatorio with anonymous identities and never block the caller', async t => {
+test('all usage events, including screen errors, use relatorio with anonymous identities and never block the caller', async t => {
  const requests = [], releases = [];
  t.mock.method(globalThis, 'fetch', async (url, options) => {
   requests.push({ url, options, body: JSON.parse(options.body) });
   await new Promise(resolve => releases.push(resolve));
   return Response.json({ success: true });
  });
- const events = ['venda', 'produto_cadastrado', 'foto_ia', 'fiado_lancado', 'compra_registrada'];
+ const events = ['venda', 'produto_cadastrado', 'foto_ia', 'fiado_lancado', 'compra_registrada', 'erro_tela'];
  for (const event of events) assert.equal(reporting.reportUsage(event, 'store-id', event === 'venda' || event === 'compra_registrada' ? 42.5 : 0), undefined);
  assert.equal(requests.length, 0);
  await waitFor(() => requests.length === 2);
- // Only two requests can be outstanding; the other three remain queued.
+ // Only two requests can be outstanding; the remaining events stay queued.
  await new Promise(resolve => setTimeout(resolve, 10));
  assert.equal(requests.length, 2);
  let completed = 0;
@@ -38,7 +38,7 @@ test('all five usage events use relatorio with anonymous identities and never bl
   await waitFor(() => releases.length > 0);
   releases.shift()(); completed++;
  }
- await waitFor(() => requests.length === 5);
+ await waitFor(() => requests.length === events.length);
  for (let index = 0; index < events.length; index++) {
   const { url, options, body } = requests.find(request => request.body.evento === events[index]);
   assert.equal(url, '/api/relatorio'); assert.equal(options.method, 'POST');

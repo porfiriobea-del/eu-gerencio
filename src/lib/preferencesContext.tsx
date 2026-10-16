@@ -1,3 +1,4 @@
+import { syncDocumentLanguage } from './browserTranslation';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 export type Language = 'pt' | 'en' | 'es';
@@ -683,8 +684,11 @@ const PreferencesContext = createContext<PreferencesContextType | undefined>(und
 
 export function PreferencesProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<Language>(() => {
-    return (cachedPreference('app_lang') as Language) || 'pt';
+    const value = cachedPreference('app_lang');
+    return value === 'en' || value === 'es' ? value : 'pt';
   });
+
+  useEffect(() => syncDocumentLanguage(language), [language]);
 
   const [languageMode, setLanguageModeState] = useState<LanguageMode>(() => {
     const mode = cachedPreference('app_lang_mode');

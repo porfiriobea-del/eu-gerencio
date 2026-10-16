@@ -30,7 +30,7 @@ test('feedback is read from Supabase, receives a server-only secret and anonymou
 });
 test('usage only forwards allowed event/value fields and anonymous store/user codes',async t=>{
  const exports=setup(t);
- for(const evento of ['venda','produto_cadastrado','foto_ia','fiado_lancado','compra_registrada']) {
+ for(const evento of ['venda','produto_cadastrado','foto_ia','fiado_lancado','compra_registrada','erro_tela']) {
   assert.equal((await invoke({categoria:'uso',evento,valor:10,loja:code('loja','store'),email:'private@test.invalid',telefone:'private'})).body.success,true);
   assert.equal(exports.at(-1).evento,evento);assert.equal(exports.at(-1).valor,10);assert.equal(exports.at(-1).loja,code('loja','store'));
   assert.equal(exports.at(-1).email,undefined);assert.equal(exports.at(-1).telefone,undefined);
