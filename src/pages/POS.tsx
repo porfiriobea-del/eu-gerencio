@@ -1,3 +1,7 @@
+import { QuickProductDialog } from '../components/QuickProductDialog';
+import { Star } from 'lucide-react';
+import { CategoryChips } from '../components/CategoryChips';
+import { QuickProducts, useProductShortcuts } from '../components/QuickProducts';
 import { useStockFormatting } from '../lib/useStockFormatting';
 import { sortByName } from '../lib/alphabetical';
 import { ProductImage } from '../components/ProductImage';
@@ -60,6 +64,8 @@ export default function POS() {
   const [todaySales, setTodaySales] = useState<Sale[]>([]);
   const [cashClosures, setCashClosures] = useState<CashClosure[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const shortcuts = useProductShortcuts(settings?.ownerId || '');
+  const [quickProduct, setQuickProduct] = useState<Product | null>(null);
   const [showDetailedCardFees, setShowDetailedCardFees] = useState(false);
 
   const [search, setSearch] = useState('');
@@ -142,6 +148,7 @@ export default function POS() {
       calculateStockUpdates(nextCart, products);
       cartRef.current = nextCart;
       setCart(nextCart);
+      if(product.id) shortcuts.remember(product.id);
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Não foi possível adicionar o produto.');
     }
@@ -419,7 +426,7 @@ export default function POS() {
   return (
     <div className="space-y-4">
       {/* Pocket Tip: Guia do Caixa em 2 Passos */}
-      <PocketTip
+      <PocketTip compact
         id="pos-guide"
         badgeText="Dica de Bolso"
         title={`Como Usar o ${v('pos.title', 'Caixa')} em 2 Passos`}
@@ -479,7 +486,8 @@ export default function POS() {
       <div className="flex flex-col lg:flex-row h-full gap-6">
       {/* Products Section */}
       <div className="min-w-0 flex-1 flex flex-col space-y-4">
-        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
+        <div className="sticky top-[var(--pos-sticky-top,0px)] z-30 -mx-1 space-y-2 rounded-xl bg-background px-1 pr-14 pb-2 md:pr-1 md:relative">
+        <div className="flex flex-wrap items-center gap-2 md:gap-3">
           <div className="relative min-w-0 flex-1 sm:min-w-[180px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-5 h-5" />
             <input 
@@ -492,7 +500,7 @@ export default function POS() {
           <select 
             value={selectedCategory} 
             onChange={e => setSelectedCategory(e.target.value)}
-            className="px-3 py-2.5 rounded-xl border border-border bg-surface text-foreground shadow-xs cursor-pointer text-sm"
+            className="hidden md:block px-3 py-2.5 rounded-xl border border-border bg-surface text-foreground shadow-xs cursor-pointer text-sm"
           >
             {categories.map(c => <option key={c} value={c}>{c === 'Todas' ? v('ui.categories', 'Todas as categorias') : c}</option>)}
           </select>
@@ -502,25 +510,32 @@ export default function POS() {
             className="px-3.5 py-2.5 bg-palette-1 text-primary hover:bg-palette-1/80 border border-primary/30 rounded-xl font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs shrink-0 text-sm"
           >
             <Lock className="w-4 h-4" />
-            <span>{v('ui.closeCash', "Fechar Caixa")}</span>
+            <span className="hidden md:inline">{v('ui.closeCash', "Fechar Caixa")}</span>
             <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-bold">
               {todaySales.length}
             </span>
           </button>
         </div>
 
+        <div className="md:hidden"><CategoryChips categories={categories} value={selectedCategory} onChange={setSelectedCategory}/></div>
+        </div>
+        <QuickProducts products={products} totals={salesTotals} favorites={shortcuts.favorites} recent={shortcuts.recent} onFavorite={shortcuts.toggleFavorite} onChoose={product=>{
+          if(product.type==='cigarro')setQuickProduct(product);
+          else addToCart(product, 'Unidade', product.hasPromoSuggestion && product.promoPrice ? product.promoPrice : product.basePrice, 1);
+        }}/>
         <div className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4 overflow-y-auto pb-24">
           {Object.keys(salesTotals).length > 0 && <p className="col-span-full text-xs text-muted-foreground">{v('pos.salesOrder', 'Mais vendidos primeiro')}</p>}
           {filteredProducts.map(p => (
-            <div key={p.id} className="bg-surface border border-border rounded-2xl p-3.5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group">
+            <div key={p.id} className="relative bg-surface border border-border rounded-2xl p-3.5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group">
+              <button type="button" aria-label={`${v('mobile.favorite','Favoritar')} ${p.name}`} aria-pressed={shortcuts.favorites.includes(p.id!)} onClick={()=>shortcuts.toggleFavorite(p.id!)} className="absolute right-1 top-1 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-surface/90 md:hidden"><Star className={`h-4 w-4 ${shortcuts.favorites.includes(p.id!)?'fill-amber-400 text-amber-600':''}`}/></button>
               <div>
                 {/* Imagem Exata do Produto no Caixa */}
-                <div className="w-full h-28 mb-3 rounded-xl overflow-hidden bg-palette-1/40 border border-border/80 flex items-center justify-center shrink-0">
+                <div className="mx-auto h-[88px] w-[88px] md:w-full md:h-28 mb-3 rounded-xl overflow-hidden bg-neutral-100 dark:bg-neutral-900 md:bg-palette-1/40 border border-border/80 flex items-center justify-center shrink-0">
                   {p.imageUrl ? (
                     <ProductImage
                       src={p.imageUrl} 
                       alt={p.name} 
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200 notranslate normal-case"
+                      className="w-full h-full object-contain md:object-cover md:group-hover:scale-105 transition-transform duration-200 notranslate normal-case"
                       loading="lazy"
                      translate="no"/>
                   ) : (
@@ -1089,6 +1104,7 @@ export default function POS() {
         </div>
       )}
 
+      {quickProduct && <QuickProductDialog product={products.find(p=>p.id===quickProduct.id)||quickProduct} onClose={()=>setQuickProduct(null)} onAdd={addToCart}/>}
       {/* Cash Closure (Fechar Caixa) Modal */}
       {isCashClosureOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs overflow-y-auto">

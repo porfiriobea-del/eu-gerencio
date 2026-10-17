@@ -1,3 +1,4 @@
+import { usePreferences } from '../lib/preferencesContext';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Sparkles, ChevronDown, ChevronUp, CheckCircle2, ArrowRight } from 'lucide-react';
@@ -31,6 +32,7 @@ interface PocketTipProps {
   sections: PocketTipStep[];
   helpfulNote?: string;
   defaultOpen?: boolean;
+  compact?: boolean;
 }
 
 export const PocketTip: React.FC<PocketTipProps> = ({
@@ -41,9 +43,12 @@ export const PocketTip: React.FC<PocketTipProps> = ({
   sections,
   helpfulNote = 'Você não precisa decorar nada: faça no seu tempo e o sistema cuida das contas!',
   defaultOpen = true,
+  compact = false,
 }) => {
+  const {v} = usePreferences();
   const storageKey = `pocket_tip_open_${id}`;
   const [isOpen, setIsOpen] = useState<boolean>(() => {
+    if (compact) return false;
     try {
       const stored = localStorage.getItem(storageKey);
       return stored !== null ? stored === 'true' : defaultOpen;
@@ -62,6 +67,7 @@ export const PocketTip: React.FC<PocketTipProps> = ({
     }
   };
 
+  if (compact && !isOpen) return <button type="button" aria-label={v('mobile.tip','Abrir dica do Caixa')} onClick={toggleOpen} className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface text-lg font-bold text-primary">?</button>;
   return (
     <div className="bg-gradient-to-r from-amber-500/10 via-palette-1/40 to-emerald-500/10 border border-primary/20 rounded-2xl p-4 sm:p-5 shadow-xs transition-all">
       {/* Header bar */}

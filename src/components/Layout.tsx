@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { MobileNavigation } from './MobileNavigation';
+import { useState, useEffect, useRef, type CSSProperties } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { 
   Home, ShoppingCart, Package, DollarSign, Users, Settings as SettingsIcon, 
@@ -122,7 +123,7 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
 
   return (
     <div className="flex h-[100dvh] min-h-0 bg-background text-foreground font-sans">
-      <div ref={mainRef} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+      <div ref={mainRef} style={{'--pos-sticky-top':menuPinned?'4rem':'0px'} as CSSProperties} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
         <header id="app-top-toolbar" className={`${menuPinned ? 'sticky top-0' : 'relative'} z-40 shrink-0 border-b border-border bg-surface`}>
           <div className="flex min-h-16 items-center gap-3 px-4 sm:px-6">
             {!sidebarVisible && <button ref={menuButtonRef} type="button" onClick={() => setMenuOpen(true)}
@@ -191,7 +192,7 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
         )}
 
 
-        <main className="flex-1 p-4 sm:p-6 md:p-8">
+        <main className="flex-1 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 md:p-8">
           <div className="mx-auto w-full min-w-0 max-w-6xl">
             <Outlet />
             <GlobalMovementHistory />
@@ -316,6 +317,7 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
         </div>
       )}
 
+      <MobileNavigation />
       <TutorialModal />
       <InviteModal isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} />
       <EmployeeSwitchModal />

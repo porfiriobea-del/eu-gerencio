@@ -1,3 +1,4 @@
+import { MobileStockList } from '../components/MobileStockList';
 import { useStockFormatting } from '../lib/useStockFormatting';
 import { compareAlphabetical, sortCategories } from '../lib/alphabetical';
 import { formatDate, normalizeLanguage } from '../lib/language';
@@ -704,7 +705,7 @@ export default function Stock() {
             Gestão com base na {v('stock.initialDate', 'data do estoque inicial').toLowerCase()} e limites de {v('stock.max', 'estoque máximo').toLowerCase()} para compras precisas.
           </p>
         </div>
-        <div className="grid w-full gap-2 sm:grid-cols-3">
+        <div className="hidden w-full gap-2 md:grid md:grid-cols-3">
           <button type="button" onClick={() => setIsCameraModalOpen(true)}
             className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-emerald-700">{v('ui.photo', "📸 Cadastrar por Foto (IA)")}</button>
           <button type="button" onClick={() => openModal()}
@@ -973,6 +974,12 @@ export default function Stock() {
         </div>
       </div>
 
+      <MobileStockList products={filteredProducts} selected={selectedProductIds}
+        onSelect={id=>setSelectedProductIds(previous=>previous.includes(id)?previous.filter(value=>value!==id):[...previous,id])}
+        onSelectAll={handleSelectAllFiltered} onDelete={handleTriggerDeleteAll}
+        onEdit={openModal} onAdjust={handleQuickAddStock}
+        onPhoto={()=>setIsCameraModalOpen(true)} onCatalog={()=>setIsCatalogImportOpen(true)} onNew={()=>openModal()}/>
+      <div className="hidden md:block">
       {/* Barra de Seleção de Modo de Visualização (Cards Simples vs Tabela Completa) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 pb-1">
         <div className="flex items-center gap-2 flex-wrap">
@@ -1673,6 +1680,7 @@ export default function Stock() {
       </div>
       )}
 
+      </div>
       {/* Modal de Cadastro / Edição com Estoque Inicial, Data Base e Estoque Máximo */}
       {isModalOpen && (
         <div 
@@ -1704,7 +1712,7 @@ export default function Stock() {
                         <img 
                           src={formData.imageUrl} 
                           alt="Prévia do produto" 
-                          className="w-20 h-20 rounded-xl object-cover border-2 border-primary/40 shadow-xs" 
+                          className="h-40 w-40 bg-neutral-100 object-contain dark:bg-neutral-900 md:w-20 md:h-20 md:object-cover rounded-xl border-2 border-primary/40 shadow-xs"
                         />
                         <button
                           type="button"
