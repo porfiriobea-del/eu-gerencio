@@ -33,7 +33,7 @@ const mocks = {
   categories: "export const getAllCategories=()=>['Bebidas','Diversos']; export const saveCustomCategory=()=>{};",
   geminiCatalogScanner: 'export const prepareCatalogFile=(file)=>globalThis.__prepareFile(file); export const recognizeCatalog=(...args)=>globalThis.__recognizeCatalog(...args);'
 };
-const childMocks = ['TutorialModal', 'InviteModal', 'EmployeeSwitchModal', 'GlobalMovementHistory', 'PocketTip', 'CameraCaptureModal'];
+const childMocks = ['EmployeeFirstPin', 'TutorialModal', 'InviteModal', 'EmployeeSwitchModal', 'GlobalMovementHistory', 'PocketTip', 'CameraCaptureModal'];
 for (const [name, source] of [['Layout','components/Layout'],['CatalogImportModal','components/CatalogImportModal'],['Stock','pages/Stock'],['ProductDuplicateDialog','components/ProductDuplicateDialog']]) {
   await build({ entryPoints: [new URL(`../src/${source}.tsx`, import.meta.url).pathname], bundle:true, packages:'external', format:'esm', platform:'node', jsx:'automatic', outfile:`${dir}/${name}.mjs`,
     plugins:[{name:'mock-integrations',setup(builder){

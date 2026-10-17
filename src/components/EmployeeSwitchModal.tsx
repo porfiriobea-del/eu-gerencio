@@ -1,3 +1,5 @@
+import {usePreferences} from '../lib/preferencesContext';
+import {isObviousEmployeePin} from '../lib/teamInvitation';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import React, { useState } from 'react';
 import { 
@@ -31,6 +33,7 @@ const PRESET_COLORS = [
 ];
 
 export const EmployeeSwitchModal: React.FC = () => {
+  const {v}=usePreferences();
   const { 
     currentEmployee, 
     employees, 
@@ -176,6 +179,7 @@ export const EmployeeSwitchModal: React.FC = () => {
 
   const handleSubmitEmployeeForm = async (e: React.FormEvent) => {
     e.preventDefault();
+    if(isObviousEmployeePin(formPassword)){setFormError(v('team.pinWeak'));return;}
     if (!formName.trim()) {
       setFormError('Por favor, informe o nome do funcionário.');
       return;
@@ -183,11 +187,6 @@ export const EmployeeSwitchModal: React.FC = () => {
 
     if (!formPassword.trim()) {
       setFormError('A senha é obrigatória para cada funcionário para garantir segurança ao mudar de operador.');
-      return;
-    }
-
-    if (formPassword.trim().length < 3) {
-      setFormError('A senha deve ter no mínimo 3 caracteres ou números.');
       return;
     }
 

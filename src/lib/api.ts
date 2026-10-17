@@ -1,3 +1,4 @@
+import { assertEmployeePin, invitationStoreName } from './teamInvitation';
 import { validateNotebook, moneyCents, notebookSum, type NotebookEntry } from './debtNotebook';
 import { storeProductImage, isEmbeddedProductImage } from './productImages';
 import { calculatePayment, paymentLabel } from './paymentFees';
@@ -1177,10 +1178,13 @@ export const addEmployee = withActionDeadline(async (
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
 
+  if(employee.pin) assertEmployeePin(employee.pin);
   const ref = doc(collection(db, 'employees'));
   const now = Date.now();
   const cleanData = removeUndefinedFields({
     ...employee,
+    ...(employee.pin ? {pin:employee.pin.trim()} : {}),
+    mustChangePin: true,
     isActive: employee.isActive ?? true,
     ownerId: uid,
     createdAt: now,
@@ -1200,9 +1204,13 @@ export const updateEmployee = withActionDeadline(async (id: string, data: Partia
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
 
+  if(data.pin !== undefined) assertEmployeePin(data.pin);
   try {
+    const current = data.pin !== undefined ? await getDoc(doc(db,'employees',id)) : null;
+    const resetPin = current?.exists() && current.data().pin !== data.pin;
     const cleanData = removeUndefinedFields({
       ...data,
+      ...(resetPin ? {mustChangePin:true} : {}),
       updatedAt: Date.now()
     });
     await updateDoc(doc(db, 'employees', id), cleanData);
@@ -1365,7 +1373,7 @@ export const createTeamInvitation = withActionDeadline(async (data: {
   role: string;
   phone?: string;
   pin?: string;
-}): Promise<{ inviteId: string; inviteUrl: string }> => {
+}): Promise<{ inviteId: string; inviteUrl: string; storeName: string }> => {
   const currentUid = auth.currentUser?.uid;
   if (!currentUid) throw new Error('Unauthenticated');
 
@@ -1373,60 +1381,24 @@ export const createTeamInvitation = withActionDeadline(async (data: {
   const now = Date.now();
   const cleanEmail = data.email.trim().toLowerCase();
 
-  // Ler o nome da loja
-  let storeName = 'Nosso Estabelecimento';
-  try {
-    const settingsSnap = await getDoc(doc(db, 'settings', currentUid));
-    if (settingsSnap.exists() && settingsSnap.data()?.storeName) {
-      storeName = settingsSnap.data().storeName;
-    }
-  } catch {}
-
-  const invitation = {
-    ownerId: currentUid,
-    storeName,
-    email: cleanEmail,
-    name: data.name.trim(),
-    role: data.role,
-    phone: data.phone?.trim() || undefined,
-    pin: data.pin?.trim() || undefined,
-    status: 'pending',
-    createdAt: now
-  };
-
-  await setDoc(ref, removeUndefinedFields(invitation as any));
-
-  // Assegurar que o funcionário também existe na coleção employees do estabelecimento
-  try {
-    const empQ = query(
-      collection(db, 'employees'), 
-      where('ownerId', '==', currentUid),
-      where('email', '==', cleanEmail)
-    );
-    const empSnap = await getDocs(empQ);
-    if (empSnap.empty) {
-      const empRef = doc(collection(db, 'employees'));
-      await setDoc(empRef, removeUndefinedFields({
-        name: data.name.trim(),
-        role: data.role,
-        email: cleanEmail,
-        phone: data.phone?.trim() || undefined,
-        pin: data.pin?.trim() || undefined,
-        isActive: true,
-        color: 'bg-emerald-500',
-        ownerId: currentUid,
-        createdAt: now,
-        updatedAt: now
-      }));
-    }
-  } catch (err) {
-    console.warn('Could not auto-sync employee record:', err);
-  }
+  assertEmployeePin(data.pin || '');
+  const settingsSnap = await getDoc(doc(db, 'settings', currentUid));
+  const storeName = invitationStoreName(settingsSnap.exists() ? settingsSnap.data().storeName : '');
+  const empSnap = await getDocs(query(collection(db,'employees'),where('ownerId','==',currentUid),where('email','==',cleanEmail)));
+  const empRef = empSnap.empty ? doc(collection(db,'employees')) : doc(db,'employees',empSnap.docs[0].id);
+  await runTransaction(db,async transaction=>{
+    const current = await transaction.get(empRef);
+    const old = current.exists() ? current.data() : {};
+    transaction.set(ref,removeUndefinedFields({ownerId:currentUid,storeName,email:cleanEmail,name:data.name.trim(),role:data.role,phone:data.phone?.trim() || undefined,status:'pending',createdAt:now}));
+    // The temporary PIN belongs only to the employee record, never the invitation link or public invitation data.
+    transaction.set(empRef,removeUndefinedFields({...old,name:data.name.trim(),role:data.role,email:cleanEmail,phone:data.phone?.trim() || undefined,
+      pin:data.pin?.trim() || old.pin,mustChangePin:true,isActive:true,color:old.color || 'bg-emerald-500',ownerId:currentUid,createdAt:old.createdAt || now,updatedAt:now}));
+  });
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const inviteUrl = `${origin}?invite=${ref.id}&store=${currentUid}`;
 
-  return { inviteId: ref.id, inviteUrl };
+  return { inviteId: ref.id, inviteUrl, storeName };
 });
 
 export const getStoreInvitationById = async (inviteId: string): Promise<TeamInvitation | null> => {
@@ -1750,5 +1722,21 @@ export const importDebtNotebook = withActionDeadline(async (entries: NotebookEnt
     debtImports:[...(customer.debtImports || []),{id:entry.id,createdAt:now,description,amount:moneyCents(entry.amount)/100,lines:entry.lines.map(line=>({description:line.description,amount:moneyCents(line.amount)/100})),readTotal:entry.readTotal,summedTotal:notebookSum(entry.lines)}]});
   });
   for(const [id,data] of pending) transaction.set(doc(db,'customers',id),data);
+ });
+});
+
+export const changeEmployeeFirstPin = withActionDeadline(async (id:string,oldPin:string,newPin:string) => {
+ assertEmployeePin(newPin);
+ const ownerId=getEffectiveOwnerId();if(!ownerId)throw new Error('Unauthenticated');
+ return runTransaction(db,async transaction=>{
+  const ref=doc(db,'employees',id),snapshot=await transaction.get(ref);
+  if(!snapshot.exists())throw new Error('Funcionário não encontrado');
+  const employee=snapshot.data();
+  if(employee.ownerId!==ownerId || !employee.isActive)throw new Error('Funcionário indisponível');
+  const session=getActiveStoreSession();
+  if(session?.isEmployee && (!session.employeeEmail || !employee.email || employee.email.toLowerCase()!==session.employeeEmail.toLowerCase()))throw new Error('Funcionário de outra conta');
+  if(employee.pin && employee.pin!==oldPin.trim())throw new Error('Senha atual incorreta');
+  if(employee.pin===newPin.trim())throw new Error('Escolha uma senha diferente da senha provisória');
+  transaction.update(ref,{pin:newPin.trim(),mustChangePin:false,pinChangedAt:Date.now(),updatedAt:Date.now()});
  });
 });

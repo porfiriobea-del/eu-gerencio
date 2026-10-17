@@ -40,6 +40,8 @@ before(async()=>{
     const id=url.searchParams.get('id')?.replace(/^eq\./,'');
     const owner=url.searchParams.get('owner_id')?.replace(/^eq\./,'');
     let rows=[...records.entries()].filter(([k,row])=>k.startsWith(table+'/')&&(!path||row.collection_path===path)&&(!id||row.id===id)&&(!owner||row.owner_id===owner)).map(([,row])=>row);
+    const emailFilter=url.searchParams.get('data->>email')?.replace(/^eq\./,'');
+    if(emailFilter)rows=rows.filter(row=>row.data.email===emailFilter);
     if(url.searchParams.get('select')?.includes('customer_id:data->>customerId')){
       const type=url.searchParams.get('data->>type')?.replace(/^eq\./,'');
       rows=rows.filter(row=>!type||row.data.type===type).map(row=>({customer_id:row.data.customerId,created_at:String(row.data.createdAt)}));
@@ -392,4 +394,33 @@ test('notebook import adds debt atomically, records lines without sales and is s
  await api.importDebtNotebook([{...entries[0],id:'notebook-new',customerId:undefined,name:'Maria'}],true);
  await api.importDebtNotebook([{...entries[0],id:'notebook-new',customerId:undefined,name:'Maria'}],true);
  assert.equal((await store.getDoc(store.doc(store.db,'customers','notebook_notebook-new'))).data().totalDebt,5.3);
+});
+
+test('employees reject obvious PINs and require a durable first-access change without changing unrelated data',async()=>{
+ await assert.rejects(api.addEmployee({name:'Ana',role:'Caixa',pin:'1234',isActive:true}),/sequências/);
+ const id=await api.addEmployee({name:'Ana',role:'Caixa',pin:'5739',email:'ana@example.com',isActive:true});
+ const ref=store.doc(store.db,'employees',id);
+ assert.equal((await store.getDoc(ref)).data().mustChangePin,true);
+ await assert.rejects(api.changeEmployeeFirstPin(id,'wrong','6248'),/incorreta/);
+ await assert.rejects(api.changeEmployeeFirstPin(id,'5739','0000'),/sequências/);
+ await assert.rejects(api.changeEmployeeFirstPin(id,'5739','5739'),/diferente/);
+ forcedConflicts=1;await api.changeEmployeeFirstPin(id,'5739','6248');
+ const changed=(await store.getDoc(ref)).data();
+ assert.equal(changed.pin,'6248');assert.equal(changed.mustChangePin,false);assert.ok(changed.pinChangedAt);assert.equal(changed.name,'Ana');
+ await api.updateEmployee(id,{name:'Ana Maria',pin:'6248'});assert.equal((await store.getDoc(ref)).data().mustChangePin,false);
+ await api.updateEmployee(id,{pin:'9537'});assert.equal((await store.getDoc(ref)).data().mustChangePin,true);
+ await assert.rejects(api.updateEmployee(id,{pin:'1111'}),/sequências/);
+});
+test('team invitation creates only one employee, uses store name and never places a PIN in the invitation document',async()=>{
+ await store.setDoc(store.doc(store.db,'settings','owner'),{ownerId:'owner',storeName:'Banca da Lu'});
+ await assert.rejects(api.createTeamInvitation({email:'invite@test.invalid',name:'Convidada',role:'Caixa',pin:'1234'}),/sequências/);
+ const first=await api.createTeamInvitation({email:'invite@test.invalid',name:'Convidada',role:'Caixa',pin:'5739'});
+ const second=await api.createTeamInvitation({email:'invite@test.invalid',name:'Convidada',role:'Caixa',pin:'6248'});
+ assert.equal(first.storeName,'Banca da Lu');assert.notEqual(first.inviteId,second.inviteId);
+ const invite=(await store.getDoc(store.doc(store.db,'teamInvitations',first.inviteId))).data();
+ assert.equal(invite.storeName,'Banca da Lu');assert.equal(invite.pin,undefined);
+ // Check both the invitation and employee records.
+ const employees=await store.getDocs(store.query(store.collection(store.db,'employees'),store.where('ownerId','==','owner')));
+ assert.equal(employees.docs.filter(row=>row.data().email==='invite@test.invalid').length,1);
+ assert.ok(employees.docs.some(row=>row.data().email==='ana@example.com'));
 });

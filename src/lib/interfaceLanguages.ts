@@ -2,6 +2,22 @@ import type {Language} from './language';
 type Mode='basic'|'neutral'|'technical';
 type Dictionary=Record<string,string>;
 const en:Dictionary={
+ 'team.inviteHelp':'Invite someone to join the team at {store}.',
+"team.pinWeak":"Choose a password with 4–64 characters, without repeats or sequences such as 1234.",
+"team.exactEmail":"Sign in with Google using exactly the email address in the invitation.",
+"team.firstPin":"Create your checkout password",
+"team.firstPinHelp":"On first access, replace the temporary password with your own. Do not share it.",
+"team.currentPin":"Temporary invitation password",
+"team.newPin":"New checkout password",
+"team.confirmPin":"Repeat the new password",
+"team.pinMismatch":"Both passwords must match.",
+"team.pinIncorrect":"The temporary password is incorrect.",
+"team.pinDifferent":"Choose a password different from the temporary one.",
+"team.pinSaved":"Your new password was saved!",
+"team.pinFailed":"Could not save. Check the temporary password and try again.",
+"team.savePin":"Save my password",
+"team.savingPin":"Saving…",
+
  "notebook.title":"Import notebook (photo)",
  "notebook.close":"Close",
  "notebook.privacy":"Review everything before saving. The photo is used only for reading and is not stored. No sales are created.",
@@ -157,6 +173,22 @@ const en:Dictionary={
  'images.migrationPending':'Your old photos are safe. Open Inventory again to retry the upload.',
 };
 const es:Dictionary={
+ 'team.inviteHelp':'Invita a alguien a unirse al equipo de {store}.',
+"team.pinWeak":"Elige una contraseña de 4 a 64 caracteres, sin repeticiones ni secuencias como 1234.",
+"team.exactEmail":"Entra con Google usando exactamente el correo de la invitación.",
+"team.firstPin":"Crea tu contraseña de Caja",
+"team.firstPinHelp":"En el primer acceso, cambia la contraseña provisional por una propia. No la compartas.",
+"team.currentPin":"Contraseña provisional de la invitación",
+"team.newPin":"Nueva contraseña de Caja",
+"team.confirmPin":"Repite la nueva contraseña",
+"team.pinMismatch":"Las dos contraseñas deben coincidir.",
+"team.pinIncorrect":"La contraseña provisional es incorrecta.",
+"team.pinDifferent":"Elige una contraseña distinta de la provisional.",
+"team.pinSaved":"¡Tu nueva contraseña se guardó!",
+"team.pinFailed":"No se pudo guardar. Revisa la contraseña provisional e inténtalo de nuevo.",
+"team.savePin":"Guardar mi contraseña",
+"team.savingPin":"Guardando…",
+
  "notebook.title":"Importar libreta (foto)",
  "notebook.close":"Cerrar",
  "notebook.privacy":"Revisa todo antes de guardar. La foto solo se usa para la lectura y no se guarda. No se crean ventas.",

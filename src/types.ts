@@ -51,6 +51,8 @@ export interface Customer {
 }
 
 export interface Employee {
+  mustChangePin?: boolean;
+  pinChangedAt?: number;
   id?: string;
   name: string;
   role: string;

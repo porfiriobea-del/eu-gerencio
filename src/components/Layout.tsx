@@ -1,3 +1,4 @@
+import {EmployeeFirstPin} from './EmployeeFirstPin';
 import { MobileNavigation } from './MobileNavigation';
 import { useState, useEffect, useRef, type CSSProperties } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
@@ -319,8 +320,9 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
 
       <MobileNavigation />
       <TutorialModal />
-      <InviteModal isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} />
+      <InviteModal storeName={storeName} isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} />
       <EmployeeSwitchModal />
+      <EmployeeFirstPin />
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import {showToast} from './lib/actionFeedback';
 import { syncUserLanguage } from './lib/userLanguage';
 import { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
@@ -118,7 +119,10 @@ export default function App() {
             .catch(() => console.warn('A migração do legado será retomada quando a origem estiver disponível.'));
         }
         if (!active || request !== generation) return;
-        if (inviteId) sessionStorage.removeItem('pending_invite_id');
+        if (inviteId) {
+          sessionStorage.removeItem('pending_invite_id');
+          if(session?.isEmployee)showToast(`Bem-vindo à equipe da ${session.storeName?.trim() || 'nossa loja'}!`);
+        }
         unsubscribeSettings = onSnapshot(profileRef, snapshot => {
           if (!active || request !== generation) return;
           const data = snapshot.exists() ? snapshot.data() : null;
@@ -253,14 +257,14 @@ export default function App() {
           {pendingInvite ? (
             <div className="p-3.5 mb-6 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-left">
               <p className="text-xs font-bold text-emerald-950 dark:text-emerald-100 flex items-center gap-1.5">
-                <span>🏢 Convite da Loja:</span>
-                <span className="underline notranslate normal-case" translate="no">{pendingInvite.storeName || 'Estabelecimento'}</span>
+                <span>Bem-vindo à equipe da </span>
+                <span className="underline notranslate normal-case" translate="no">{pendingInvite.storeName?.trim() || 'nossa loja'}!</span>
               </p>
               <p className="text-xs text-foreground font-semibold mt-1 notranslate normal-case" translate="no">
                 Olá, {pendingInvite.name}! ({pendingInvite.role})
               </p>
               <p className="text-[11px] text-[#444444] mt-1 leading-snug">
-                Você <span className="font-bold underline">vai entrar pelo e-mail que foi convidado</span>: <span className="font-mono font-bold text-emerald-800">{pendingInvite.email}</span>. Ao entrar, sua sub-conta será ativada automaticamente.
+                Entre com o Google usando exatamente o e-mail do convite: <span className="font-mono font-bold text-emerald-800">{pendingInvite.email}</span>. Seu acesso à equipe será ativado ao entrar.
               </p>
             </div>
           ) : (
@@ -269,7 +273,7 @@ export default function App() {
                 💼 Convidado para a equipe?
               </p>
               <p className="text-[11px] text-[#555555] mt-0.5">
-                Você <span className="font-bold underline">vai entrar pelo e-mail que foi convidado, enviado o convite</span>.
+                Entre com o Google usando exatamente o e-mail do convite.
               </p>
             </div>
           )}

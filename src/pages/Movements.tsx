@@ -1,3 +1,4 @@
+import {isObviousEmployeePin} from '../lib/teamInvitation';
 import { sortByName } from '../lib/alphabetical';
 import { useCurrency } from '../lib/useCurrency';
 import { formatProductStock } from '../lib/productUnits';
@@ -261,6 +262,7 @@ export default function Movements() {
   // Employee Form submit (Add or Edit)
   const handleSaveEmployeeForm = async (e: React.FormEvent) => {
     e.preventDefault();
+    if(isObviousEmployeePin(empPin)){setEmpFormError(v('team.pinWeak'));return;}
     if (!empName.trim()) {
       setEmpFormError('Por favor, informe o nome do funcionário.');
       return;
@@ -855,7 +857,7 @@ export default function Movements() {
                         {emp.email && (
                           <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200">
                             <span className="font-semibold block text-[11px]">
-                              vai entrar pelo e-mail que foi convidado, enviado o convite:
+                              {v('team.exactEmail')}
                             </span>
                             <span className="font-mono text-xs font-bold text-foreground">
                               {emp.email}

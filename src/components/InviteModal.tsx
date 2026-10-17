@@ -1,15 +1,18 @@
+import {formatTeamInvitation,isObviousEmployeePin,invitationStoreName} from '../lib/teamInvitation';
+import {usePreferences} from '../lib/preferencesContext';
 import { showToast, showActionError } from '../lib/actionFeedback';
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, Mail, CheckCircle2, UserPlus, Phone, Shield, 
   Copy, Check, Info, Sparkles, Link as LinkIcon,
   Lock, Eye, EyeOff
 } from 'lucide-react';
-import { addEmployee, recordMovement, createTeamInvitation } from '../lib/api';
+import { recordMovement, createTeamInvitation } from '../lib/api';
 
 interface InviteModalProps {
   isOpen: boolean;
+  storeName?: string;
   onClose: () => void;
   onEmployeeAdded?: () => void;
 }
@@ -22,7 +25,10 @@ const PRESET_ROLES = [
   'Auxiliar Geral'
 ];
 
-export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalProps) {
+export function InviteModal({ isOpen, onClose, onEmployeeAdded, storeName: commerce }: InviteModalProps) {
+  const {v}=usePreferences();
+  const feedbackTimer=useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(()=>()=>clearTimeout(feedbackTimer.current),[]);
   const [name, setName] = useState('');
   const [role, setRole] = useState(PRESET_ROLES[0]);
   const [email, setEmail] = useState('');
@@ -37,10 +43,6 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
   const [generatedUrl, setGeneratedUrl] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  const generateInviteText = (url: string) => {
-    return `Olá ${name || 'colaborador'}!\n\nVocê foi convidado para a equipe do estabelecimento no aplicativo Eu Gerencio na função de *${role}*.\n\n⚠️ *COMO ACESSAR:*\nVocê *vai entrar pelo e-mail que foi convidado, enviado o convite*:\n👉 ${email}${pin.trim() ? `\n🔑 *Sua Senha de Acesso no Caixa:* ${pin.trim()}` : ''}\n\nClique no link oficial abaixo para entrar diretamente como funcionário com a sua sub-conta do estabelecimento:\n🔗 ${url}\n\nAo entrar pelo link e fazer login com sua conta Google deste e-mail, você já terá acesso às vendas, estoque e fiados do nosso comércio. Bom trabalho!`;
-  };
-
   const handleRegisterAndSend = async (method: 'email' | 'copy' | 'linkOnly') => {
     if (!name.trim()) {
       setErrorMessage('Por favor, informe o nome do funcionário.');
@@ -51,6 +53,7 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
       return;
     }
 
+    if(isObviousEmployeePin(pin)){setErrorMessage(v('team.pinWeak'));return;}
     setErrorMessage('');
     setIsSubmitting(true);
 
@@ -59,7 +62,7 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
       const cleanEmail = email.trim().toLowerCase();
 
       // 1. Cria o convite oficial de equipe com URL única de sub-conta
-      const { inviteId, inviteUrl } = await createTeamInvitation({
+      const { inviteId, inviteUrl, storeName } = await createTeamInvitation({
         email: cleanEmail,
         name: name.trim(),
         role,
@@ -69,17 +72,6 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
 
       setGeneratedUrl(inviteUrl);
 
-      // 2. Garante o cadastro do funcionário no banco de dados da loja
-      await addEmployee({
-        name: name.trim(),
-        role,
-        email: cleanEmail,
-        phone: phone.trim() || undefined,
-        pin: pin.trim() || undefined,
-        isActive: true,
-        color: 'bg-emerald-500'
-      });
-
       // 3. Registra no histórico de movimentações
       recordMovement({
         timestamp: Date.now(),
@@ -87,7 +79,7 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
         employeeName: 'Proprietário',
         employeeRole: 'Administrador',
         type: 'employee_login',
-        description: `Convidou novo colaborador ${name.trim()} (${role}). Vai entrar pelo e-mail que foi convidado (${cleanEmail}) com sub-conta do estabelecimento.`,
+        description: `Convidou novo colaborador ${name.trim()} (${role}). Vai entrar pelo e-mail que foi convidado (${cleanEmail}) na equipe de ${storeName}.`,
         entityId: inviteId,
         entityName: name.trim(),
         notes: `Convite enviado para ${cleanEmail} (Link: ${inviteUrl})`
@@ -95,24 +87,27 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
 
       if (onEmployeeAdded) onEmployeeAdded();
 
-      const text = generateInviteText(inviteUrl);
+      const invitation = formatTeamInvitation({name,role,email:cleanEmail,pin,storeName,url:inviteUrl},method==='email'?'email':'whatsapp');
+      const text=invitation.body;
       registered = true;
       showToast('✓ Convite cadastrado com sucesso!');
       setIsSubmitting(false);
       handleReset();
 
       if (method === 'email') {
-        const subject = encodeURIComponent(`Convite para a Equipe - Eu Gerencio (${role})`);
+        const subject = encodeURIComponent(invitation.subject);
         const body = encodeURIComponent(text);
         window.location.href = `mailto:${cleanEmail}?subject=${subject}&body=${body}`;
       } else if (method === 'copy') {
         await navigator.clipboard.writeText(text);
         setCopied(true);
-        setTimeout(() => setCopied(false), 3000);
+        clearTimeout(feedbackTimer.current);
+        feedbackTimer.current=setTimeout(() => setCopied(false), 3000);
       } else if (method === 'linkOnly') {
         await navigator.clipboard.writeText(inviteUrl);
         setCopiedLinkOnly(true);
-        setTimeout(() => setCopiedLinkOnly(false), 3000);
+        clearTimeout(feedbackTimer.current);
+        feedbackTimer.current=setTimeout(() => setCopiedLinkOnly(false), 3000);
       }
 
 
@@ -165,7 +160,7 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
                 <div>
                   <h2 className="text-xl font-bold font-heading text-foreground">Convidar Equipe</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Adicione colaboradores e envie o link oficial de acesso ao estabelecimento.
+                    {v('team.inviteHelp').replace('{store}',invitationStoreName(commerce))}
                   </p>
                 </div>
               </div>
@@ -188,7 +183,7 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
                     <div className="text-xs text-amber-900 dark:text-amber-200">
                       <p className="font-bold">Aviso importante de acesso:</p>
                       <p className="mt-0.5">
-                        O colaborador <span className="font-semibold underline">vai entrar pelo e-mail que foi convidado, enviado o convite</span>. Ao cadastrar abaixo, o funcionário já fica registrado na equipe.
+                        {v('team.exactEmail')}
                       </p>
                     </div>
                   </div>
@@ -236,7 +231,7 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="block text-xs font-bold text-foreground flex items-center gap-1">
                           <Lock className="w-3 h-3 text-primary" />
-                          Senha de Acesso / PIN
+                          Senha de Acesso / PIN *
                         </label>
                         <span className="text-[10px] text-muted-foreground font-medium">
                           para troca de turno
@@ -247,7 +242,9 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
                           type={showPin ? 'text' : 'password'}
                           value={pin}
                           onChange={(e) => setPin(e.target.value)}
-                          placeholder="Ex: 1234 ou senha"
+                          placeholder={v('team.newPin')}
+                          minLength={4}
+                          maxLength={64}
                           className="w-full px-3.5 py-2.5 pr-9 rounded-xl border border-border bg-surface text-foreground text-sm font-mono tracking-wider focus:ring-2 focus:ring-primary/40 focus:outline-none"
                         />
                         <button
@@ -281,7 +278,7 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
                       className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface text-foreground text-sm font-medium focus:ring-2 focus:ring-primary/40 focus:outline-none"
                     />
                     <p className="text-[11px] text-muted-foreground mt-1">
-                      Ele <span className="font-semibold text-foreground">vai entrar pelo e-mail que foi convidado, enviado o convite</span>.
+                      {v('team.exactEmail')}
                     </p>
                   </div>
 
@@ -348,10 +345,10 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
                       Como o colaborador vai acessar:
                     </p>
                     <p>
-                      Ele <span className="font-bold underline">vai entrar pelo e-mail que foi convidado, enviado o convite</span>: <span className="font-mono font-bold">{email}</span>.
+                      {v('team.exactEmail')} <span className="font-mono font-bold notranslate" translate="no">{email}</span>
                     </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      Ao abrir o link oficial enviado, ele entra como funcionário deste estabelecimento e cria uma sub-conta para movimentar as vendas, estoque e fiados em tempo real.
+                      {v('team.exactEmail')}
                     </p>
                   </div>
 
@@ -372,7 +369,8 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded }: InviteModalPro
                           onClick={() => {
                             navigator.clipboard.writeText(generatedUrl);
                             setCopiedLinkOnly(true);
-                            setTimeout(() => setCopiedLinkOnly(false), 3000);
+                            clearTimeout(feedbackTimer.current);
+                            feedbackTimer.current=setTimeout(() => setCopiedLinkOnly(false), 3000);
                           }}
                           className="px-3 py-1.5 rounded-xl bg-primary text-white text-xs font-bold flex items-center gap-1 hover:bg-primary/90 transition-colors cursor-pointer shrink-0"
                           title="Copiar link"
