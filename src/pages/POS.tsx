@@ -523,14 +523,14 @@ export default function POS() {
           if(product.type==='cigarro')setQuickProduct(product);
           else addToCart(product, 'Unidade', product.hasPromoSuggestion && product.promoPrice ? product.promoPrice : product.basePrice, 1);
         }}/>
-        <div className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4 overflow-y-auto pb-24">
+        <div className="grid grid-cols-1 min-[560px]:grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4 overflow-y-auto pb-24">
           {Object.keys(salesTotals).length > 0 && <p className="col-span-full text-xs text-muted-foreground">{v('pos.salesOrder', 'Mais vendidos primeiro')}</p>}
           {filteredProducts.map(p => (
-            <div key={p.id} className="relative bg-surface border border-border rounded-2xl p-3.5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group">
+            <div key={p.id} className="relative bg-surface border border-border rounded-2xl p-3.5 shadow-xs hover:shadow-md transition-all grid grid-cols-[88px_minmax(0,1fr)] gap-x-3 md:flex md:flex-col md:gap-x-0 justify-between group">
               <button type="button" aria-label={`${v('mobile.favorite','Favoritar')} ${p.name}`} aria-pressed={shortcuts.favorites.includes(p.id!)} onClick={()=>shortcuts.toggleFavorite(p.id!)} className="absolute right-1 top-1 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-surface/90 md:hidden"><Star className={`h-4 w-4 ${shortcuts.favorites.includes(p.id!)?'fill-amber-400 text-amber-600':''}`}/></button>
-              <div>
+              <div className="contents md:block">
                 {/* Imagem Exata do Produto no Caixa */}
-                <div className="mx-auto h-[88px] w-[88px] md:w-full md:h-28 mb-3 rounded-xl overflow-hidden bg-neutral-100 dark:bg-neutral-900 md:bg-palette-1/40 border border-border/80 flex items-center justify-center shrink-0">
+                <div className="mx-auto h-[88px] w-[88px] md:w-full md:h-28 row-span-2 self-start md:self-auto mb-0 md:mb-3 rounded-xl overflow-hidden bg-neutral-100 dark:bg-neutral-900 md:bg-palette-1/40 border border-border/80 flex items-center justify-center shrink-0">
                   {p.imageUrl ? (
                     <ProductImage
                       src={p.imageUrl} 
@@ -546,6 +546,7 @@ export default function POS() {
                   )}
                 </div>
 
+                <div className="min-w-0 pr-7 md:contents md:pr-0">
                 <h3 className="font-semibold text-foreground leading-tight text-sm line-clamp-2 notranslate normal-case" translate="no">{p.name}</h3>
                 <div className="mt-1 flex items-center justify-between gap-1 flex-wrap">
                   <span className="text-[10px] font-semibold text-primary bg-palette-1 px-1.5 py-0.5 rounded">
@@ -581,9 +582,10 @@ export default function POS() {
                     )}
                   </div>
                 )}
+                </div>
               </div>
               
-              <div className="mt-3">
+              <div className="col-start-2 min-w-0 mt-2 md:mt-3">
                 {p.type === 'cigarro' ? (
                   <div className="flex flex-col gap-1.5">
                     {getCigaretteFormats(p).length === 0 && (
