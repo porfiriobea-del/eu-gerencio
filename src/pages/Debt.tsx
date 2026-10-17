@@ -1,8 +1,11 @@
+import { MobileDebtCards } from '../components/MobileDebtCards';
+import { debtOverview,orderDebtCustomers } from '../lib/debtOverview';
+import { useMobileViewport } from '../lib/useMobileViewport';
 import { sortByName } from '../lib/alphabetical';
 import { useCurrency } from '../lib/useCurrency';
 import { usePreferences } from '../lib/preferencesContext';
 import { showToast, showActionError } from '../lib/actionFeedback';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   subscribeCustomers, 
   addCustomer, 
@@ -35,6 +38,14 @@ export default function Debt() {
   const { formatMoney, currencySymbol, isBrazil } = useCurrency();
 
   const { v } = usePreferences();
+  const {mobile}=useMobileViewport();
+  const [order,setOrder]=useState<'name'|'debt'>('name');
+  const [legacyDates,setLegacyDates]=useState<Record<string,number>>({});
+  const [dateError,setDateError]=useState(false);
+  const [loadingDates,setLoadingDates]=useState(false);
+  const legacyRequested=useRef(false);
+  const legacyMounted=useRef(true);
+  useEffect(()=>{legacyMounted.current=true;return()=>{legacyMounted.current=false;};},[]);
   const { currentEmployee } = useEmployee();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -101,19 +112,27 @@ export default function Debt() {
     }
   }, [customers]);
 
-  const totalDebt = useMemo(() => {
-    return customers.reduce((acc, c) => acc + c.totalDebt, 0);
-  }, [customers]);
+  const overview=useMemo(()=>debtOverview(customers),[customers]);
+  const totalDebt=overview.total;
+  useEffect(()=>{
+    if(!mobile||legacyRequested.current||!customers.some(customer=>customer.lastMovementAt===undefined))return;
+    legacyRequested.current=true;
+    setLoadingDates(true);
+    void import('../lib/api').then(api=>api.getCustomerLastMovements?.()).then(dates=>{
+      if(legacyMounted.current&&dates)setLegacyDates(dates);
+    }).catch(()=>{if(legacyMounted.current)setDateError(true);}).finally(()=>{if(legacyMounted.current)setLoadingDates(false);});
+    // Snapshot updates must not restart this once-per-mount legacy lookup.
+  },[mobile,customers]);
 
   const filteredCustomers = useMemo(() => {
-    if (!searchQuery.trim()) return sortByName(customers);
+    if (!searchQuery.trim()) return orderDebtCustomers(customers,mobile?order:'name');
     const q = searchQuery.toLowerCase().trim();
-    return sortByName(customers).filter(c =>
+    return orderDebtCustomers(customers,mobile?order:'name').filter(c =>
       c.name.toLowerCase().includes(q) || 
       (c.phone && c.phone.includes(q)) ||
       (c.notes && c.notes.toLowerCase().includes(q))
     );
-  }, [customers, searchQuery]);
+  }, [customers, searchQuery,mobile,order]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -273,7 +292,7 @@ export default function Debt() {
         <div>
           <h1 className="text-2xl font-bold font-heading text-foreground">{v('debt.title')}</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            {v('debt.balance')}: <span className="font-bold text-red-600 dark:text-red-400">{formatMoney(totalDebt)}</span> ({customers.length} cliente{customers.length !== 1 ? 's' : ''})
+            {v('debt.outstanding','Falta receber')} <span className="font-bold text-red-600 dark:text-red-400">{formatMoney(totalDebt)}</span> ({overview.count} {v('debt.owing','devendo')})
           </p>
         </div>
 
@@ -307,6 +326,17 @@ export default function Debt() {
         )}
       </div>
 
+      {mobile ? <>
+        <label className="flex items-center justify-between gap-3 text-sm font-semibold">{v('debt.order','Ordenar por')}
+          <select value={order} onChange={e=>setOrder(e.target.value as 'name'|'debt')} className="min-h-11 rounded-xl border border-border bg-surface px-3">
+            <option value="name">{v('debt.alphabetical','Nome: A a Z')}</option>
+            <option value="debt">{v('debt.mostOwed','Quem mais deve')}</option>
+          </select>
+        </label>
+        <MobileDebtCards customers={filteredCustomers} legacyDates={legacyDates} loadingDates={loadingDates} dateError={dateError}
+          onHistory={customer=>{setSelectedCustomer(customer);setIsHistoryModalOpen(true);}}
+          onReceive={customer=>{setSelectedCustomer(customer);setPayAmount(customer.totalDebt);setIsPayModalOpen(true);}}/>
+      </> : <>
       {/* Customers Table */}
       <div className="bg-surface rounded-2xl shadow-xs border border-border overflow-hidden">
         <div className="overflow-x-auto">
@@ -432,6 +462,7 @@ export default function Debt() {
         </div>
       </div>
 
+      </>}
       {/* ========================================================================= */}
       {/* MODAL: HISTÓRICO DE COMPRAS E PAGAMENTOS (COM DIA E HORÁRIO) */}
       {/* ========================================================================= */}

@@ -37,6 +37,7 @@ export interface Product {
 }
 
 export interface Customer {
+  lastMovementAt?: number;
   id?: string;
   name: string;
   phone?: string;

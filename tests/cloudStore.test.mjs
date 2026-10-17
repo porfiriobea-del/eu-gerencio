@@ -39,7 +39,11 @@ before(async()=>{
     const path=url.searchParams.get('collection_path')?.replace(/^eq\./,'');
     const id=url.searchParams.get('id')?.replace(/^eq\./,'');
     const owner=url.searchParams.get('owner_id')?.replace(/^eq\./,'');
-    const rows=[...records.entries()].filter(([k,row])=>k.startsWith(table+'/')&&(!path||row.collection_path===path)&&(!id||row.id===id)&&(!owner||row.owner_id===owner)).map(([,row])=>row);
+    let rows=[...records.entries()].filter(([k,row])=>k.startsWith(table+'/')&&(!path||row.collection_path===path)&&(!id||row.id===id)&&(!owner||row.owner_id===owner)).map(([,row])=>row);
+    if(url.searchParams.get('select')?.includes('customer_id:data->>customerId')){
+      const type=url.searchParams.get('data->>type')?.replace(/^eq\./,'');
+      rows=rows.filter(row=>!type||row.data.type===type).map(row=>({customer_id:row.data.customerId,created_at:String(row.data.createdAt)}));
+    }
     if(id)res.end(JSON.stringify(rows[0]||null));else { const offset=Number(url.searchParams.get('offset')||0);const limit=Number(url.searchParams.get('limit')||rows.length);res.end(JSON.stringify(rows.slice(offset,offset+limit))); }
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -146,6 +150,7 @@ test('a fiado payment above the current debt is rejected without recording money
   assert.equal((await store.getDocs(query)).size,before);
   await api.recordPayment('customer',9.90,'cash');
   assert.equal((await store.getDoc(ref)).data().totalDebt,0.10);
+  assert.ok((await store.getDoc(ref)).data().lastMovementAt>0);
   await api.recordPayment('customer',0.10,'cash');
   assert.equal((await store.getDoc(ref)).data().totalDebt,0);
 });
@@ -341,4 +346,30 @@ test('shop currency persists independently of language without converting produc
  assert.equal((await store.getDoc(productRef)).data().basePrice,100);assert.equal((await store.getDoc(productRef)).data().unitCost,40);
  await assert.rejects(api.updateSettings({currency:'GBP'}),/BRL, USD ou EUR/);
  assert.equal((await store.getDoc(ref)).data().currency,'USD');
+});
+
+
+test('last Fiado activity reads paginated financial dates only and excludes cash sales and another shop',async()=>{
+ for(let i=0;i<1001;i++){
+  const id='legacy-date-'+i;
+  records.set(key('eu_sales','sales',id),{id,collection_path:'sales',owner_id:'owner',revision:1,data:{ownerId:'owner',customerId:'legacy-client',type:'fiado',createdAt:i+10}});
+ }
+ for(const [table,id,owner,customer,type,createdAt]of [
+  ['eu_payments','legacy-payment','owner','legacy-client',undefined,1100],
+  ['eu_sales','cash-not-fiado','owner','legacy-client','cash',99999],
+  ['eu_payments','foreign-payment','other','foreign-client',undefined,999999]
+ ]){
+  records.set(key(table,table==='eu_sales'?'sales':'payments',id),{id,collection_path:table==='eu_sales'?'sales':'payments',owner_id:owner,revision:1,data:{ownerId:owner,customerId:customer,type,createdAt}});
+ }
+ const dates=await api.getCustomerLastMovements();
+ assert.equal(dates['legacy-client'],1100);assert.equal(dates['foreign-client'],undefined);
+ assert.ok(calls.some(call=>call.url.includes('offset=1000')&&call.url.includes('eu_sales')));
+});
+test('editing customer details keeps the last financial activity date unchanged',async()=>{
+ const ref=store.doc(store.db,'customers','dated-customer');
+ await store.setDoc(ref,{ownerId:'owner',name:'Original',previousDebt:0,totalDebt:10,lastMovementAt:12345});
+ await api.updateCustomer('dated-customer',{name:'Nome atualizado'});
+ assert.equal((await store.getDoc(ref)).data().lastMovementAt,12345);
+ await api.recordPayment('dated-customer',1,'cash');
+ assert.ok((await store.getDoc(ref)).data().lastMovementAt>12345);
 });

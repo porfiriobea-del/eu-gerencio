@@ -11,7 +11,8 @@ for(const name of ['window','document','navigator','HTMLElement','Node','CustomE
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT=true;
 const React=await import('react');
-const {render,fireEvent,act,cleanup}=await import('@testing-library/react');
+const {MemoryRouter}=await import('react-router-dom');
+const {render,fireEvent,act,cleanup,within}=await import('@testing-library/react');
 const {AppToast}=await import('../src/components/AppToast.tsx');
 let desktop=false;const mediaListeners=new Set();
 window.matchMedia=()=>({get matches(){return desktop;},addEventListener(_event,fn){mediaListeners.add(fn);},removeEventListener(_event,fn){mediaListeners.delete(fn);}});
@@ -24,10 +25,10 @@ await build({stdin:{contents:"export {default} from './src/pages/POS'; export {C
 const {default:POS,CurrencyContext}=await import(pathToFileURL(`${dir}/POS.mjs`).href);
 const standard={id:'p1',name:'Suco',category:'Bebidas',type:'comum',stock:10,basePrice:5,unitCost:1,unitsPerPackage:1,safetyStock:0,dailyAverageSales:0,replacementDays:3};
 const cigarettes={...standard,id:'p2',name:'Cigarro',category:'Cigarros',type:'cigarro',stockUnit:'carteira',stock:20,unitsPerPackage:10,unitCost:10,basePrice:20,pricePack:180,priceCart:20,priceHalfCart:11,priceUnit:2};
-function setup(onSale=async()=>{},isDesktop=false,feeSettings={}){
+function setup(onSale=async()=>{},isDesktop=false,feeSettings={},initialCustomers=[],initialEntries=['/caixa']){
  desktop=isDesktop;
- globalThis.__posApi={getProductSalesTotals:async()=>globalThis.__posRanking||{},subscribeProducts(cb){cb([standard,cigarettes]);return()=>{};},subscribeCustomers(cb){cb([]);return()=>{};},subscribeTodaySales(cb){cb([]);return()=>{};},subscribeCashClosures(cb){cb([]);return()=>{};},subscribeSettings(cb){cb({enableCardFees:false,...feeSettings});return()=>{};},recordSale:onSale};
- return render(React.createElement(CurrencyContext.Provider,{value:{currency:feeSettings.currency||'BRL',language:feeSettings.language||'pt'}},React.createElement(React.Fragment,null,React.createElement(POS),React.createElement(AppToast))));
+ globalThis.__posApi={getProductSalesTotals:async()=>globalThis.__posRanking||{},subscribeProducts(cb){cb([standard,cigarettes]);return()=>{};},subscribeCustomers(cb){cb(initialCustomers);return()=>{};},subscribeTodaySales(cb){cb([]);return()=>{};},subscribeCashClosures(cb){cb([]);return()=>{};},subscribeSettings(cb){cb({enableCardFees:false,...feeSettings});return()=>{};},recordSale:onSale};
+ return render(React.createElement(CurrencyContext.Provider,{value:{currency:feeSettings.currency||'BRL',language:feeSettings.language||'pt'}},React.createElement(React.Fragment,null,React.createElement(MemoryRouter,{initialEntries},React.createElement(POS)),React.createElement(AppToast))));
 }
 afterEach(()=>{cleanup();localStorage.clear();delete globalThis.__posApi;delete globalThis.__posRanking;});
 after(async()=>{await rm(dir,{recursive:true,force:true});dom.window.close();for(const [name,value]of previous){if(value)Object.defineProperty(globalThis,name,value);else delete globalThis[name];}delete globalThis.IS_REACT_ACT_ENVIRONMENT;});
@@ -133,3 +134,17 @@ for(const [currency,language] of [['USD','en'],['EUR','es']]){
   assert.equal(sale.total,5);assert.equal(sale.paymentMethod,'debit');
  });
 }
+
+
+test('Anotar compra keeps the chosen customer and fiado payment through cart checkout',async()=>{
+ const sales=[];
+ const customer={id:'customer-1',name:'Cliente ORIGINAL',ownerId:'owner',previousDebt:0,totalDebt:10,createdAt:Date.now(),updatedAt:Date.now()};
+ let ui;await act(async()=>{ui=setup(async(...args)=>sales.push(args),false,{},[customer],['/caixa?fiado_cliente=customer-1']);});
+ assert.ok(ui.getByText('Cliente ORIGINAL'));
+ addStandard(ui);openCart(ui);
+ fireEvent.click(ui.getByRole('button',{name:'Finalizar Compra / Receber'}));
+ const select=within(ui.getByRole('dialog',{name:'Finalizar venda'})).getByRole('combobox');
+ assert.equal(select.value,'customer-1');
+ await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Confirmar'})));
+ assert.equal(sales.length,1);assert.equal(sales[0][0].type,'fiado');assert.equal(sales[0][0].customerId,'customer-1');
+});

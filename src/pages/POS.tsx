@@ -1,3 +1,4 @@
+import { useLocation,useNavigate } from 'react-router-dom';
 import { QuickProductDialog } from '../components/QuickProductDialog';
 import { Star } from 'lucide-react';
 import { CategoryChips } from '../components/CategoryChips';
@@ -53,6 +54,9 @@ import { calculateExpirationStatus } from '../lib/promoUtils';
 import { useEmployee } from '../lib/employeeContext';
 
 export default function POS() {
+  const location=useLocation(),navigate=useNavigate();
+  const [fiadoIntent,setFiadoIntent]=useState(false);
+  const [customersLoaded,setCustomersLoaded]=useState(false);
   const { formatProductStock, formatStockNumber } = useStockFormatting();
   const { formatMoney, currencySymbol, isBrazil } = useCurrency();
 
@@ -102,7 +106,7 @@ export default function POS() {
 
   useEffect(() => {
     const unsubP = subscribeProducts(setProducts);
-    const unsubC = subscribeCustomers(items => setCustomers(sortByName(items)));
+    const unsubC = subscribeCustomers(items => {setCustomers(sortByName(items));setCustomersLoaded(true);});
     const unsubS = subscribeTodaySales(setTodaySales);
     const unsubClosures = subscribeCashClosures(setCashClosures);
     const unsubSettings = subscribeSettings(setSettings);
@@ -136,6 +140,23 @@ export default function POS() {
       return matchSearch && matchCat;
     }), salesTotals);
   }, [products, search, selectedCategory, salesTotals]);
+
+  useEffect(()=>{
+    const params=new URLSearchParams(location.search),customerId=params.get('fiado_cliente');
+    if(!customerId||!customersLoaded)return;
+    const customer=customers.find(item=>item.id===customerId);
+    if(customer){
+      setSelectedCustomerId(customer.id!);
+      setIsCreatingNewCustomer(false);
+      setPaymentType('fiado');
+      setFiadoIntent(true);
+    }else {
+      const message=v('debt.customerUnavailable','Este cliente não está disponível nesta loja.');
+      showActionError(new Error(message),message);
+    }
+    params.delete('fiado_cliente');
+    navigate({pathname:location.pathname,search:params.toString()},{replace:true});
+  },[location.search,customersLoaded,customers,navigate]);
 
   const addToCart = (product: Product, format: string, price: number, stockDeduction: number) => {
     if (checkoutInProgressRef.current) return;
@@ -277,6 +298,7 @@ export default function POS() {
     setPaymentType('cash');
     setCardMethod('debit');
     setSelectedCustomerId('');
+    setFiadoIntent(false);
     setIsCreatingNewCustomer(false);
     setNewCustomerName('');
     setNewCustomerPhone('');
@@ -425,6 +447,10 @@ export default function POS() {
 
   return (
     <div className="space-y-4">
+      {fiadoIntent&&<div className="flex items-center justify-between gap-3 rounded-xl border border-amber-400/50 bg-amber-500/10 p-3 text-sm">
+        <p>{v('debt.purchaseFor','Anotar compra para')} <strong translate="no" className="notranslate">{customers.find(customer=>customer.id===selectedCustomerId)?.name}</strong></p>
+        <button type="button" className="min-h-11 rounded-lg px-3 text-xs font-semibold" onClick={()=>{setFiadoIntent(false);setSelectedCustomerId('');setPaymentType('cash');}}>{v('ui.cancel','Cancelar')}</button>
+      </div>}
       {/* Pocket Tip: Guia do Caixa em 2 Passos */}
       <PocketTip compact
         id="pos-guide"
@@ -714,7 +740,7 @@ export default function POS() {
       </div>
 
       <CartDrawer items={cart} total={cartTotal} busy={isCompletingSale} onQuantity={changeCartQuantity} onRemove={removeFromCart}
-        onCheckout={() => { setPaymentType('cash'); setIsCheckoutOpen(true); }}
+        onCheckout={() => { setPaymentType(fiadoIntent?'fiado':'cash'); setIsCheckoutOpen(true); }}
         onFiado={() => { setPaymentType('fiado'); setIsCheckoutOpen(true); }} />
 
       {/* Checkout Modal */}

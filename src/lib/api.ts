@@ -469,7 +469,7 @@ export const addCustomer = withActionDeadline(async (customer: Omit<Customer, 'i
   try {
     const ref = doc(collection(db, 'customers'));
     const now = Date.now();
-    await setDoc(ref, { ...removeUndefinedFields(customer as any), ownerId: uid, createdAt: now, updatedAt: now });
+    await setDoc(ref, { ...removeUndefinedFields(customer as any), lastMovementAt: customer.previousDebt > 0 ? now : 0, ownerId: uid, createdAt: now, updatedAt: now });
 
     recordMovement({
       sourceOwnerId: uid,
@@ -586,7 +586,7 @@ export const recordSale = withActionDeadline(async (
       }
       if (sale.type === 'fiado') {
         if (!customer?.exists()) throw new Error('Cliente de fiado não encontrado.');
-        transaction.update(customer.ref, { totalDebt: Math.round((Number(customer.data().totalDebt) + sale.total) * 100) / 100, updatedAt: now });
+        transaction.update(customer.ref, { totalDebt: Math.round((Number(customer.data().totalDebt) + sale.total) * 100) / 100, lastMovementAt: now, updatedAt: now });
       }
       confirmedSummary = items.map(item => {
         const product = stockProducts.get(item.productId)!;
@@ -649,7 +649,7 @@ export const recordPayment = withActionDeadline(async (
       if (!Number.isSafeInteger(debtCents) || debtCents < 0) throw new Error('Saldo de fiado inválido. Confira o cadastro do cliente.');
       if (!Number.isSafeInteger(amountCents) || amountCents <= 0) throw new Error('Pagamento inválido.');
       if (amountCents > debtCents) throw new Error('O pagamento excede o saldo de fiado atual. Atualize o cliente e confira o valor.');
-      transaction.update(ref, { totalDebt: (debtCents - amountCents) / 100, updatedAt: now });
+      transaction.update(ref, { totalDebt: (debtCents - amountCents) / 100, lastMovementAt: now, updatedAt: now });
       transaction.set(pRef, { customerId, amount: amountCents / 100, method, employeeId: empId, employeeName: empName, ownerId: uid, createdAt: now });
     });
 
@@ -1700,4 +1700,29 @@ export async function migrateProductImages(products: Product[], shouldContinue: 
     if (updated) migrated++;
   }
   return migrated;
+}
+
+
+/** One lightweight paginated pass for legacy customers; new financial writes carry their timestamp. */
+export async function getCustomerLastMovements(): Promise<Record<string, number>> {
+  const ownerId=getEffectiveOwnerId();
+  if(!ownerId)return {};
+  const maps=await Promise.all(['eu_sales','eu_payments'].map(async table=>{
+    const result:Record<string,number>=Object.create(null);
+    for(let offset=0;;offset+=1000){
+      let request=supabase.from(table).select('customer_id:data->>customerId,created_at:data->>createdAt').eq('owner_id',ownerId);
+      if(table==='eu_sales')request=request.eq('data->>type','fiado');
+      const {data,error}=await request.order('collection_path').order('id').range(offset,offset+999).abortSignal(AbortSignal.timeout(15000));
+      if(error)throw new Error('Não foi possível consultar as datas do fiado.');
+      if(getEffectiveOwnerId()!==ownerId)throw new Error('A sessão da loja mudou.');
+      for(const row of data||[]){
+        const timestamp=Number(row.created_at);
+        if(typeof row.customer_id==='string'&&Number.isFinite(timestamp)&&timestamp>0)result[row.customer_id]=Math.max(result[row.customer_id]||0,timestamp);
+      }
+      if((data||[]).length<1000)return result;
+    }
+  }));
+  const combined:Record<string,number>=Object.create(null);
+  for(const map of maps)for(const [id,time]of Object.entries(map))combined[id]=Math.max(combined[id]||0,time);
+  return combined;
 }
