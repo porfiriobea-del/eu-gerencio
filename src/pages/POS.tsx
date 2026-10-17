@@ -1,3 +1,5 @@
+import {usePermissions} from '../lib/permissionsContext';
+import {useCheckoutQuote} from '../lib/useCheckoutQuote';
 import { useLocation,useNavigate } from 'react-router-dom';
 import { QuickProductDialog } from '../components/QuickProductDialog';
 import { Star } from 'lucide-react';
@@ -54,6 +56,7 @@ import { calculateExpirationStatus } from '../lib/promoUtils';
 import { useEmployee } from '../lib/employeeContext';
 
 export default function POS() {
+  const access=usePermissions();
   const location=useLocation(),navigate=useNavigate();
   const [fiadoIntent,setFiadoIntent]=useState(false);
   const [customersLoaded,setCustomersLoaded]=useState(false);
@@ -108,7 +111,7 @@ export default function POS() {
     const unsubP = subscribeProducts(setProducts);
     const unsubC = subscribeCustomers(items => {setCustomers(sortByName(items));setCustomersLoaded(true);});
     const unsubS = subscribeTodaySales(setTodaySales);
-    const unsubClosures = subscribeCashClosures(setCashClosures);
+    const unsubClosures = access.isEmployee?()=>{}:subscribeCashClosures(setCashClosures);
     const unsubSettings = subscribeSettings(setSettings);
     return () => { 
       unsubP(); 
@@ -194,7 +197,9 @@ export default function POS() {
 
   // Card Fee logic
   const isCardFeeEnabled = settings?.enableCardFees ?? false;
-  const payment = useMemo(() => calculatePayment(cartTotal, paymentType === 'card' ? (!isBrazil && ['pix','pix_machine'].includes(cardMethod) ? 'debit' : cardMethod) : paymentType, settings), [cartTotal, paymentType, cardMethod, settings, isBrazil]);
+  const basePayment = useMemo(() => calculatePayment(cartTotal, paymentType === 'card' ? (!isBrazil && ['pix','pix_machine'].includes(cardMethod) ? 'debit' : cardMethod) : paymentType, settings), [cartTotal, paymentType, cardMethod, settings, isBrazil]);
+  const quote=useCheckoutQuote(cartTotal,paymentType==='card'?cardMethod:paymentType,basePayment,isCheckoutOpen);
+  const payment=quote.payment;
   const activeRate = payment.feeRate;
   const finalTotal = payment.total;
   const estimatedDeduction = payment.feeAmount;
@@ -206,7 +211,7 @@ export default function POS() {
   const checkoutInProgressRef = useRef(false);
 
   const handleCheckout = async () => {
-    if (checkoutInProgressRef.current) return;
+    if (checkoutInProgressRef.current || quote.waiting || quote.failed) return;
     checkoutInProgressRef.current = true;
     setIsCompletingSale(true);
     try {
@@ -455,7 +460,7 @@ export default function POS() {
       </div>}
       {/* Pocket Tip: Guia do Caixa em 2 Passos */}
       <div className="flex items-start justify-between gap-3">
-      <PocketTip compact
+      {!access.isEmployee&&<PocketTip compact
         id="pos-guide"
         badgeText="Dica de Bolso"
         title={`Como Usar o ${v('pos.title', 'Caixa')} em 2 Passos`}
@@ -505,14 +510,14 @@ export default function POS() {
             },
             actionButton: {
               label: 'Conferir / Abrir Caixa',
-              onClick: () => setIsCashClosureOpen(true),
+              onClick: () => {if(!access.isEmployee)setIsCashClosureOpen(true);},
               icon: <Lock className="w-4 h-4" />
             }
           }
         ]}
-      />
+      />}
 
-          <button
+          {!access.isEmployee&&<button
             type="button"
             onClick={() => setIsCashClosureOpen(true)}
             aria-label={v('ui.closeCash', 'Fechar Caixa')}
@@ -523,7 +528,7 @@ export default function POS() {
             <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-bold">
               {todaySales.length}
             </span>
-          </button>
+          </button>}
       </div>
 
       <div className="flex flex-col lg:flex-row h-full gap-6">
@@ -762,13 +767,13 @@ export default function POS() {
                   <span className="text-[10px] text-muted-foreground">({currentEmployee.role})</span>
                 )}
               </div>
-              <button
+              {!access.isEmployee&&<button
                 type="button"
                 onClick={openSwitchModal}
                 className="text-primary hover:underline font-bold text-[11px] shrink-0 cursor-pointer"
               >
                 Trocar
-              </button>
+              </button>}
             </div>
             
             <fieldset disabled={isCompletingSale} className="space-y-4">
@@ -806,7 +811,7 @@ export default function POS() {
                 </div>
               </div>
 
-              {paymentType === 'card' && isCardFeeEnabled && (
+              {!access.isEmployee && paymentType === 'card' && isCardFeeEnabled && (
                 <div className="p-3 bg-muted/50 rounded-xl border border-border space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-bold text-foreground">Detalhes do pagamento</label>
@@ -859,6 +864,9 @@ export default function POS() {
                 </div>
               )}
 
+              {access.isEmployee&&paymentType==='card'&&!['pix','pix_machine'].includes(cardMethod)&&<select aria-label={v('access.method')} value={cardMethod} onChange={e=>setCardMethod(e.target.value as 'debit'|'credit'|'voucher')} className="w-full p-3 border border-border rounded-xl bg-surface"><option value="debit">{v('access.debit')}</option><option value="credit">{v('access.credit')}</option><option value="voucher">{v('access.voucher')}</option></select>}
+              {quote.failed&&<p role="alert" className="text-amber-600">{v('access.quoteFailed')}</p>}
+              {quote.waiting&&!quote.failed&&<p role="status">{v('access.wait')}</p>}
               {paymentType === 'cash' && (
                 <div className="pt-1 space-y-3">
                   <div>
@@ -923,7 +931,7 @@ export default function POS() {
                         <Users className="w-3.5 h-3.5" />
                         <span>Caderneta ({customers.length})</span>
                       </button>
-                      <button
+                      {!access.isEmployee&&<button
                         type="button"
                         onClick={() => setIsCreatingNewCustomer(true)}
                         className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
@@ -934,7 +942,7 @@ export default function POS() {
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>+ Novo Cliente</span>
-                      </button>
+                      </button>}
                     </div>
                   </div>
 
@@ -1066,9 +1074,9 @@ export default function POS() {
                             className="w-full border border-border p-3 rounded-xl bg-surface text-foreground text-sm font-semibold focus:ring-2 focus:ring-primary focus:outline-none cursor-pointer"
                           >
                             <option value="">-- Selecione quem está comprando na caderneta --</option>
-                            <option value="__NEW__" className="font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950">
+                            {!access.isEmployee&&<option value="__NEW__" className="font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950">
                               ➕ [+ Cadastrar Novo Cliente Agora nesta Compra]
-                            </option>
+                            </option>}
                             {sortByName(customers).map(c => (
                               <option key={c.id} value={c.id} className="notranslate normal-case" translate="no">
                                 {c.name} {c.totalDebt > 0 ? `(Já deve ${formatMoney(c.totalDebt)})` : '(Sem dívida)'}
@@ -1076,7 +1084,7 @@ export default function POS() {
                             ))}
                           </select>
 
-                          <div className="mt-1.5 flex items-center justify-between px-1">
+                          {!access.isEmployee&&<div className="mt-1.5 flex items-center justify-between px-1">
                             <span className="text-[11px] text-muted-foreground">
                               Não encontrou o cliente na lista?
                             </span>
@@ -1088,7 +1096,7 @@ export default function POS() {
                               <Plus className="w-3 h-3" />
                               <span>Cadastrar Novo Cliente</span>
                             </button>
-                          </div>
+                          </div>}
                         </div>
                       )}
                     </div>
@@ -1115,7 +1123,7 @@ export default function POS() {
               <button disabled={isCompletingSale} onClick={() => setIsCheckoutOpen(false)} className="px-6 py-3 border border-border rounded-xl hover:bg-muted font-medium text-muted-foreground cursor-pointer disabled:opacity-50">{v('ui.cancel', "Cancelar")}</button>
               <button 
                 onClick={handleCheckout} 
-                disabled={isCompletingSale || (
+                disabled={isCompletingSale || quote.waiting || quote.failed || (
                   paymentType === 'fiado' && 
                   !selectedCustomerId && 
                   (!isCreatingNewCustomer || !newCustomerName.trim()))
@@ -1135,7 +1143,7 @@ export default function POS() {
 
       {quickProduct && <QuickProductDialog product={products.find(p=>p.id===quickProduct.id)||quickProduct} onClose={()=>setQuickProduct(null)} onAdd={addToCart}/>}
       {/* Cash Closure (Fechar Caixa) Modal */}
-      {isCashClosureOpen && (
+      {!access.isEmployee && isCashClosureOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs overflow-y-auto">
           <div className="bg-surface rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl border border-border my-auto">
             {/* Modal Header */}

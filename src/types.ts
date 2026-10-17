@@ -97,6 +97,8 @@ export interface UserStore {
 }
 
 export type MovementType = 
+  | 'shift_start'
+  | 'shift_end'
   | 'employee_login'
   | 'employee_logout'
   | 'sale'

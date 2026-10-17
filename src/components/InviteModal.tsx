@@ -18,6 +18,7 @@ interface InviteModalProps {
 }
 
 const PRESET_ROLES = [
+  'Funcionário',
   'Operador de Caixa',
   'Atendente',
   'Repositor de Estoque',
@@ -78,7 +79,7 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded, storeName: comme
         employeeId: 'owner',
         employeeName: 'Proprietário',
         employeeRole: 'Administrador',
-        type: 'employee_login',
+        type: 'manual_entry',
         description: `Convidou novo colaborador ${name.trim()} (${role}). Vai entrar pelo e-mail que foi convidado (${cleanEmail}) na equipe de ${storeName}.`,
         entityId: inviteId,
         entityName: name.trim(),

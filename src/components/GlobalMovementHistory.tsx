@@ -152,6 +152,8 @@ export function GlobalMovementHistory() {
           bg: 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20',
           label: 'Fechamento de Caixa'
         };
+      case 'shift_start':
+      case 'shift_end':
       case 'employee_login':
       case 'employee_logout':
         return {

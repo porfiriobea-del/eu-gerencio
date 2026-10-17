@@ -1,3 +1,5 @@
+import {usePermissions} from '../lib/permissionsContext';
+import {OwnerPinDialog} from './OwnerPinDialog';
 import {EmployeeFirstPin} from './EmployeeFirstPin';
 import { MobileNavigation } from './MobileNavigation';
 import { useState, useEffect, useRef, type CSSProperties } from 'react';
@@ -24,13 +26,14 @@ interface LayoutProps {
 }
 
 export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
+  const access=usePermissions();
   const [storeName, setStoreName] = useState('Eu Gerencio!');
   const [logoUrl, setLogoUrl] = useState<string | undefined>();
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [storeSession, setStoreSession] = useState<ActiveStoreSession | null>(getActiveStoreSession);
   const location = useLocation();
   const { isOnline, wasOffline, isReconnecting, reconnectedJustNow, syncNow } = useOnlineStatus();
-  const { currentEmployee, activeAnnouncement, clearAnnouncement, openSwitchModal } = useEmployee();
+  const { currentEmployee, activeAnnouncement, clearAnnouncement, openSwitchModal, logoutEmployee } = useEmployee();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const sidebarVisible = menuPinned && isDesktop;
@@ -110,7 +113,7 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
     { to: '/movimentacoes', icon: Activity, label: v('nav.movements', 'Movimentações'), id: 'nav-item-movimentacoes' },
     { to: '/ajustes', icon: SettingsIcon, label: t('nav.settings'), id: 'nav-item-ajustes' },
     { to: '/tutorial', icon: HelpCircle, label: t('nav.tutorial'), id: 'nav-item-tutorial' },
-  ];
+  ].filter(item=>access.canAccess(item.to));
 
   useEffect(() => {
     const unsub = subscribeSettings(s => {
@@ -196,7 +199,7 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
         <main className="flex-1 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 md:p-8">
           <div className="mx-auto w-full min-w-0 max-w-6xl">
             <Outlet />
-            <GlobalMovementHistory />
+            {!access.isEmployee&&<GlobalMovementHistory />}
           </div>
         </main>
       </div>
@@ -231,11 +234,11 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
                 ))}
               </nav>
               <div className="mt-4 space-y-2 border-t border-border pt-4">
-                <button type="button" id="sidebar-employee-mode-btn" onClick={() => { setMenuOpen(false); openSwitchModal(); }} className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm hover:bg-muted">
+                {!access.isEmployee&&<button type="button" id="sidebar-employee-mode-btn" onClick={() => { setMenuOpen(false); openSwitchModal(); }} className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm hover:bg-muted">
                   <Users className="h-5 w-5 shrink-0 text-primary" /><span className="min-w-0"><span className="block truncate font-medium notranslate normal-case" translate="no">{currentEmployee ? currentEmployee.name : 'Modo do Funcionário'}</span><span className="block text-xs text-muted-foreground">{currentEmployee ? 'Colaborador em turno' : 'Trocar com senha • Equipe'}</span></span>
-                </button>
-                <button type="button" onClick={() => { setMenuOpen(false); setShowInviteModal(true); }} className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3.5 py-3 text-sm text-primary hover:bg-muted"><MailPlus className="h-5 w-5" />{t('nav.invite')}</button>
-                <button type="button" onClick={logout} className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3.5 py-3 text-sm text-red-600 hover:bg-muted"><LogOut className="h-5 w-5" />{t('nav.logout')}</button>
+                </button>}
+                {access.isOwner&&<button type="button" onClick={() => { setMenuOpen(false); setShowInviteModal(true); }} className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3.5 py-3 text-sm text-primary hover:bg-muted"><MailPlus className="h-5 w-5" />{t('nav.invite')}</button>}
+                <button type="button" onClick={()=>{void (async()=>{try{if(currentEmployee)await logoutEmployee();}finally{await logout();}})();}} className="flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3.5 py-3 text-sm text-red-600 hover:bg-muted"><LogOut className="h-5 w-5" />{t('nav.logout')}</button>
               </div>
               <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4 [&>button]:min-h-[44px] [&>a]:min-h-[44px]">
             {/* Quick Simple / Complete View Mode Toggle for Basic Mode */}
@@ -272,7 +275,7 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
             )}
 
             {/* Quick Feedback Button */}
-            <NavLink
+            {!access.isEmployee&&<NavLink
               to="/tutorial?tab=feedback"
               onClick={() => setMenuOpen(false)}
               id="topbar-quick-feedback-btn"
@@ -281,7 +284,7 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
             >
               <MessageSquareQuote className="w-4 h-4 shrink-0 text-primary" />
               <span className="">Dar Feedback</span>
-            </NavLink>
+            </NavLink>}
 
             {/* Quick Dark / Light Mode Toggle Button */}
             <button
@@ -319,9 +322,10 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
       )}
 
       <MobileNavigation />
-      <TutorialModal />
-      <InviteModal storeName={storeName} isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} />
-      <EmployeeSwitchModal />
+      {!access.isEmployee&&<TutorialModal />}
+      {access.isOwner&&<InviteModal storeName={storeName} isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} />}
+      {!access.isEmployee&&<EmployeeSwitchModal />}
+      <OwnerPinDialog />
       <EmployeeFirstPin />
     </div>
   );

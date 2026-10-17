@@ -1,3 +1,4 @@
+import {TeamShifts} from '../components/TeamShifts';
 import { SimpleHomeSummary } from '../components/SimpleHomeSummary';
 import { SimpleMonthlyProfitChart } from '../components/SimpleMonthlyProfitChart';
 import { useStockFormatting } from '../lib/useStockFormatting';
@@ -116,6 +117,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <TeamShifts />
       <div id="dashboard-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">{v('ui.homeTitle', "Início - Resumo do Dia")}</h1>

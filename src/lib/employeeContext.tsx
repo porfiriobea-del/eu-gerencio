@@ -1,4 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
+import {getAccessState,requireManagement} from './accessControl';
+import {shiftAction} from './workforceApi';
+import {auth} from './firebase';
+import {logout} from './auth';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useRef } from 'react';
 import { Employee, Movement } from '../types';
 import { 
   subscribeEmployees, 
@@ -112,124 +116,47 @@ export const EmployeeProvider: React.FC<{ children: ReactNode }> = ({ children }
   const openSwitchModal = () => setIsSwitchModalOpen(true);
   const closeSwitchModal = () => setIsSwitchModalOpen(false);
 
-  // LOG IN / START SHIFT
-  const loginEmployee = async (employee: Employee) => {
-    const now = Date.now();
-    const timeFormatted = new Intl.DateTimeFormat('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit'
-    }).format(now);
-
-    const updatedEmployee: Employee = {
-      ...employee,
-      currentShiftStartedAt: now,
-      updatedAt: now
-    };
-
-    setCurrentEmployee(updatedEmployee);
-    setActiveEmployeeStorage({ id: employee.id!, name: employee.name, role: employee.role });
-
-    // Update in Supabase
-    if (employee.id) {
-      updateEmployee(employee.id, {
-        currentShiftStartedAt: now
-      }).catch(e => console.warn('Could not update employee shift start in Supabase:', e));
-    }
-
-    // Record movement in history
-    recordMovement({
-      timestamp: now,
-      employeeId: employee.id || 'employee',
-      employeeName: employee.name,
-      employeeRole: employee.role,
-      type: 'employee_login',
-      description: `ENTRADA DE FUNCIONÁRIO: ${employee.name} (${employee.role}) iniciou o turno de trabalho às ${timeFormatted}. Todas as próximas movimentações serão atribuídas a ele.`,
-      entityId: employee.id,
-      entityName: employee.name
-    }).catch(e => console.warn('Could not record employee login movement:', e));
-
-    // Show announcement banner
-    setActiveAnnouncement({
-      title: 'Funcionário em Serviço!',
-      message: `${employee.name} (${employee.role}) iniciou o turno às ${timeFormatted}.`,
-      type: 'entry',
-      timestamp: now,
-      employeeName: employee.name,
-      role: employee.role
-    });
-
+  // Starts/ends are authoritative, idempotent operations; never fire-and-forget.
+  const loginEmployee = async (employee:Employee) => {
+    const state=getAccessState();
+    if(!state.scoped && state.role==='employee' && currentEmployee?.id!==employee.id)throw new Error('Entre apenas no seu próprio turno.');
+    if(state.scoped && employee.email?.trim().toLowerCase()!==auth.currentUser?.email?.trim().toLowerCase())throw new Error('Entre apenas no seu próprio turno.');
+    const shift=await shiftAction('start',employee.id);
+    const updated={...employee,currentShiftStartedAt:shift?.started_at};
+    setCurrentEmployee(updated);
+    setActiveEmployeeStorage({id:employee.id!,name:employee.name,role:employee.role});
     setIsSwitchModalOpen(false);
   };
-
-  // LOG OUT / END SHIFT
   const logoutEmployee = async () => {
-    if (!currentEmployee) return;
-
-    const now = Date.now();
-    const timeFormatted = new Intl.DateTimeFormat('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit'
-    }).format(now);
-
-    let durationText = '';
-    if (currentEmployee.currentShiftStartedAt) {
-      const diffMs = Math.max(0, now - currentEmployee.currentShiftStartedAt);
-      const totalMinutes = Math.floor(diffMs / (1000 * 60));
-      const hours = Math.floor(totalMinutes / 60);
-      const minutes = totalMinutes % 60;
-      durationText = hours > 0 ? `${hours}h ${minutes}m` : `${minutes} min`;
-    }
-
-    const previousEmp = currentEmployee;
-
-    // Update in Supabase
-    if (previousEmp.id) {
-      updateEmployee(previousEmp.id, {
-        currentShiftStartedAt: undefined,
-        lastShiftEndedAt: now
-      }).catch(e => console.warn('Could not update employee shift end in Supabase:', e));
-    }
-
-    // Reset current employee
-    setCurrentEmployee(null);
-    setActiveEmployeeStorage(null);
-
-    // Record movement in history
-    const durationDetail = durationText ? ` (Duração do turno: ${durationText})` : '';
-    recordMovement({
-      timestamp: now,
-      employeeId: previousEmp.id || 'employee',
-      employeeName: previousEmp.name,
-      employeeRole: previousEmp.role,
-      type: 'employee_logout',
-      description: `SAÍDA DE FUNCIONÁRIO: ${previousEmp.name} (${previousEmp.role}) encerrou o turno e saiu às ${timeFormatted}${durationDetail}.`,
-      entityId: previousEmp.id,
-      entityName: previousEmp.name
-    }).catch(e => console.warn('Could not record employee logout movement:', e));
-
-    // Show announcement banner
-    setActiveAnnouncement({
-      title: 'Saída Registrada!',
-      message: `${previousEmp.name} encerrou o turno às ${timeFormatted}${durationDetail}.`,
-      type: 'exit',
-      timestamp: now,
-      employeeName: previousEmp.name,
-      role: previousEmp.role
-    });
-
-    setIsSwitchModalOpen(false);
+    if(!currentEmployee)return;
+    await shiftAction('end',currentEmployee.id);
+    // A shared owner login must never become an owner session just by ending a staff shift.
+    if(!getAccessState().scoped){await logout();return;}
+    setCurrentEmployee(null);setActiveEmployeeStorage(null);setIsSwitchModalOpen(false);
   };
+  const automaticLogin=useRef('');
+  useEffect(()=>{
+    if(!getAccessState().scoped || isLoadingEmployees)return;
+    const employee=[...employees].sort((a,b)=>(b.updatedAt || 0)-(a.updatedAt || 0)||String(a.id).localeCompare(String(b.id))).find(e=>e.isActive && e.email?.trim().toLowerCase()===auth.currentUser?.email?.trim().toLowerCase());
+    const key=getAccessState().storeId+':'+(auth.currentUser?.uid || '');
+    if(!employee || automaticLogin.current===key)return;
+    automaticLogin.current=key;
+    void loginEmployee(employee).catch(()=>{automaticLogin.current='';});
+  },[isLoadingEmployees,employees]);
 
   const createEmployee = async (data: Omit<Employee, 'id' | 'ownerId' | 'createdAt' | 'updatedAt'>) => {
+    requireManagement();
     const id = await addEmployee(data);
     return id;
   };
 
   const editEmployee = async (id: string, data: Partial<Employee>) => {
+    requireManagement();
     await updateEmployee(id, data);
   };
 
   const removeEmployee = async (id: string) => {
+    requireManagement();
     const emp = employees.find(e => e.id === id);
     if (currentEmployee?.id === id) {
       await logoutEmployee();

@@ -119,7 +119,7 @@ export default function Movements() {
       if (selectedTypeFilter !== 'all') {
         if (selectedTypeFilter === 'sales' && m.type !== 'sale') return false;
         if (selectedTypeFilter === 'stock' && !['stock_in', 'stock_out', 'stock_adjustment'].includes(m.type)) return false;
-        if (selectedTypeFilter === 'shifts' && !['employee_login', 'employee_logout'].includes(m.type)) return false;
+        if (selectedTypeFilter === 'shifts' && !['employee_login', 'employee_logout','shift_start','shift_end'].includes(m.type)) return false;
         if (selectedTypeFilter === 'debt' && !['debt_add', 'debt_payment'].includes(m.type)) return false;
         if (selectedTypeFilter === 'closure' && m.type !== 'cash_closure') return false;
       }
@@ -154,7 +154,7 @@ export default function Movements() {
         stockInCount += m.quantity || 1;
       } else if (m.type === 'stock_out') {
         stockOutCount += m.quantity || 1;
-      } else if (m.type === 'employee_login' || m.type === 'employee_logout') {
+      } else if (['employee_login','employee_logout','shift_start','shift_end'].includes(m.type)) {
         shiftsCount++;
       }
     });
@@ -382,6 +382,7 @@ export default function Movements() {
   // Helper badge for movement type
   const renderMovementTypeBadge = (type: MovementType) => {
     switch (type) {
+      case 'shift_start':
       case 'employee_login':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
@@ -389,6 +390,7 @@ export default function Movements() {
             Entrada de Funcionário
           </span>
         );
+      case 'shift_end':
       case 'employee_logout':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">

@@ -1,3 +1,5 @@
+import {PermissionsProvider} from './lib/PermissionsProvider';
+import {AccessPage} from './components/AccessPage';
 import {showToast} from './lib/actionFeedback';
 import { syncUserLanguage } from './lib/userLanguage';
 import { useState, useEffect, useRef } from 'react';
@@ -135,7 +137,7 @@ export default function App() {
           }
           setOnboardingComplete(!!data?.storeName);
           setCloudError(''); setLoading(false);
-          if (data?.storeName) void checkAndRunDailyAutomatedBackup();
+          if (data?.storeName && !session?.isEmployee) void checkAndRunDailyAutomatedBackup();
         }, fail);
       } catch (error) { if (request === generation) fail(error); }
     }, () => {
@@ -302,20 +304,22 @@ export default function App() {
   return (
     <BrowserRouter>
       <EmployeeProvider>
+      <PermissionsProvider>
         <Routes>
           <Route path="/" element={<Layout menuPinned={menuPinned} onToggleMenuPinned={() => setMenuPinned(previous => !previous)} />}>
-            <Route index element={<Dashboard />} />
-            <Route path="caixa" element={<POS />} />
-            <Route path="estoque" element={<Stock />} />
-            <Route path="compras" element={<Purchases />} />
-            <Route path="precos" element={<Pricing />} />
-            <Route path="fiado" element={<Debt />} />
-            <Route path="movimentacoes" element={<Movements />} />
-            <Route path="ajustes" element={<SettingsView />} />
-            <Route path="tutorial" element={<Tutorial />} />
+            <Route index element={<AccessPage path="/"><Dashboard /></AccessPage>} />
+            <Route path="caixa" element={<AccessPage path="/caixa"><POS /></AccessPage>} />
+            <Route path="estoque" element={<AccessPage path="/estoque"><Stock /></AccessPage>} />
+            <Route path="compras" element={<AccessPage path="/compras"><Purchases /></AccessPage>} />
+            <Route path="precos" element={<AccessPage path="/precos"><Pricing /></AccessPage>} />
+            <Route path="fiado" element={<AccessPage path="/fiado"><Debt /></AccessPage>} />
+            <Route path="movimentacoes" element={<AccessPage path="/movimentacoes"><Movements /></AccessPage>} />
+            <Route path="ajustes" element={<AccessPage path="/ajustes"><SettingsView /></AccessPage>} />
+            <Route path="tutorial" element={<AccessPage path="/tutorial"><Tutorial /></AccessPage>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
+      </PermissionsProvider>
       </EmployeeProvider>
     </BrowserRouter>
   );

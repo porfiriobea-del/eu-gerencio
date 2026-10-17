@@ -13,6 +13,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT=true;
 const React=await import('react');const{render,cleanup,act}=await import('@testing-library/react');
 const cache=new URL('../node_modules/.cache/',import.meta.url);await mkdir(cache,{recursive:true});const dir=await mkdtemp(new URL('cloud-startup-',cache));
 const content={
+ PermissionsProvider:'export const PermissionsProvider=({children})=>children;',
+ AccessPage:'export const AccessPage=({children})=>children;',
  usageReporting:'export const sendReport=async()=>false;',
  userLanguage:'export const syncUserLanguage=()=>()=>{};',
  auth:"export const initAuth=(success)=>{let active=true;queueMicrotask(()=>{if(active)void success({uid:'owner',email:'owner@test.invalid'});});return()=>{active=false;};};export const googleSignIn=async()=>{};",

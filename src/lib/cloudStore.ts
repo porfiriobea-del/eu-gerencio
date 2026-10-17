@@ -1,3 +1,4 @@
+import {getAccessState,requestDeletionApproval} from './accessControl';
 import { supabase, assertSupabaseConfigured } from './supabase';
 
 export const TABLES: Record<string, string> = {
@@ -61,7 +62,9 @@ export class QuerySnapshot {
 function fail(error: any): never {
   if (!error?.code || /fetch|network|connection/i.test(error?.message || '')) event('cloud-offline');
   let message = error?.message || 'Não foi possível acessar os dados na nuvem.';
-  if (['PGRST202', 'PGRST205', '42P01', '42883'].includes(error?.code)) {
+  if(error?.permissionSchema && ['PGRST202','PGRST205','42P01','42883'].includes(error?.code)){
+    message='As permissões da equipe ainda não foram ativadas. Peça ao dono para atualizar a loja.';
+  } else if (['PGRST202', 'PGRST205', '42P01', '42883'].includes(error?.code)) {
     message = 'A estrutura do Supabase ainda não está instalada ou atualizada. Execute a migração 20261014_cloud_source_of_truth.sql no SQL Editor do projeto e tente novamente.';
   } else if (['PGRST301', 'PGRST303'].includes(error?.code)) {
     message = 'O Supabase não reconheceu a sessão. Entre novamente e verifique a integração Firebase em Authentication → Third-Party Auth no projeto Supabase.';
@@ -79,6 +82,10 @@ export async function verifyCloudIdentity(userId: string) {
 
 export async function getDoc(ref: Reference): Promise<DocumentSnapshot> {
   assertSupabaseConfigured();
+  if(getAccessState().scoped){
+    const {data,error}=await supabase.rpc('eu_staff_read',{store_id:getAccessState().storeId,table_name:ref.table,path:ref.collectionPath,record_id:ref.id});
+    if(error)fail({...error,permissionSchema:true});return new DocumentSnapshot(ref,data?.[0] || null);
+  }
   const { data, error } = await supabase.from(ref.table).select('id,collection_path,owner_id,revision,data').eq('collection_path', ref.collectionPath).eq('id', ref.id).maybeSingle();
   if (error) fail(error);
   event('cloud-online');
@@ -88,6 +95,10 @@ export async function getDocs(source: Query): Promise<QuerySnapshot> {
   assertSupabaseConfigured();
   const rows: CloudRow[] = [];
   for (let offset = 0; ; offset += 1000) {
+    if(getAccessState().scoped){
+      const {data,error}=await supabase.rpc('eu_staff_read',{store_id:getAccessState().storeId,table_name:source.table,path:source.path,filters:source.filters,page_offset:offset});
+      if(error)fail({...error,permissionSchema:true});rows.push(...(data || []));if(!data || data.length<1000)break;continue;
+    }
     let request = supabase.from(source.table).select('id,collection_path,owner_id,revision,data').eq('collection_path', source.path);
     for (const filter of source.filters.filter(item => item.kind === 'where')) {
       const key = filter.field === 'ownerId' ? 'owner_id' : `data->${typeof filter.value === 'number' ? '' : '>'}${filter.field}`;
@@ -114,6 +125,8 @@ export async function getDocs(source: Query): Promise<QuerySnapshot> {
 async function commit(operations: Operation[], reads: ReadVersion[] = [], requestId = crypto.randomUUID()) {
   assertSupabaseConfigured();
   if (!operations.length) return;
+  const targets=operations.filter(op=>op.action==='delete'&&['eu_products','eu_customers'].includes(op.table)).map(op=>({table:op.table,id:op.id}));
+  if(targets.length && getAccessState().enabled){const token=await requestDeletionApproval(targets);operations=operations.map(op=>op.action==='delete'?{...op,ownerApproval:token}:op);}
   const { error } = await supabase.rpc('eu_apply_changes', { operations, read_versions: reads, request_id: requestId });
   if (error) fail(error);
   event('cloud-online');

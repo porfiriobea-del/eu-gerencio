@@ -1,3 +1,4 @@
+import {getAccessState} from '../lib/accessControl';
 import {useState,useEffect,useRef} from 'react';
 import {createPortal} from 'react-dom';
 import {useEmployee} from '../lib/employeeContext';
@@ -8,7 +9,7 @@ import {showToast} from '../lib/actionFeedback';
 export function EmployeeFirstPin() {
  const {employees,currentEmployee,isLoadingEmployees}=useEmployee();
  const session=getActiveStoreSession();
- const employee=session?.isEmployee ? employees?.find(e=>e.isActive && e.email?.trim().toLowerCase()===session.employeeEmail?.trim().toLowerCase()) : employees?.find(e=>e.id===currentEmployee?.id);
+ const employee=session?.isEmployee ? employees?.find(e=>e.isActive && (getAccessState().employeeId?e.id===getAccessState().employeeId:e.email?.trim().toLowerCase()===session.employeeEmail?.trim().toLowerCase())) : employees?.find(e=>e.id===currentEmployee?.id);
  const {v}=usePreferences();
  const [oldPin,setOldPin]=useState(''),[pin,setPin]=useState(''),[confirmation,setConfirmation]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const required=!isLoadingEmployees && !!employee?.id && (!!employee.mustChangePin || !employee.pin);

@@ -1,3 +1,5 @@
+import {configureAccess,normalizeAccessRole,getAccessState,requireManagement,requireOwner,requestDeletionApproval} from './accessControl';
+import {workforceRpc} from './workforceApi';
 import { assertEmployeePin, assertTemporaryEmployeePin, invitationStoreName } from './teamInvitation';
 import { validateNotebook, moneyCents, notebookSum, type NotebookEntry } from './debtNotebook';
 import { storeProductImage, isEmbeddedProductImage } from './productImages';
@@ -84,6 +86,7 @@ let activeStoreSession: ActiveStoreSession | null = null;
 export const getActiveStoreSession = (): ActiveStoreSession | null => activeStoreSession;
 export const setActiveStoreSession = (session: ActiveStoreSession | null) => {
   activeStoreSession = session;
+  configureAccess({role:session?.isEmployee?normalizeAccessRole(session.employeeRole):'owner',storeId:session?.storeOwnerId || auth.currentUser?.uid || '',scoped:!!session?.isEmployee,employeeId:session?.employeeId});
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('store-session-changed', { detail: session }));
 };
 if (typeof window !== 'undefined') window.addEventListener('auth-user-changed', () => {
@@ -189,6 +192,7 @@ export const subscribeProducts = (callback: (p: Product[]) => void) => {
 };
 
 export const addProduct = withActionDeadline(async (product: Omit<Product, 'id'|'ownerId'|'createdAt'|'updatedAt'>) => {
+  requireManagement();
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   const path = 'products';
@@ -288,6 +292,7 @@ function withProductWriteQueue<A extends unknown[], R>(action: (id: string, ...a
   };
 }
 export const adjustProductStock = withProductWriteQueue(async (id: string, individualUnits: number) => {
+  requireManagement();
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   if (!isValidStockQuantity(Math.abs(individualUnits))) throw new Error('Quantidade inválida: use incrementos de 0,05 carteira.');
@@ -314,6 +319,7 @@ export const adjustProductStock = withProductWriteQueue(async (id: string, indiv
 });
 
 export const updateProduct = withProductWriteQueue(async (id: string, data: Partial<Product>) => {
+  requireManagement();
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   if (data.imageUrl !== undefined) data = { ...data, imageUrl: await storeProductImage(data.imageUrl, uid) };
@@ -357,6 +363,7 @@ export const updateProduct = withProductWriteQueue(async (id: string, data: Part
 });
 
 export const deleteProduct = withProductWriteQueue(async (id: string, productName?: string) => {
+  requireManagement();
   try {
     await deleteDoc(doc(db, 'products', id));
 
@@ -466,6 +473,7 @@ export const subscribeCustomers = (callback: (c: Customer[]) => void) => {
 };
 
 export const addCustomer = withActionDeadline(async (customer: Omit<Customer, 'id'|'ownerId'|'createdAt'|'updatedAt'>): Promise<string> => {
+  requireManagement();
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   try {
@@ -491,6 +499,7 @@ export const addCustomer = withActionDeadline(async (customer: Omit<Customer, 'i
 });
 
 export const updateCustomer = withActionDeadline(async (id: string, data: Partial<Customer>) => {
+  requireManagement();
   try {
     const cleanData = removeUndefinedFields(data as any);
     await updateDoc(doc(db, 'customers', id), { ...cleanData, updatedAt: Date.now() });
@@ -500,6 +509,7 @@ export const updateCustomer = withActionDeadline(async (id: string, data: Partia
 });
 
 export const deleteCustomer = withActionDeadline(async (id: string, customerName?: string): Promise<void> => {
+  requireManagement();
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
 
@@ -540,6 +550,10 @@ export const recordSale = withActionDeadline(async (
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   
+  if(getAccessState().role==='employee'){
+    await workforceRpc('eu_staff_sale',{request_id:crypto.randomUUID(),acting_employee_id:getAccessState().employeeId || null,sale_input:sale,items_input:items.map(({productId,name,format,quantity,price,stockDeduction})=>({productId,name,format,quantity,price,stockDeduction}))});
+    reportUsage('venda',uid,sale.total);return;
+  }
   const now = Date.now();
   let confirmedSummary = '';
   const summary = items.map(item => `${item.quantity}x ${item.name} (${item.format})`).join(', ').slice(0, 950);
@@ -633,6 +647,7 @@ export const recordPayment = withActionDeadline(async (
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   
+  if(getAccessState().role==='employee'){await workforceRpc('eu_staff_receive',{request_id:crypto.randomUUID(),acting_employee_id:getAccessState().employeeId || null,customer_id:customerId,amount,method});return;}
   const now = Date.now();
   const activeEmp = getActiveEmployeeStorage();
   const empId = employee?.id || activeEmp.id;
@@ -693,7 +708,7 @@ export const subscribeTodaySales = (callback: (s: Sale[]) => void) => {
 };
 
 export const getSalesByDateRange = async (start: number, end: number): Promise<Sale[]> => {
-  const uid = auth.currentUser?.uid;
+  const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   const q = query(
     collection(db, 'sales'),
@@ -711,7 +726,7 @@ export const getSalesByDateRange = async (start: number, end: number): Promise<S
 };
 
 export const getSaleItems = async (saleId: string): Promise<SaleItem[]> => {
-  const uid = auth.currentUser?.uid;
+  const uid = getEffectiveOwnerId();
   if (!uid) return [];
   try {
     const q = query(collection(db, `sales/${saleId}/saleItems`), where('ownerId', '==', uid));
@@ -724,7 +739,7 @@ export const getSaleItems = async (saleId: string): Promise<SaleItem[]> => {
 };
 
 export const getMonthlyFinancials = async (targetDate: Date = new Date()): Promise<MonthlyFinancials> => {
-  const uid = auth.currentUser?.uid;
+  const uid = getEffectiveOwnerId();
   const start = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1, 0, 0, 0, 0).getTime();
   const end = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
 
@@ -901,7 +916,9 @@ export const subscribeCashClosures = (callback: (closures: CashClosure[]) => voi
 export const deleteEntireAccountData = async (): Promise<void> => {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error('Entre na sua conta para excluir os dados.');
-  const { error } = await supabase.rpc('eu_clear_account_data');
+  requireOwner();
+  const token=await requestDeletionApproval([{table:'*',id:'*'}]);
+  const { error } = await supabase.rpc('eu_clear_account_data',{owner_approval:token});
   if (error) throw new Error(error.message);
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('cloud-refresh'));
 };
@@ -1175,6 +1192,7 @@ export const subscribeEmployees = (callback: (employees: Employee[]) => void) =>
 export const addEmployee = withActionDeadline(async (
   employee: Omit<Employee, 'id' | 'ownerId' | 'createdAt' | 'updatedAt'>
 ): Promise<string> => {
+  requireManagement();
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
 
@@ -1201,6 +1219,7 @@ export const addEmployee = withActionDeadline(async (
 });
 
 export const updateEmployee = withActionDeadline(async (id: string, data: Partial<Employee>): Promise<void> => {
+  requireManagement();
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
 
@@ -1221,6 +1240,7 @@ export const updateEmployee = withActionDeadline(async (id: string, data: Partia
 });
 
 export const deleteEmployee = withActionDeadline(async (id: string, employeeName?: string): Promise<void> => {
+  requireManagement();
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
 
@@ -1374,6 +1394,7 @@ export const createTeamInvitation = withActionDeadline(async (data: {
   phone?: string;
   pin?: string;
 }): Promise<{ inviteId: string; inviteUrl: string; storeName: string }> => {
+  requireOwner();
   const currentUid = auth.currentUser?.uid;
   if (!currentUid) throw new Error('Unauthenticated');
 
@@ -1497,18 +1518,7 @@ export const checkAndAcceptPendingInvitation = async (
         role: targetInvite.role
       });
 
-      // Gravar no histórico de movimentações da loja
-      recordMovement({
-      sourceOwnerId: targetInvite.ownerId,
-        timestamp: now,
-        employeeId: userUid,
-        employeeName: targetInvite.name,
-        employeeRole: targetInvite.role,
-        type: 'employee_login',
-        description: `Colaborador ${targetInvite.name} (${targetInvite.role}) entrou pelo link de convite e ativou a sub-conta do estabelecimento.`,
-        entityId: targetDocId,
-        entityName: targetInvite.name
-      }).catch(() => {});
+      // The employee provider starts the authoritative shift after employee resolution.
 
       return session;
     }
@@ -1587,6 +1597,7 @@ export const getSaleItemsForSale = async (saleId: string): Promise<SaleItem[]> =
 
 
 async function deleteMultipleProductsImpl(ids: string[]) {
+  requireManagement();
   if (!ids || ids.length === 0) return;
   const { doc, writeBatch } = await import('./cloudStore');
   const batch = writeBatch(db);
@@ -1633,6 +1644,7 @@ export const mergeProducts = withProductWriteQueue(async (targetId: string, sour
 export async function getProductSalesTotals(products: Product[], signal?: AbortSignal): Promise<Record<string, number>> {
   const ownerId = getEffectiveOwnerId();
   if (!ownerId) return {};
+  if(getAccessState().scoped)return workforceRpc<Record<string,number>>('eu_product_popularity');
   const byId = new Map(products.map(product => [product.id, product]));
   const totals: Record<string, number> = Object.create(null);
   for (let offset = 0; ; offset += 1000) {
@@ -1702,6 +1714,7 @@ export async function getCustomerLastMovements(): Promise<Record<string, number>
 
 // Stable entry IDs make retries safe, including after a request timeout.
 export const importDebtNotebook = withActionDeadline(async (entries: NotebookEntry[], confirmed: boolean) => {
+  requireManagement();
  if (confirmed !== true) throw new Error('Confirme a conferência antes de salvar');
  validateNotebook(entries);
  const ownerId = getEffectiveOwnerId();
@@ -1727,6 +1740,8 @@ export const importDebtNotebook = withActionDeadline(async (entries: NotebookEnt
 
 export const changeEmployeeFirstPin = withActionDeadline(async (id:string,oldPin:string,newPin:string) => {
  assertEmployeePin(newPin);
+ if(getAccessState().role==='employee' && id!==getAccessState().employeeId)throw new Error('Troque apenas sua própria senha.');
+ if(getAccessState().scoped){if(id!==getAccessState().employeeId)throw new Error('Troque apenas sua própria senha.');await workforceRpc('eu_change_own_pin',{old_pin:oldPin,new_pin:newPin});return;}
  const ownerId=getEffectiveOwnerId();if(!ownerId)throw new Error('Unauthenticated');
  return runTransaction(db,async transaction=>{
   const ref=doc(db,'employees',id),snapshot=await transaction.get(ref);

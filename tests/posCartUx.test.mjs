@@ -18,17 +18,17 @@ let desktop=false;const mediaListeners=new Set();
 window.matchMedia=()=>({get matches(){return desktop;},addEventListener(_event,fn){mediaListeners.add(fn);},removeEventListener(_event,fn){mediaListeners.delete(fn);}});
 const cache=new URL('../node_modules/.cache/',import.meta.url);await mkdir(cache,{recursive:true});const dir=await mkdtemp(new URL('pos-cart-',cache));
 const names=['getProductSalesTotals','subscribeProducts','subscribeCustomers','addCustomer','recordSale','subscribeTodaySales','saveCashClosure','subscribeCashClosures','subscribeSettings'];
-await build({stdin:{contents:"export {default} from './src/pages/POS'; export {CurrencyContext} from './src/lib/useCurrency';",resolveDir:new URL('..',import.meta.url).pathname,loader:'tsx'},bundle:true,packages:'external',format:'esm',platform:'node',jsx:'automatic',outfile:`${dir}/POS.mjs`,plugins:[{name:'mock-business',setup(b){
- b.onResolve({filter:/\/(api|preferencesContext|employeeContext|categories|PocketTip)$/},args=>({path:args.path.split('/').at(-1),namespace:'pos-test'}));
- b.onLoad({filter:/.*/,namespace:'pos-test'},args=>({loader:'js',contents:args.path==='api'?names.map(name=>`export const ${name}=(...args)=>globalThis.__posApi.${name}(...args);`).join('\n'):args.path==='preferencesContext'?"export const usePreferences=()=>({v:(k,f)=>f||k,entityName:()=> 'Produto',languageMode:'neutral',isBasicMode:false,simpleViewMode:false});":args.path==='employeeContext'?"export const useEmployee=()=>({currentEmployee:null,openSwitchModal(){}});":args.path==='categories'?"export const getAllCategories=()=>['Bebidas','Cigarros'];":"export const PocketTip=()=>null;"}));
+await build({stdin:{contents:"export {default} from './src/pages/POS'; export {CurrencyContext} from './src/lib/useCurrency';export {PermissionsContext} from './src/lib/permissionsContext';",resolveDir:new URL('..',import.meta.url).pathname,loader:'tsx'},bundle:true,packages:'external',format:'esm',platform:'node',jsx:'automatic',outfile:`${dir}/POS.mjs`,plugins:[{name:'mock-business',setup(b){
+ b.onResolve({filter:/\/(api|preferencesContext|employeeContext|categories|PocketTip|workforceApi)$/},args=>({path:args.path.split('/').at(-1),namespace:'pos-test'}));
+ b.onLoad({filter:/.*/,namespace:'pos-test'},args=>({loader:'js',contents:args.path==='api'?names.map(name=>`export const ${name}=(...args)=>globalThis.__posApi.${name}(...args);`).join('\n'):args.path==='preferencesContext'?"export const usePreferences=()=>({v:(k,f)=>f||k,entityName:()=> 'Produto',languageMode:'neutral',isBasicMode:false,simpleViewMode:false});":args.path==='employeeContext'?"export const useEmployee=()=>({currentEmployee:null,openSwitchModal(){}});":args.path==='workforceApi'?"export const workforceRpc=async (_name,args)=>({subtotal:args.subtotal,total:args.subtotal+(args.method==='credit'?1:0),surchargeAmount:args.method==='credit'?1:0});":args.path==='categories'?"export const getAllCategories=()=>['Bebidas','Cigarros'];":"export const PocketTip=()=>null;"}));
 }}]});
-const {default:POS,CurrencyContext}=await import(pathToFileURL(`${dir}/POS.mjs`).href);
+const {default:POS,CurrencyContext,PermissionsContext}=await import(pathToFileURL(`${dir}/POS.mjs`).href);
 const standard={id:'p1',name:'Suco',category:'Bebidas',type:'comum',stock:10,basePrice:5,unitCost:1,unitsPerPackage:1,safetyStock:0,dailyAverageSales:0,replacementDays:3};
 const cigarettes={...standard,id:'p2',name:'Cigarro',category:'Cigarros',type:'cigarro',stockUnit:'carteira',stock:20,unitsPerPackage:10,unitCost:10,basePrice:20,pricePack:180,priceCart:20,priceHalfCart:11,priceUnit:2};
-function setup(onSale=async()=>{},isDesktop=false,feeSettings={},initialCustomers=[],initialEntries=['/caixa']){
+function setup(onSale=async()=>{},isDesktop=false,feeSettings={},initialCustomers=[],initialEntries=['/caixa'],role='owner'){
  desktop=isDesktop;
  globalThis.__posApi={getProductSalesTotals:async()=>globalThis.__posRanking||{},subscribeProducts(cb){cb([standard,cigarettes]);return()=>{};},subscribeCustomers(cb){cb(initialCustomers);return()=>{};},subscribeTodaySales(cb){cb([]);return()=>{};},subscribeCashClosures(cb){cb([]);return()=>{};},subscribeSettings(cb){cb({enableCardFees:false,...feeSettings});return()=>{};},recordSale:onSale};
- return render(React.createElement(CurrencyContext.Provider,{value:{currency:feeSettings.currency||'BRL',language:feeSettings.language||'pt'}},React.createElement(React.Fragment,null,React.createElement(MemoryRouter,{initialEntries},React.createElement(POS)),React.createElement(AppToast))));
+ return render(React.createElement(CurrencyContext.Provider,{value:{currency:feeSettings.currency||'BRL',language:feeSettings.language||'pt'}},React.createElement(React.Fragment,null,React.createElement(MemoryRouter,{initialEntries},React.createElement(PermissionsContext.Provider,{value:{role,isEmployee:role==='employee',isOwner:role==='owner',ready:true,canAccess:()=>true}},React.createElement(POS))),React.createElement(AppToast))));
 }
 afterEach(()=>{cleanup();localStorage.clear();delete globalThis.__posApi;delete globalThis.__posRanking;});
 after(async()=>{await rm(dir,{recursive:true,force:true});dom.window.close();for(const [name,value]of previous){if(value)Object.defineProperty(globalThis,name,value);else delete globalThis[name];}delete globalThis.IS_REACT_ACT_ENVIRONMENT;});
@@ -160,4 +160,19 @@ test('checkout category list contains only product categories, closes on selecti
  assert.deepEqual(names(),['Cigarro']);
  fireEvent.click(ui.getByRole('button',{name:'Limpar categoria Cigarros'}));
  assert.equal(names().length,2);
+});
+
+test('staff checkout hides closure, team switching, customer creation and fee details but uses the server total',async()=>{
+ let recorded,ui;await act(async()=>{ui=setup((...args)=>{recorded=args;},false,{},[{id:'c',name:'Cliente',totalDebt:10}],['/caixa'],'employee');});
+ assert.equal(ui.queryByRole('button',{name:'Fechar Caixa'}),null);
+ addStandard(ui);openCart(ui);await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Finalizar Compra / Receber'})));
+ assert.equal(ui.queryByRole('button',{name:'Trocar'}),null);
+ await act(async()=>fireEvent.click(ui.getByRole('button',{name:/Cartão$/})));
+ assert.equal(ui.queryByText('Ver taxas'),null);assert.equal(ui.queryByText(/Você recebe:/),null);
+ await act(async()=>fireEvent.change(ui.getByRole('combobox',{name:'access.method'}),{target:{value:'credit'}}));
+ await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Confirmar'})));
+ assert.equal(recorded[0].total,6);assert.equal(recorded[0].paymentMethod,'credit');
+ addStandard(ui);openCart(ui);await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Finalizar Compra / Receber'})));
+ await act(async()=>fireEvent.click(ui.getByRole('button',{name:/Caderneta$/})));
+ assert.equal(ui.queryByRole('button',{name:'+ Novo Cliente'}),null);assert.equal(ui.queryByRole('option',{name:/Cadastrar Novo Cliente Agora/}),null);
 });

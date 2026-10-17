@@ -12,6 +12,7 @@ import { useEmployee } from '../lib/employeeContext';
 import { Employee } from '../types';
 
 const PRESET_ROLES = [
+  'Funcionário',
   'Operador de Caixa',
   'Atendente',
   'Balconista',
