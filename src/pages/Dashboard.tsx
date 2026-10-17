@@ -1,3 +1,5 @@
+import { SimpleHomeSummary } from '../components/SimpleHomeSummary';
+import { SimpleMonthlyProfitChart } from '../components/SimpleMonthlyProfitChart';
 import { useStockFormatting } from '../lib/useStockFormatting';
 import { formatDate, normalizeLanguage, languageLocales } from '../lib/language';
 import { useCurrency } from '../lib/useCurrency';
@@ -22,6 +24,8 @@ export default function Dashboard() {
   const { formatMoney, currencySymbol, language } = useCurrency();
 
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
+  const [basicDetails,setBasicDetails]=useState(false);
+  useEffect(()=>setBasicDetails(false),[isBasicMode]);
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -120,7 +124,7 @@ export default function Dashboard() {
           </span>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        {!isBasicMode&&<div className="flex items-center gap-2 flex-wrap">
 
           <button
             type="button"
@@ -132,9 +136,18 @@ export default function Dashboard() {
             <Compass className="w-4 h-4" />
             <span>{v('ui.tour', "Tour Guiado")}</span>
           </button>
-        </div>
+        </div>}
       </div>
 
+      {isBasicMode&&<>
+        <SimpleHomeSummary sales={totalSales} purchases={todayPurchasesSpent} fees={feesPaid}/>
+        <SimpleMonthlyProfitChart/>
+        <button type="button" aria-expanded={basicDetails} aria-controls="dashboard-more-details" onClick={()=>setBasicDetails(!basicDetails)} className="flex min-h-11 w-full items-center justify-between rounded-xl border border-border bg-surface px-4 text-sm font-semibold">
+          {v(basicDetails?'home.hideDetails':'home.details',basicDetails?'Ocultar detalhes':'Ver detalhes')}
+          <ChevronDown className={`h-4 w-4 ${basicDetails?'rotate-180':''}`}/>
+        </button>
+      </>}
+      {(!isBasicMode||basicDetails)&&<div id="dashboard-more-details" className="space-y-6">
       {/* CARD DE 'RESUMO DO DIA' / PAINEL FINANCEIRO SIMPLIFICADO */}
       <div id="dashboard-summary-card" className="bg-surface rounded-2xl p-5 md:p-6 shadow-sm border border-border">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-border">
@@ -299,21 +312,21 @@ export default function Dashboard() {
         </div>
 
         {/* EXPLICAÇÃO CLARA E DIRETA ("EM POUCAS PALAVRAS") */}
-        <div className="bg-muted/40 border border-border p-3.5 rounded-xl flex items-center gap-3 text-xs md:text-sm">
+        {!isBasicMode&&<div className="bg-muted/40 border border-border p-3.5 rounded-xl flex items-center gap-3 text-xs md:text-sm">
           <div className="p-2 rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 shrink-0">
             <Sparkles className="w-4 h-4" />
           </div>
           <p className="text-foreground leading-relaxed">
             {v('reports.note')}
           </p>
-        </div>
+        </div>}
       </div>
 
       {/* GRÁFICO DE LUCRO MENSAL (VENDAS − CUSTOS DE COMPRA) */}
       <PaymentSummary sales={sales} />
-      <div id="dashboard-monthly-profit">
+      {!isBasicMode&&<div id="dashboard-monthly-profit">
         <MonthlyProfitChart />
-      </div>
+      </div>}
 
       {/* PAINEL DE RELATÓRIOS VISUAIS: MINIMIZADO NO MODO BÁSICO, EXPANSÍVEL SOB DEMANDA */}
       <div className="bg-surface rounded-2xl shadow-sm border border-border overflow-hidden">
@@ -602,6 +615,7 @@ export default function Dashboard() {
       </div>
 
       {/* Modal de Detalhes dos Itens da Venda */}
+      </div>}
       {selectedSale && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs">
           <div className="bg-surface rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-border">
