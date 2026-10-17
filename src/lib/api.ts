@@ -1,4 +1,4 @@
-import { assertEmployeePin, invitationStoreName } from './teamInvitation';
+import { assertEmployeePin, assertTemporaryEmployeePin, invitationStoreName } from './teamInvitation';
 import { validateNotebook, moneyCents, notebookSum, type NotebookEntry } from './debtNotebook';
 import { storeProductImage, isEmbeddedProductImage } from './productImages';
 import { calculatePayment, paymentLabel } from './paymentFees';
@@ -1178,7 +1178,7 @@ export const addEmployee = withActionDeadline(async (
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
 
-  if(employee.pin) assertEmployeePin(employee.pin);
+  if(employee.pin) assertTemporaryEmployeePin(employee.pin);
   const ref = doc(collection(db, 'employees'));
   const now = Date.now();
   const cleanData = removeUndefinedFields({
@@ -1204,7 +1204,7 @@ export const updateEmployee = withActionDeadline(async (id: string, data: Partia
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
 
-  if(data.pin !== undefined) assertEmployeePin(data.pin);
+  if(data.pin !== undefined) assertTemporaryEmployeePin(data.pin);
   try {
     const current = data.pin !== undefined ? await getDoc(doc(db,'employees',id)) : null;
     const resetPin = current?.exists() && current.data().pin !== data.pin;
@@ -1381,7 +1381,7 @@ export const createTeamInvitation = withActionDeadline(async (data: {
   const now = Date.now();
   const cleanEmail = data.email.trim().toLowerCase();
 
-  assertEmployeePin(data.pin || '');
+  assertTemporaryEmployeePin(data.pin || '');
   const settingsSnap = await getDoc(doc(db, 'settings', currentUid));
   const storeName = invitationStoreName(settingsSnap.exists() ? settingsSnap.data().storeName : '');
   const empSnap = await getDocs(query(collection(db,'employees'),where('ownerId','==',currentUid),where('email','==',cleanEmail)));

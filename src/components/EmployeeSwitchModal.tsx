@@ -1,5 +1,5 @@
 import {usePreferences} from '../lib/preferencesContext';
-import {isObviousEmployeePin} from '../lib/teamInvitation';
+import {isInvalidTemporaryPin} from '../lib/teamInvitation';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import React, { useState } from 'react';
 import { 
@@ -179,7 +179,7 @@ export const EmployeeSwitchModal: React.FC = () => {
 
   const handleSubmitEmployeeForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if(isObviousEmployeePin(formPassword)){setFormError(v('team.pinWeak'));return;}
+    if(isInvalidTemporaryPin(formPassword)){setFormError(v('team.temporaryPinLength'));return;}
     if (!formName.trim()) {
       setFormError('Por favor, informe o nome do funcionário.');
       return;
@@ -578,6 +578,7 @@ export const EmployeeSwitchModal: React.FC = () => {
               />
             </div>
 
+            <p className="text-xs text-muted-foreground">{v('team.temporaryPinHelp')}</p>
             {/* Cargo e Senha Individual Obrigatória */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -610,6 +611,9 @@ export const EmployeeSwitchModal: React.FC = () => {
                   <input
                     type={showFormPassword ? 'text' : 'password'}
                     required
+                    title={v('team.temporaryPinHelp')}
+                    minLength={4}
+                    maxLength={64}
                     value={formPassword}
                     onChange={(e) => setFormPassword(e.target.value)}
                     placeholder="Defina a senha..."

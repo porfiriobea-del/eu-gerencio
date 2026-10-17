@@ -1,4 +1,4 @@
-import {formatTeamInvitation,isObviousEmployeePin,invitationStoreName} from '../lib/teamInvitation';
+import {formatTeamInvitation,isInvalidTemporaryPin,invitationStoreName} from '../lib/teamInvitation';
 import {usePreferences} from '../lib/preferencesContext';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import React, { useState, useRef, useEffect } from 'react';
@@ -53,7 +53,7 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded, storeName: comme
       return;
     }
 
-    if(isObviousEmployeePin(pin)){setErrorMessage(v('team.pinWeak'));return;}
+    if(isInvalidTemporaryPin(pin)){setErrorMessage(v('team.temporaryPinLength'));return;}
     setErrorMessage('');
     setIsSubmitting(true);
 
@@ -226,6 +226,7 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded, storeName: comme
                       </select>
                     </div>
 
+                    <p className="text-xs text-muted-foreground">{v('team.temporaryPinHelp')}</p>
                     {/* Senha Individual do Funcionário */}
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
@@ -242,7 +243,8 @@ export function InviteModal({ isOpen, onClose, onEmployeeAdded, storeName: comme
                           type={showPin ? 'text' : 'password'}
                           value={pin}
                           onChange={(e) => setPin(e.target.value)}
-                          placeholder={v('team.newPin')}
+                          placeholder={v('team.temporaryPin')}
+                          title={v('team.temporaryPinHelp')}
                           minLength={4}
                           maxLength={64}
                           className="w-full px-3.5 py-2.5 pr-9 rounded-xl border border-border bg-surface text-foreground text-sm font-mono tracking-wider focus:ring-2 focus:ring-primary/40 focus:outline-none"

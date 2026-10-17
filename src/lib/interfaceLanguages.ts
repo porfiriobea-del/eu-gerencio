@@ -2,6 +2,10 @@ import type {Language} from './language';
 type Mode='basic'|'neutral'|'technical';
 type Dictionary=Record<string,string>;
 const en:Dictionary={
+"team.temporaryPin":"Temporary checkout password",
+"team.temporaryPinLength":"The temporary password must have 4–64 characters.",
+"team.temporaryPinHelp":"You may start with 1234, 1111 or 0000. The employee must change it on first access.",
+
  'team.inviteHelp':'Invite someone to join the team at {store}.',
 "team.pinWeak":"Choose a password with 4–64 characters, without repeats or sequences such as 1234.",
 "team.exactEmail":"Sign in with Google using exactly the email address in the invitation.",
@@ -173,6 +177,10 @@ const en:Dictionary={
  'images.migrationPending':'Your old photos are safe. Open Inventory again to retry the upload.',
 };
 const es:Dictionary={
+"team.temporaryPin":"Contraseña provisional de Caja",
+"team.temporaryPinLength":"La contraseña provisional debe tener de 4 a 64 caracteres.",
+"team.temporaryPinHelp":"Puedes empezar con 1234, 1111 o 0000. La persona deberá cambiarla al entrar.",
+
  'team.inviteHelp':'Invita a alguien a unirse al equipo de {store}.',
 "team.pinWeak":"Elige una contraseña de 4 a 64 caracteres, sin repeticiones ni secuencias como 1234.",
 "team.exactEmail":"Entra con Google usando exactamente el correo de la invitación.",

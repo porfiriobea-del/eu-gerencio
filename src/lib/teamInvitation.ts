@@ -14,3 +14,7 @@ export function isObviousEmployeePin(pin:string) {
  return ['01234567890123456789','98765432109876543210','abcdefghijklmnopqrstuvwxyz','zyxwvutsrqponmlkjihgfedcba','qwertyuiop','asdfghjkl','zxcvbnm'].some(sequence=>sequence.includes(value));
 }
 export function assertEmployeePin(pin:string) {if(isObviousEmployeePin(pin))throw new Error('Escolha uma senha com 4 a 64 caracteres, sem repetições ou sequências como 1234.');}
+
+// Store owners may choose a simple temporary password; the employee's personal password remains strict.
+export const isInvalidTemporaryPin=(pin:string)=>pin.trim().length<4 || pin.trim().length>64;
+export function assertTemporaryEmployeePin(pin:string) {if(isInvalidTemporaryPin(pin))throw new Error('A senha provisória deve ter de 4 a 64 caracteres.');}

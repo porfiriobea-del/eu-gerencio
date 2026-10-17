@@ -16,11 +16,11 @@ const {InviteModal,EmployeeFirstPin,PreferencesProvider,usePreferences}=await im
 afterEach(()=>{cleanup();localStorage.clear();delete globalThis.__employee;});
 after(async()=>{await rm(folder,{recursive:true,force:true});dom.window.close();for(const[k,v]of previous){if(v)Object.defineProperty(globalThis,k,v);else delete globalThis[k];}});
 test('Google employee is matched by invitation email, must confirm a strong different PIN, and persists before gate closes',async()=>{
- const employee={id:'employee-record',email:'ana@example.com',name:'Ana',pin:'5739',mustChangePin:true,isActive:true};let saved;
+ const employee={id:'employee-record',email:'ana@example.com',name:'Ana',pin:'1234',mustChangePin:true,isActive:true};let saved;
  globalThis.__employee={session:{isEmployee:true,employeeEmail:'ana@example.com'},context:{employees:[employee],currentEmployee:{id:'google-uid'},isLoadingEmployees:false},change:async(...args)=>{saved=args;employee.mustChangePin=false;employee.pin='6248';}};
  const view=()=>React.createElement(PreferencesProvider,null,React.createElement(EmployeeFirstPin));
  const ui=render(view());assert.ok(ui.getByRole('dialog'));assert.equal(saved,undefined);
- fireEvent.change(ui.getByLabelText('Senha provisória do convite'),{target:{value:'5739'}});
+ fireEvent.change(ui.getByLabelText('Senha provisória do convite'),{target:{value:'1234'}});
  fireEvent.change(ui.getByLabelText('Nova senha do Caixa'),{target:{value:'1234'}});
  fireEvent.change(ui.getByLabelText('Repita a nova senha'),{target:{value:'1234'}});
  await act(async()=>fireEvent.submit(ui.getByRole('button',{name:'Salvar minha senha'}).closest('form')));
@@ -28,7 +28,7 @@ test('Google employee is matched by invitation email, must confirm a strong diff
  fireEvent.change(ui.getByLabelText('Nova senha do Caixa'),{target:{value:'6248'}});
  fireEvent.change(ui.getByLabelText('Repita a nova senha'),{target:{value:'6248'}});
  await act(async()=>fireEvent.submit(ui.getByRole('button',{name:'Salvar minha senha'}).closest('form')));
- assert.deepEqual(saved,['employee-record','5739','6248']);assert.equal(ui.queryByRole('dialog'),null);
+ assert.deepEqual(saved,['employee-record','1234','6248']);assert.equal(ui.queryByRole('dialog'),null);
 });
 test('first access copy follows all three language modes during the session and default language stays pt-BR',()=>{
  const employee={id:'e',name:'Original NAME',pin:'5739',mustChangePin:true,isActive:true};globalThis.__employee={session:null,context:{employees:[employee],currentEmployee:employee,isLoadingEmployees:false}};
@@ -40,19 +40,17 @@ test('first access copy follows all three language modes during the session and 
  }
 });
 
-test('copy invitation rejects weak PIN before writing, uses persisted store name, and creates only one invitation',async()=>{
+test('copy invitation accepts a simple temporary PIN, uses persisted store name, and creates only one invitation',async()=>{
  let copied,invites=[];
  Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{copied=text;}}});
  globalThis.__employee={invite:async data=>{invites.push(data);return {inviteId:'i',inviteUrl:'https://app.test/?invite=i',storeName:'Banca da Lu'};}};
  const ui=render(React.createElement(PreferencesProvider,null,React.createElement(InviteModal,{isOpen:true,storeName:'Nome antigo',onClose(){}})));
  fireEvent.change(ui.getByPlaceholderText('Ex: Carlos Oliveira, Maria Atendente...'),{target:{value:'José'}});
  fireEvent.change(ui.getByPlaceholderText('email.do.funcionario@gmail.com'),{target:{value:'JOSE@EXAMPLE.COM'}});
- fireEvent.change(ui.getByPlaceholderText('Nova senha do Caixa'),{target:{value:'1234'}});
+ fireEvent.change(ui.getByPlaceholderText('Senha provisória do Caixa'),{target:{value:'1234'}});
  await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Cadastrar e Copiar Texto do Convite'})));
- assert.equal(invites.length,0);assert.match(ui.container.textContent,/sem repetições/);
- fireEvent.change(ui.getByPlaceholderText('Nova senha do Caixa'),{target:{value:'5739'}});
- await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Cadastrar e Copiar Texto do Convite'})));
+ assert.equal(invites[0].pin,'1234');
  assert.equal(invites.length,1);assert.equal(invites[0].email,'jose@example.com');
  assert.match(copied,/Olá, José!/);assert.match(copied,/\*Banca da Lu\*/);assert.doesNotMatch(copied,/Nome antigo|do estabelecimento/);
- assert.match(copied,/5739/);assert.match(copied,/primeiro acesso/);
+ assert.match(copied,/1234/);assert.match(copied,/primeiro acesso/);
 });

@@ -86,6 +86,10 @@ export const LANGUAGE_MODE_INFOS: LanguageModeInfo[] = [
 // Unified, consistent dictionary per language mode
 export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   technical: {
+"team.temporaryPin":"Senha provisória do Caixa",
+"team.temporaryPinLength":"A senha provisória deve ter de 4 a 64 caracteres.",
+"team.temporaryPinHelp":"Senhas provisórias como 1234, 1111 e 0000 são permitidas. A substituição por uma senha pessoal é obrigatória no primeiro acesso.",
+
  'team.inviteHelp':'Cadastre colaboradores e compartilhe o acesso à equipe de {store}.',
 "team.pinWeak":"Escolha uma senha com 4 a 64 caracteres, sem repetições ou sequências como 1234.",
 "team.exactEmail":"Entre com o Google usando exatamente o e-mail informado no convite.",
@@ -347,6 +351,10 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Frente de Caixa',
   },
   neutral: {
+"team.temporaryPin":"Senha provisória do Caixa",
+"team.temporaryPinLength":"A senha provisória deve ter de 4 a 64 caracteres.",
+"team.temporaryPinHelp":"A senha inicial pode ser 1234, 1111 ou 0000. O funcionário deverá trocá-la no primeiro acesso.",
+
  'team.inviteHelp':'Convide pessoas para trabalhar na equipe de {store}.',
 "team.pinWeak":"Escolha uma senha com 4 a 64 caracteres, sem repetições ou sequências como 1234.",
 "team.exactEmail":"Entre com o Google usando exatamente o e-mail informado no convite.",
@@ -608,6 +616,10 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Caixa',
   },
   basic: {
+"team.temporaryPin":"Senha provisória do Caixa",
+"team.temporaryPinLength":"A senha provisória deve ter de 4 a 64 caracteres.",
+"team.temporaryPinHelp":"Pode usar 1234, 1111 ou 0000 para começar. A pessoa terá que trocar a senha ao entrar.",
+
  'team.inviteHelp':'Chame alguém para a equipe de {store}.',
 "team.pinWeak":"Escolha uma senha com 4 a 64 caracteres, sem repetições ou sequências como 1234.",
 "team.exactEmail":"Entre com o Google usando exatamente o e-mail informado no convite.",

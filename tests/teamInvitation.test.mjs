@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {formatTeamInvitation,isObviousEmployeePin,assertEmployeePin} from '../src/lib/teamInvitation.ts';
+import {formatTeamInvitation,isObviousEmployeePin,assertEmployeePin,assertTemporaryEmployeePin} from '../src/lib/teamInvitation.ts';
 test('email and WhatsApp share invitation details, preserve names and distinguish formatting',()=>{
  const data={name:'  José ',storeName:'Banca da Lu',role:'Operador de Caixa',email:'JOSE@EXAMPLE.COM',pin:'5739',url:'https://app.test/?invite=test'};
  const mail=formatTeamInvitation(data,'email'),whats=formatTeamInvitation(data,'whatsapp');
@@ -18,4 +18,12 @@ test('obvious passwords including repetitions and ascending/descending sequences
   assert.equal(isObviousEmployeePin(pin),true,pin);assert.throws(()=>assertEmployeePin(pin));
  }
  for(const pin of ['5739','6248','Caixa!73'])assert.doesNotThrow(()=>assertEmployeePin(pin));
+});
+
+test('temporary passwords allow simple defaults but personal passwords still reject them',()=>{
+ for(const pin of ['1234','1111','0000']){
+  assert.doesNotThrow(()=>assertTemporaryEmployeePin(pin));
+  assert.throws(()=>assertEmployeePin(pin));
+ }
+ for(const pin of ['', '123', 'x'.repeat(65)])assert.throws(()=>assertTemporaryEmployeePin(pin));
 });

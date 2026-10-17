@@ -1,4 +1,4 @@
-import {isObviousEmployeePin} from '../lib/teamInvitation';
+import {isInvalidTemporaryPin} from '../lib/teamInvitation';
 import { sortByName } from '../lib/alphabetical';
 import { useCurrency } from '../lib/useCurrency';
 import { formatProductStock } from '../lib/productUnits';
@@ -262,7 +262,7 @@ export default function Movements() {
   // Employee Form submit (Add or Edit)
   const handleSaveEmployeeForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if(isObviousEmployeePin(empPin)){setEmpFormError(v('team.pinWeak'));return;}
+    if(isInvalidTemporaryPin(empPin)){setEmpFormError(v('team.temporaryPinLength'));return;}
     if (!empName.trim()) {
       setEmpFormError('Por favor, informe o nome do funcionário.');
       return;
@@ -1169,6 +1169,9 @@ export default function Movements() {
                   <input
                     type="password"
                     required
+                    title={v('team.temporaryPinHelp')}
+                    minLength={4}
+                    maxLength={64}
                     value={empPin}
                     onChange={(e) => setEmpPin(e.target.value)}
                     placeholder="Defina a senha..."
@@ -1177,6 +1180,7 @@ export default function Movements() {
                 </div>
               </div>
 
+              <p className="text-xs text-muted-foreground">{v('team.temporaryPinHelp')}</p>
               <div>
                 <label className="block text-xs font-semibold text-foreground mb-1">
                   Telefone (Opcional)

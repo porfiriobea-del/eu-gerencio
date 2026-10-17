@@ -396,8 +396,15 @@ test('notebook import adds debt atomically, records lines without sales and is s
  assert.equal((await store.getDoc(store.doc(store.db,'customers','notebook_notebook-new'))).data().totalDebt,5.3);
 });
 
-test('employees reject obvious PINs and require a durable first-access change without changing unrelated data',async()=>{
- await assert.rejects(api.addEmployee({name:'Ana',role:'Caixa',pin:'1234',isActive:true}),/sequências/);
+test('employees accept simple temporary PINs and require a durable first-access change without changing unrelated data',async()=>{
+ for(const pin of ['1234','1111','0000']) {
+  const temporaryId=await api.addEmployee({name:'Inicial',role:'Caixa',pin,isActive:true});
+  const temporary=(await store.getDoc(store.doc(store.db,'employees',temporaryId))).data();
+  assert.equal(temporary.pin,pin);assert.equal(temporary.mustChangePin,true);
+  await api.changeEmployeeFirstPin(temporaryId,pin,'6248');
+  const personal=(await store.getDoc(store.doc(store.db,'employees',temporaryId))).data();
+  assert.equal(personal.pin,'6248');assert.equal(personal.mustChangePin,false);
+ }
  const id=await api.addEmployee({name:'Ana',role:'Caixa',pin:'5739',email:'ana@example.com',isActive:true});
  const ref=store.doc(store.db,'employees',id);
  assert.equal((await store.getDoc(ref)).data().mustChangePin,true);
@@ -409,12 +416,14 @@ test('employees reject obvious PINs and require a durable first-access change wi
  assert.equal(changed.pin,'6248');assert.equal(changed.mustChangePin,false);assert.ok(changed.pinChangedAt);assert.equal(changed.name,'Ana');
  await api.updateEmployee(id,{name:'Ana Maria',pin:'6248'});assert.equal((await store.getDoc(ref)).data().mustChangePin,false);
  await api.updateEmployee(id,{pin:'9537'});assert.equal((await store.getDoc(ref)).data().mustChangePin,true);
- await assert.rejects(api.updateEmployee(id,{pin:'1111'}),/sequências/);
+ await api.updateEmployee(id,{pin:'1111'});
+ assert.equal((await store.getDoc(ref)).data().pin,'1111');
+ assert.equal((await store.getDoc(ref)).data().mustChangePin,true);
 });
 test('team invitation creates only one employee, uses store name and never places a PIN in the invitation document',async()=>{
  await store.setDoc(store.doc(store.db,'settings','owner'),{ownerId:'owner',storeName:'Banca da Lu'});
- await assert.rejects(api.createTeamInvitation({email:'invite@test.invalid',name:'Convidada',role:'Caixa',pin:'1234'}),/sequências/);
- const first=await api.createTeamInvitation({email:'invite@test.invalid',name:'Convidada',role:'Caixa',pin:'5739'});
+ await assert.rejects(api.createTeamInvitation({email:'invite@test.invalid',name:'Convidada',role:'Caixa',pin:'12'}),/4 a 64/);
+ const first=await api.createTeamInvitation({email:'invite@test.invalid',name:'Convidada',role:'Caixa',pin:'1234'});
  const second=await api.createTeamInvitation({email:'invite@test.invalid',name:'Convidada',role:'Caixa',pin:'6248'});
  assert.equal(first.storeName,'Banca da Lu');assert.notEqual(first.inviteId,second.inviteId);
  const invite=(await store.getDoc(store.doc(store.db,'teamInvitations',first.inviteId))).data();
