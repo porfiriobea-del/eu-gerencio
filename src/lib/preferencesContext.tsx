@@ -86,6 +86,8 @@ export const LANGUAGE_MODE_INFOS: LanguageModeInfo[] = [
 // Unified, consistent dictionary per language mode
 export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   technical: {
+    'pos.category': 'Categoria',
+    'pos.clearCategory': 'Limpar categoria',
     "debt.outstanding": "Falta receber",
     "debt.owing": "devendo",
     "debt.settled": "Quitado",
@@ -285,6 +287,8 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Frente de Caixa',
   },
   neutral: {
+    'pos.category': 'Categoria',
+    'pos.clearCategory': 'Limpar categoria',
     "debt.outstanding": "Falta receber",
     "debt.owing": "devendo",
     "debt.settled": "Quitado",
@@ -484,6 +488,8 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Caixa',
   },
   basic: {
+    'pos.category': 'Categoria',
+    'pos.clearCategory': 'Limpar categoria',
     "debt.outstanding": "Falta receber",
     "debt.owing": "devendo",
     "debt.settled": "Quitado",

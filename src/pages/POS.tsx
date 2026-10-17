@@ -1,7 +1,8 @@
 import { useLocation,useNavigate } from 'react-router-dom';
 import { QuickProductDialog } from '../components/QuickProductDialog';
 import { Star } from 'lucide-react';
-import { CategoryChips } from '../components/CategoryChips';
+import { CategoryFilter,SelectedCategory } from '../components/CategoryFilter';
+import { posCategories } from '../lib/posCategories';
 import { QuickProducts, useProductShortcuts } from '../components/QuickProducts';
 import { useStockFormatting } from '../lib/useStockFormatting';
 import { sortByName } from '../lib/alphabetical';
@@ -24,7 +25,6 @@ import {
   subscribeSettings 
 } from '../lib/api';
 import { Product, Customer, Sale, CashClosure, Settings } from '../types';
-import { getAllCategories } from '../lib/categories';
 import { 
   Search, 
   ShoppingCart, 
@@ -130,8 +130,10 @@ export default function POS() {
   }, [products, todaySales]);
 
   const categories = useMemo(() => {
-    return ['Todas', ...getAllCategories(products.map(p => p.category))];
+    return posCategories(products);
   }, [products]);
+
+  useEffect(()=>{if(selectedCategory!=='Todas'&&!categories.some(category=>category.name===selectedCategory))setSelectedCategory('Todas');},[categories,selectedCategory]);
 
   const filteredProducts = useMemo(() => {
     return rankProductsBySales(products.filter(p => {
@@ -452,6 +454,7 @@ export default function POS() {
         <button type="button" className="min-h-11 rounded-lg px-3 text-xs font-semibold" onClick={()=>{setFiadoIntent(false);setSelectedCustomerId('');setPaymentType('cash');}}>{v('ui.cancel','Cancelar')}</button>
       </div>}
       {/* Pocket Tip: Guia do Caixa em 2 Passos */}
+      <div className="flex items-start justify-between gap-3">
       <PocketTip compact
         id="pos-guide"
         badgeText="Dica de Bolso"
@@ -509,6 +512,20 @@ export default function POS() {
         ]}
       />
 
+          <button
+            type="button"
+            onClick={() => setIsCashClosureOpen(true)}
+            aria-label={v('ui.closeCash', 'Fechar Caixa')}
+            className="px-3.5 py-2.5 bg-palette-1 text-primary hover:bg-palette-1/80 border border-primary/30 rounded-xl font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs shrink-0 text-sm"
+          >
+            <Lock className="w-4 h-4" />
+            <span className="hidden md:inline">{v('ui.closeCash', "Fechar Caixa")}</span>
+            <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-bold">
+              {todaySales.length}
+            </span>
+          </button>
+      </div>
+
       <div className="flex flex-col lg:flex-row h-full gap-6">
       {/* Products Section */}
       <div className="min-w-0 flex-1 flex flex-col space-y-4">
@@ -523,27 +540,11 @@ export default function POS() {
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-surface text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary shadow-xs"
             />
           </div>
-          <select 
-            value={selectedCategory} 
-            onChange={e => setSelectedCategory(e.target.value)}
-            className="hidden md:block px-3 py-2.5 rounded-xl border border-border bg-surface text-foreground shadow-xs cursor-pointer text-sm"
-          >
-            {categories.map(c => <option key={c} value={c}>{c === 'Todas' ? v('ui.categories', 'Todas as categorias') : c}</option>)}
-          </select>
-          <button
-            type="button"
-            onClick={() => setIsCashClosureOpen(true)}
-            className="px-3.5 py-2.5 bg-palette-1 text-primary hover:bg-palette-1/80 border border-primary/30 rounded-xl font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs shrink-0 text-sm"
-          >
-            <Lock className="w-4 h-4" />
-            <span className="hidden md:inline">{v('ui.closeCash', "Fechar Caixa")}</span>
-            <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-bold">
-              {todaySales.length}
-            </span>
-          </button>
+          <CategoryFilter categories={categories} total={products.length} value={selectedCategory} onChange={setSelectedCategory}/>
+
         </div>
 
-        <div className="md:hidden"><CategoryChips categories={categories} value={selectedCategory} onChange={setSelectedCategory}/></div>
+        <SelectedCategory value={selectedCategory} onClear={()=>setSelectedCategory('Todas')}/>
         </div>
         <QuickProducts products={products} totals={salesTotals} favorites={shortcuts.favorites} recent={shortcuts.recent} onFavorite={shortcuts.toggleFavorite} onChoose={product=>{
           if(product.type==='cigarro')setQuickProduct(product);
@@ -552,11 +553,11 @@ export default function POS() {
         <div className="grid grid-cols-1 min-[560px]:grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4 overflow-y-auto pb-24">
           {Object.keys(salesTotals).length > 0 && <p className="col-span-full text-xs text-muted-foreground">{v('pos.salesOrder', 'Mais vendidos primeiro')}</p>}
           {filteredProducts.map(p => (
-            <div key={p.id} className="relative bg-surface border border-border rounded-2xl p-3.5 shadow-xs hover:shadow-md transition-all grid grid-cols-[88px_minmax(0,1fr)] gap-x-3 md:flex md:flex-col md:gap-x-0 justify-between group">
+            <div key={p.id} className={`relative bg-surface border border-border rounded-2xl p-3.5 shadow-xs hover:shadow-md transition-all grid ${p.imageUrl ? 'grid-cols-[88px_minmax(0,1fr)]' : 'grid-cols-[40px_minmax(0,1fr)]'} gap-x-3 md:flex md:flex-col md:gap-x-0 justify-between group`}>
               <button type="button" aria-label={`${v('mobile.favorite','Favoritar')} ${p.name}`} aria-pressed={shortcuts.favorites.includes(p.id!)} onClick={()=>shortcuts.toggleFavorite(p.id!)} className="absolute right-1 top-1 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-surface/90 md:hidden"><Star className={`h-4 w-4 ${shortcuts.favorites.includes(p.id!)?'fill-amber-400 text-amber-600':''}`}/></button>
               <div className="contents md:block">
                 {/* Imagem Exata do Produto no Caixa */}
-                <div className="mx-auto h-[88px] w-[88px] md:w-full md:h-28 row-span-2 self-start md:self-auto mb-0 md:mb-3 rounded-xl overflow-hidden bg-neutral-100 dark:bg-neutral-900 md:bg-palette-1/40 border border-border/80 flex items-center justify-center shrink-0">
+                <div className={`mx-auto ${p.imageUrl ? 'h-[88px] w-[88px]' : 'h-10 w-10'} md:w-full md:h-28 row-span-2 self-start md:self-auto mb-0 md:mb-3 rounded-xl overflow-hidden bg-neutral-100 dark:bg-neutral-900 md:bg-palette-1/40 border border-border/80 flex items-center justify-center shrink-0`}>
                   {p.imageUrl ? (
                     <ProductImage
                       src={p.imageUrl} 
@@ -566,8 +567,8 @@ export default function POS() {
                      translate="no"/>
                   ) : (
                     <div className="flex flex-col items-center justify-center text-primary/40 p-2">
-                      <Package className="w-8 h-8 mb-1" />
-                      <span className="text-[10px] font-medium text-muted-foreground truncate max-w-full">{p.category}</span>
+                      <Package className="w-5 h-5 md:w-8 md:h-8 md:mb-1" />
+                      <span className="hidden md:block text-[10px] font-medium text-muted-foreground truncate max-w-full">{p.category}</span>
                     </div>
                   )}
                 </div>

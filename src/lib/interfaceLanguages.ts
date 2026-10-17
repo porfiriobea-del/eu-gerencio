@@ -2,6 +2,7 @@ import type {Language} from './language';
 type Mode='basic'|'neutral'|'technical';
 type Dictionary=Record<string,string>;
 const en:Dictionary={
+ 'pos.category':'Category','pos.clearCategory':'Clear category',
  "debt.outstanding":"Awaiting payment",
  "debt.owing":"owing",
  "debt.settled":"Paid off",
@@ -112,6 +113,7 @@ const en:Dictionary={
  'images.migrationPending':'Your old photos are safe. Open Inventory again to retry the upload.',
 };
 const es:Dictionary={
+ 'pos.category':'Categoría','pos.clearCategory':'Quitar categoría',
  "debt.outstanding":"Falta cobrar",
  "debt.owing":"con deuda",
  "debt.settled":"Saldado",

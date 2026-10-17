@@ -148,3 +148,16 @@ test('Anotar compra keeps the chosen customer and fiado payment through cart che
  await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Confirmar'})));
  assert.equal(sales.length,1);assert.equal(sales[0][0].type,'fiado');assert.equal(sales[0][0].customerId,'customer-1');
 });
+
+
+test('checkout category list contains only product categories, closes on selection and clears through its tag',async()=>{
+ let ui;await act(async()=>{ui=setup();});
+ fireEvent.click(ui.getByRole('button',{name:'Categoria'}));
+ assert.deepEqual(ui.getAllByRole('option').map(option=>option.textContent),['Todas as categorias2','Bebidas1','Cigarros1']);
+ fireEvent.click(ui.getByRole('option',{name:/Cigarros.*1/}));
+ assert.equal(ui.queryByRole('listbox'),null);
+ const names=()=>[...ui.container.querySelectorAll('h3')].map(node=>node.textContent).filter(name=>['Suco','Cigarro'].includes(name));
+ assert.deepEqual(names(),['Cigarro']);
+ fireEvent.click(ui.getByRole('button',{name:'Limpar categoria Cigarros'}));
+ assert.equal(names().length,2);
+});

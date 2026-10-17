@@ -17,6 +17,8 @@ const {PreferencesProvider}=await import('../src/lib/preferencesContext.tsx');
 const {MobileNavigation}=await import('../src/components/MobileNavigation.tsx');
 const {MobileStockList}=await import('../src/components/MobileStockList.tsx');
 const {CategoryChips}=await import('../src/components/CategoryChips.tsx');
+const {CategoryFilter,SelectedCategory}=await import('../src/components/CategoryFilter.tsx');
+const {posCategories}=await import('../src/lib/posCategories.ts');
 const {QuickProducts,useProductShortcuts}=await import('../src/components/QuickProducts.tsx');
 const {PocketTip}=await import('../src/components/PocketTip.tsx');
 const {QuickProductDialog}=await import('../src/components/QuickProductDialog.tsx');
@@ -94,4 +96,22 @@ test('quick cigarette sale requires an enabled format, keeps fractional deductio
  fireEvent.click(ui.getByRole('button',{name:/Meia Carteira/}));
  assert.equal(calls[0][3],0.5);assert.equal(calls[0][2],11);assert.equal(closed,1);
  fireEvent.keyDown(document,{key:'Escape'});assert.equal(closed,2);
+});
+
+
+test('category dropdown counts only existing categories, sorts A-Z and closes on choice, Escape and outside click',()=>{
+ const categories=posCategories([{category:'Cigarros'},{category:'Bebidas'},{category:'Água'},{category:'Bebidas'},{category:''}]);
+ assert.deepEqual(categories,[{name:'Água',count:1},{name:'Bebidas',count:2},{name:'Cigarros',count:1}]);
+ function Filter(){const[value,setValue]=React.useState('Todas');return React.createElement(React.Fragment,null,React.createElement(CategoryFilter,{categories,total:5,value,onChange:setValue}),React.createElement(SelectedCategory,{value,onClear:()=>setValue('Todas')}));}
+ const ui=render(wrap(React.createElement(Filter)));
+ const trigger=ui.getByRole('button',{name:'Categoria'});
+ assert.equal(ui.queryByRole('listbox'),null);fireEvent.click(trigger);
+ assert.deepEqual(ui.getAllByRole('option').map(option=>option.textContent),['Todas as categorias5','Água1','Bebidas2','Cigarros1']);
+ fireEvent.click(ui.getByRole('option',{name:/Bebidas.*2/}));
+ assert.equal(ui.queryByRole('listbox'),null);assert.equal(trigger.getAttribute('aria-expanded'),'false');
+ fireEvent.click(ui.getByRole('button',{name:'Limpar categoria Bebidas'}));
+ assert.equal(ui.queryByRole('button',{name:'Limpar categoria Bebidas'}),null);
+ fireEvent.keyDown(trigger,{key:'ArrowDown'});assert.ok(ui.getByRole('listbox'));
+ fireEvent.keyDown(ui.getByRole('listbox'),{key:'Escape'});assert.equal(ui.queryByRole('listbox'),null);
+ fireEvent.click(trigger);fireEvent.mouseDown(document.body);assert.equal(ui.queryByRole('listbox'),null);
 });
