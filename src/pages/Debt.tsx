@@ -1,3 +1,4 @@
+import {NotebookImport} from '../components/NotebookImport';
 import { MobileDebtCards } from '../components/MobileDebtCards';
 import { debtOverview,orderDebtCustomers } from '../lib/debtOverview';
 import { useMobileViewport } from '../lib/useMobileViewport';
@@ -25,7 +26,7 @@ import { useEmployee } from '../lib/employeeContext';
 
 interface LedgerItem {
   id: string;
-  type: 'sale' | 'payment' | 'initial_debt';
+  type: 'sale' | 'payment' | 'initial_debt' | 'notebook';
   timestamp: number;
   amount: number;
   description: string;
@@ -51,6 +52,7 @@ export default function Debt() {
   const [searchQuery, setSearchQuery] = useState('');
   
   // Modal States
+  const [importOpen,setImportOpen]=useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
@@ -204,6 +206,7 @@ export default function Debt() {
     if (!selectedCustomer) return [];
 
     const items: LedgerItem[] = [];
+    for (const entry of selectedCustomer.debtImports || []) items.push({id:entry.id,type:'notebook',timestamp:entry.createdAt,amount:entry.amount,description:entry.description,itemsSummary:entry.lines.map(line=>`${line.description}: ${formatMoney(line.amount)}`).join('; ')});
 
     // 1. Initial debt when customer was created, if any
     if (selectedCustomer.previousDebt > 0) {
@@ -248,7 +251,7 @@ export default function Debt() {
 
     // Apply tab filter
     if (historyTab === 'sales') {
-      return items.filter(it => it.type === 'sale' || it.type === 'initial_debt');
+      return items.filter(it => it.type === 'sale' || it.type === 'initial_debt' || it.type === 'notebook');
     }
     if (historyTab === 'payments') {
       return items.filter(it => it.type === 'payment');
@@ -296,7 +299,9 @@ export default function Debt() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+          {importOpen && <NotebookImport customers={customers} onClose={()=>setImportOpen(false)}/>}
+          <button className="border border-border rounded-xl px-4 py-2.5 text-sm" onClick={()=>setImportOpen(true)}>{v('notebook.title')}</button>
           <button 
             onClick={() => setIsModalOpen(true)} 
             className="w-full sm:w-auto bg-primary text-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 hover:opacity-90 font-semibold cursor-pointer shadow-xs text-sm transition-opacity"
@@ -656,7 +661,7 @@ export default function Debt() {
                                     ? 'text-emerald-700 dark:text-emerald-300'
                                     : 'text-foreground'
                                 }`}>
-                                  {isSale ? '🛒 Compra no Fiado (A Prazo)' : isPayment ? '💰 Pagamento de Fiado Recebido' : '📋 Saldo Anterior / Dívida Inicial'}
+                                  {isSale ? '🛒 Compra no Fiado (A Prazo)' : isPayment ? '💰 Pagamento de Fiado Recebido' : item.type === 'notebook' ? v('notebook.title') : '📋 Saldo Anterior / Dívida Inicial'}
                                 </span>
 
                                 {/* Dia e Horário Formatado com Destaque */}
@@ -670,6 +675,7 @@ export default function Debt() {
                               <p className="text-xs text-foreground/90 mt-1 leading-relaxed notranslate normal-case" translate="no">
                                 {item.description}
                               </p>
+                              {item.type === 'notebook' && <p className="text-xs mt-1 notranslate" translate="no">{item.itemsSummary}</p>}
 
                               {/* Employee / Operator who performed the action */}
                               {item.employeeName && (
@@ -695,10 +701,10 @@ export default function Debt() {
                                 ? 'text-emerald-600 dark:text-emerald-400'
                                 : 'text-foreground'
                             }`}>
-                              {isSale ? `+ ${formatMoney(item.amount)}` : isPayment ? `- ${formatMoney(item.amount)}` : `${formatMoney(item.amount)}`}
+                              {isSale || item.type === 'notebook' ? `+ ${formatMoney(item.amount)}` : isPayment ? `- ${formatMoney(item.amount)}` : `${formatMoney(item.amount)}`}
                             </span>
                             <span className="block text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
-                              {isSale ? 'Acréscimo na Dívida' : isPayment ? 'Abatimento' : 'Saldo Inicial'}
+                              {isSale ? 'Acréscimo na Dívida' : isPayment ? 'Abatimento' : item.type === 'notebook' ? v('notebook.amount') : 'Saldo Inicial'}
                             </span>
                           </div>
                         </div>

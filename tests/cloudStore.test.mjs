@@ -373,3 +373,23 @@ test('editing customer details keeps the last financial activity date unchanged'
  await api.recordPayment('dated-customer',1,'cash');
  assert.ok((await store.getDoc(ref)).data().lastMovementAt>12345);
 });
+
+test('notebook import adds debt atomically, records lines without sales and is safe to retry',async()=>{
+ const ref=store.doc(store.db,'customers','notebook-existing');
+ await store.setDoc(ref,{ownerId:'owner',name:'José',previousDebt:10,totalDebt:25,createdAt:1});
+ const entries=[{id:'notebook-first',customerId:'notebook-existing',name:'JOSE',lines:[{description:'Pão',amount:2.1},{description:'Leite',amount:3.2}],readTotal:6,amount:5.3},{id:'notebook-second',customerId:'notebook-existing',name:'José',lines:[{description:'Café',amount:4.7}],readTotal:4.7,amount:4.7}];
+ const beforeSales=[...records.keys()].filter(k=>k.startsWith('eu_sales/')).length;
+ await assert.rejects(api.importDebtNotebook(entries,false),/Confirme/);
+ forcedConflicts=1;
+ await api.importDebtNotebook(entries,true);
+ await api.importDebtNotebook(entries,true);
+ const customer=(await store.getDoc(ref)).data();
+ assert.equal(customer.totalDebt,35);assert.equal(customer.previousDebt,10);assert.equal(customer.name,'José');
+ assert.equal(customer.debtImports.length,2);assert.equal(customer.debtImports[0].summedTotal,5.3);assert.equal(customer.debtImports[0].readTotal,6);
+ assert.match(customer.debtImports[0].description,/Importado da caderneta em \d{2}\/\d{2}/);
+ assert.equal([...records.keys()].filter(k=>k.startsWith('eu_sales/')).length,beforeSales);
+ assert.doesNotMatch(JSON.stringify(customer),/base64|imageUrl|fileBase64/);
+ await api.importDebtNotebook([{...entries[0],id:'notebook-new',customerId:undefined,name:'Maria'}],true);
+ await api.importDebtNotebook([{...entries[0],id:'notebook-new',customerId:undefined,name:'Maria'}],true);
+ assert.equal((await store.getDoc(store.doc(store.db,'customers','notebook_notebook-new'))).data().totalDebt,5.3);
+});

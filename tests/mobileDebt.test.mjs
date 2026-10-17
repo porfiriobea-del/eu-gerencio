@@ -14,7 +14,7 @@ const React=await import('react');
 const {MemoryRouter,Routes,Route,useLocation}=await import('react-router-dom');
 const {render,fireEvent,act,cleanup,within}=await import('@testing-library/react');
 const folder=await mkdtemp(new URL('../.debt-ui-',import.meta.url).pathname);
-const names=['subscribeCustomers','addCustomer','recordPayment','deleteCustomer','subscribeCustomerSales','subscribeCustomerPayments','getCustomerLastMovements'];
+const names=['importDebtNotebook','subscribeCustomers','addCustomer','recordPayment','deleteCustomer','subscribeCustomerSales','subscribeCustomerPayments','getCustomerLastMovements'];
 await build({stdin:{contents:"export {default as Debt} from './src/pages/Debt';export {PreferencesProvider} from './src/lib/preferencesContext';",resolveDir:new URL('..',import.meta.url).pathname,loader:'tsx'},bundle:true,packages:'external',platform:'node',format:'esm',jsx:'automatic',outfile:folder+'/ui.mjs',plugins:[{name:'bank',setup(b){
  b.onResolve({filter:/\/lib\/(api|employeeContext)$/},args=>({path:args.path.split('/').at(-1),namespace:'mock'}));
  b.onLoad({filter:/.*/,namespace:'mock'},args=>({loader:'js',contents:args.path==='api'?names.map(name=>`export const ${name}=(...args)=>globalThis.__debtBank.${name}(...args);`).join('\n'):'export const useEmployee=()=>({currentEmployee:null});'}));

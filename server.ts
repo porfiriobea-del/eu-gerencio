@@ -1,3 +1,4 @@
+import recognizeNotebook from './api/gemini/recognize-notebook.ts';
 import express from 'express';
 import { recognizeProduct } from './server/geminiRecognition.ts';
 import { recognizeCatalog } from './api/gemini/recognize-catalog.ts';
@@ -17,6 +18,7 @@ app.use(express.json({ limit: '25mb' }));
 
 app.post('/api/gemini/recognize-product', recognizeProduct);
 app.post('/api/gemini/recognize-catalog', recognizeCatalog);
+app.post('/api/gemini/recognize-notebook', recognizeNotebook);
 app.post('/api/feedback/export', exportFeedback);
 app.post('/api/relatorio', relatorio);
 

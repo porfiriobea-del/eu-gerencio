@@ -28,7 +28,7 @@ await build({
       builder.onResolve({ filter: /\/lib\/(api|employeeContext)$/ }, args => ({ path: args.path.endsWith('/api') ? 'api' : 'employee', namespace: 'modal-test' }));
       builder.onLoad({ filter: /.*/, namespace: 'modal-test' }, args => ({
         contents: args.path === 'employee' ? 'export const useEmployee = () => ({ currentEmployee: null });' :
-          ['subscribeCustomers', 'addCustomer', 'recordPayment', 'deleteCustomer', 'subscribeCustomerSales', 'subscribeCustomerPayments'].map(name => `export const ${name} = (...args) => globalThis.__modalUiApi.${name}(...args);`).join('\n'),
+          ['importDebtNotebook','subscribeCustomers', 'addCustomer', 'recordPayment', 'deleteCustomer', 'subscribeCustomerSales', 'subscribeCustomerPayments'].map(name => `export const ${name} = (...args) => globalThis.__modalUiApi.${name}(...args);`).join('\n'),
         loader: 'js'
       }));
     }

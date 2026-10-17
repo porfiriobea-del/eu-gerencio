@@ -37,6 +37,7 @@ export interface Product {
 }
 
 export interface Customer {
+  debtImports?: { id: string; createdAt: number; description: string; amount: number; lines: {description: string; amount: number}[]; readTotal: number | null; summedTotal: number }[];
   lastMovementAt?: number;
   id?: string;
   name: string;

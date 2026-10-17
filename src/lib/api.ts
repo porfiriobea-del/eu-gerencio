@@ -1,3 +1,4 @@
+import { validateNotebook, moneyCents, notebookSum, type NotebookEntry } from './debtNotebook';
 import { storeProductImage, isEmbeddedProductImage } from './productImages';
 import { calculatePayment, paymentLabel } from './paymentFees';
 import { soldBaseQuantity } from './productSalesRanking';
@@ -1726,3 +1727,28 @@ export async function getCustomerLastMovements(): Promise<Record<string, number>
   for(const map of maps)for(const [id,time]of Object.entries(map))combined[id]=Math.max(combined[id]||0,time);
   return combined;
 }
+
+// Stable entry IDs make retries safe, including after a request timeout.
+export const importDebtNotebook = withActionDeadline(async (entries: NotebookEntry[], confirmed: boolean) => {
+ if (confirmed !== true) throw new Error('Confirme a conferência antes de salvar');
+ validateNotebook(entries);
+ const ownerId = getEffectiveOwnerId();
+ if (!ownerId) throw new Error('Unauthenticated');
+ const refs = entries.map(entry => doc(db, 'customers', entry.customerId || `notebook_${entry.id}`));
+ return runTransaction(db, async transaction => {
+  const snapshots = await Promise.all(refs.map(ref=>transaction.get(ref)));
+  const pending = new Map<string, any>();
+  entries.forEach((entry,index) => {
+   const existing = pending.get(refs[index].id) || (snapshots[index].exists() ? snapshots[index].data() : null);
+   if (entry.customerId && !existing) throw new Error('Cliente não encontrado');
+   if (existing && existing.ownerId !== ownerId) throw new Error('Cliente de outra loja');
+   if (existing?.debtImports?.some((item: {id:string})=>item.id===entry.id)) return;
+   const now = Date.now();
+   const description = `Importado da caderneta em ${new Date(now).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',timeZone:'America/Sao_Paulo'})}`;
+   const customer = existing || {name:entry.name.trim(),previousDebt:0,totalDebt:0,ownerId,createdAt:now};
+   pending.set(refs[index].id, {...customer,totalDebt:(Math.round(customer.totalDebt*100)+moneyCents(entry.amount))/100,updatedAt:now,lastMovementAt:now,
+    debtImports:[...(customer.debtImports || []),{id:entry.id,createdAt:now,description,amount:moneyCents(entry.amount)/100,lines:entry.lines.map(line=>({description:line.description,amount:moneyCents(line.amount)/100})),readTotal:entry.readTotal,summedTotal:notebookSum(entry.lines)}]});
+  });
+  for(const [id,data] of pending) transaction.set(doc(db,'customers',id),data);
+ });
+});
