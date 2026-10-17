@@ -1,5 +1,5 @@
+import { useStockFormatting } from '../lib/useStockFormatting';
 import { useCurrency } from '../lib/useCurrency';
-import { formatProductStock } from '../lib/productUnits';
 import { usePreferences } from '../lib/preferencesContext';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -11,6 +11,7 @@ interface Props { items: CartItem[]; total: number; busy?: boolean; onQuantity: 
 const storageKey = 'eu_gerencio_pos_cart_pinned';
 
 export function CartDrawer({ items, total, busy = false, onQuantity, onRemove, onCheckout, onFiado }: Props) {
+  const { formatProductStock } = useStockFormatting();
   const { formatMoney, currencySymbol } = useCurrency(); const money = formatMoney;
 
   const { v } = usePreferences();

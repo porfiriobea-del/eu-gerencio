@@ -1,3 +1,4 @@
+import { sortByName } from '../lib/alphabetical';
 import { useCurrency } from '../lib/useCurrency';
 import { usePreferences } from '../lib/preferencesContext';
 import { showToast, showActionError } from '../lib/actionFeedback';
@@ -61,7 +62,7 @@ export default function Debt() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   useEffect(() => {
-    return subscribeCustomers(setCustomers);
+    return subscribeCustomers(items => setCustomers(sortByName(items)));
   }, []);
 
   // When selectedCustomer changes and history modal is open, listen to sales & payments
@@ -105,9 +106,9 @@ export default function Debt() {
   }, [customers]);
 
   const filteredCustomers = useMemo(() => {
-    if (!searchQuery.trim()) return customers;
+    if (!searchQuery.trim()) return sortByName(customers);
     const q = searchQuery.toLowerCase().trim();
-    return customers.filter(c => 
+    return sortByName(customers).filter(c =>
       c.name.toLowerCase().includes(q) || 
       (c.phone && c.phone.includes(q)) ||
       (c.notes && c.notes.toLowerCase().includes(q))

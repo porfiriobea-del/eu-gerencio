@@ -1,8 +1,8 @@
+import { useStockFormatting } from '../lib/useStockFormatting';
 import { formatDate, normalizeLanguage, languageLocales } from '../lib/language';
 import { useCurrency } from '../lib/useCurrency';
 import { saleFee, paymentLabel } from '../lib/paymentFees';
 import { PaymentSummary } from '../components/PaymentSummary';
-import { formatProductStock } from '../lib/productUnits';
 import { getReorderPoint } from '../lib/stockSuggestions';
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
@@ -18,6 +18,7 @@ import { VisualReportsPanel } from '../components/VisualReportsPanel';
 import { MonthlyProfitChart } from '../components/MonthlyProfitChart';
 
 export default function Dashboard() {
+  const { formatProductStock } = useStockFormatting();
   const { formatMoney, currencySymbol, language } = useCurrency();
 
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
@@ -390,10 +391,10 @@ export default function Dashboard() {
                   <li key={p.id} className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
                     <div>
                       <span className="font-medium text-foreground notranslate normal-case" translate="no">{p.name}</span>
-                      <span className="text-xs text-muted-foreground ml-2">({formatProductStock(p)} atuais / máx: {maxStockVal})</span>
+                      <span className="text-xs text-muted-foreground ml-2">({formatProductStock(p)} atuais / máx: {formatProductStock(p, maxStockVal)})</span>
                     </div>
                     <span className="text-red-500 font-semibold bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded text-xs">
-                      {languageMode === 'basic' ? `Comprar +${suggestedBuy} un.` : `Comprar +${suggestedBuy} un.`}
+                      {languageMode === 'basic' ? `Comprar +${formatProductStock(p, suggestedBuy)}` : `Comprar +${formatProductStock(p, suggestedBuy)}`}
                     </span>
                   </li>
                 );

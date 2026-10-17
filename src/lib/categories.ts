@@ -1,3 +1,4 @@
+import { sortCategories } from './alphabetical';
 import { showActionError } from './actionFeedback';
 export interface BusinessSector {
   id: string;
@@ -145,5 +146,5 @@ export function saveCustomCategory(name: string): string[] {
 }
 export function removeCustomCategory(name: string): string[] { return setCustomCategories(customCategories.filter(value => value.toLowerCase() !== name.trim().toLowerCase())); }
 export function getAllCategories(productCategories: string[] = []): string[] {
-  return Array.from(new Set([...(customCategories.length ? customCategories : DEFAULT_CATEGORIES), ...productCategories.filter(Boolean), 'Diversos']));
+  return sortCategories(Array.from(new Set([...(customCategories.length ? customCategories : DEFAULT_CATEGORIES), ...productCategories.filter(Boolean), 'Diversos'])));
 }

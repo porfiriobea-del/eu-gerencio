@@ -211,7 +211,7 @@ export const addProduct = withActionDeadline(async (product: Omit<Product, 'id'|
       employeeName: activeEmp.name,
       employeeRole: activeEmp.role,
       type: 'product_create',
-      description: `Produto cadastrado: "${product.name}" (${product.category}) • Estoque: ${product.stock} un`,
+      description: `Produto cadastrado: "${product.name}" (${product.category}) • Estoque: ${formatProductStock(product)}`,
       entityId: ref.id,
       entityName: product.name,
       quantity: product.stock,

@@ -1,5 +1,6 @@
+import { useStockFormatting } from '../lib/useStockFormatting';
+import { compareAlphabetical, sortCategories, sortByName } from '../lib/alphabetical';
 import { useCurrency } from '../lib/useCurrency';
-import { formatProductStock } from '../lib/productUnits';
 import { getPurchasePackageUnits } from '../lib/productUnits';
 import { getReorderPoint } from '../lib/stockSuggestions';
 import { showToast, showActionError } from '../lib/actionFeedback';
@@ -26,6 +27,7 @@ import {
 } from '../lib/promoUtils';
 
 export default function Purchases() {
+  const { formatProductStock, formatStockNumber, stockInputValue } = useStockFormatting();
   const { formatMoney, currencySymbol, currency, language } = useCurrency();
 
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
@@ -77,7 +79,7 @@ export default function Purchases() {
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    const unsubProd = subscribeProducts(setProducts);
+    const unsubProd = subscribeProducts(items => setProducts(sortByName(items)));
     const unsubPurchases = subscribePurchases(setPurchases);
     return () => {
       unsubProd();
@@ -91,12 +93,12 @@ export default function Purchases() {
     products.forEach(p => {
       if (p.category) set.add(p.category);
     });
-    return ['Todas', ...Array.from(set).sort()];
+    return sortCategories(['Todas', ...Array.from(set)]);
   }, [products]);
 
   // Products needing replenishment ("Repor agora")
   const replenishList = useMemo(() => {
-    return products
+    return sortByName(products)
       .map(p => {
         const reorderPoint = getReorderPoint(p);
         const needsReplenish = p.stock <= reorderPoint;
@@ -215,7 +217,7 @@ export default function Purchases() {
         (p.category && p.category.toLowerCase().includes(historySearch.toLowerCase()));
 
       return matchesPeriod && matchesSearch;
-    });
+    }).sort((a,b)=>compareAlphabetical(a.productName,b.productName) || b.createdAt-a.createdAt);
   }, [purchases, historyPeriod, historySearch]);
 
   const historyTotals = useMemo(() => {
@@ -465,7 +467,7 @@ export default function Purchases() {
             <span className="text-3xl font-bold text-foreground">
               {replenishList.length}
             </span>
-            <span className="text-xs text-muted-foreground font-medium">{entityName(true).toLowerCase()} ({totalSuggestedUnits} un. sugeridas)</span>
+            <span className="text-xs text-muted-foreground font-medium">{entityName(true).toLowerCase()} ({formatStockNumber(totalSuggestedUnits)} un. sugeridas)</span>
           </div>
           <p className="text-xs text-muted-foreground mt-3">
             {replenishList.filter(i => i.isCritical).length > 0 ? (
@@ -566,7 +568,7 @@ export default function Purchases() {
               className="px-3 py-2.5 rounded-xl border border-border bg-surface text-foreground text-sm cursor-pointer"
             >
               {categories.map(c => (
-                <option key={c} value={c}>{c === 'Todas' ? 'Todas as categorias' : c}</option>
+                <option key={c} value={c}>{c === 'Todas' ? v('ui.categories', 'Todas as categorias') : c}</option>
               ))}
             </select>
 
@@ -656,13 +658,13 @@ export default function Purchases() {
                               {formatProductStock(p)}
                             </div>
                             <div className="text-[11px] text-muted-foreground">
-                              Segurança: {p.safetyStock} un. | Máx: {item.maxStock} un.
+                              Segurança: {formatProductStock(p, p.safetyStock)} | Máx: {formatProductStock(p, item.maxStock)}
                             </div>
                           </td>
 
                           <td className="p-3.5">
                             <div className="font-bold text-primary">
-                              +{item.suggestedBuyUnits} un.
+                              +{formatProductStock(p, item.suggestedBuyUnits)}
                             </div>
                             {isPkg && (
                               <div className="text-xs font-semibold text-muted-foreground">
@@ -773,8 +775,8 @@ export default function Purchases() {
                         <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
                           <span className="font-semibold text-primary">
                             {isPkg
-                              ? `${item.suggestedPackages} ${p.purchaseForm || 'fardo(s)'} (${item.suggestedBuyUnits} un.)`
-                              : `${item.suggestedBuyUnits} unidades`}
+                              ? `${item.suggestedPackages} ${p.purchaseForm || 'fardo(s)'} (${formatProductStock(p, item.suggestedBuyUnits)})`
+                              : `${formatProductStock(p, item.suggestedBuyUnits)}`}
                           </span>
                           <span>• Est. {formatMoney(item.estimatedCost)}</span>
                         </div>
@@ -937,7 +939,7 @@ export default function Purchases() {
                           </td>
 
                           <td className="p-3 text-center font-bold text-foreground">
-                            {item.quantity} un.
+                            {formatStockNumber(item.quantity)} un.
                             {item.packageQuantity && item.packageQuantity > 0 && (
                               <span className="block text-[11px] text-muted-foreground font-normal">
                                 ({item.packageQuantity} {item.packageType || 'emb.'})
@@ -1088,7 +1090,7 @@ export default function Purchases() {
                       Total de Unidades a Somar:
                     </label>
                     <div className="px-3 py-2 rounded-xl border border-border bg-muted/60 text-primary font-bold text-base flex items-center">
-                      +{looseUnitsQty} un. físicas
+                      +{formatStockNumber(looseUnitsQty)} un. físicas
                     </div>
                   </div>
                 </div>
@@ -1102,7 +1104,7 @@ export default function Purchases() {
                     min="1"
                     step="1"
                     required
-                    value={looseUnitsQty}
+                    value={stockInputValue(looseUnitsQty)}
                     onChange={e => handleLooseUnitsChange(Number(e.target.value))}
                     className="w-full px-3 py-2 rounded-xl border border-border bg-surface text-foreground font-bold text-base focus:outline-none focus:ring-1 focus:ring-primary"
                   />

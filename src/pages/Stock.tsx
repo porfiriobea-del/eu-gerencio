@@ -1,7 +1,8 @@
-import { formatDate, normalizeLanguage, languageLocales } from '../lib/language';
+import { useStockFormatting } from '../lib/useStockFormatting';
+import { compareAlphabetical, sortCategories } from '../lib/alphabetical';
+import { formatDate, normalizeLanguage } from '../lib/language';
 import { ProductImage } from '../components/ProductImage';
 import { useCurrency } from '../lib/useCurrency';
-import { formatProductStock } from '../lib/productUnits';
 import { CigarettePurchaseOptions } from '../components/CigarettePurchaseOptions';
 import { StockLevelSuggestion } from '../components/StockLevelSuggestion';
 import { getReorderPoint } from '../lib/stockSuggestions';
@@ -34,6 +35,7 @@ import {
 } from '../lib/promoUtils';
 
 export default function Stock() {
+  const { formatProductStock, formatStockNumber, stockInputValue } = useStockFormatting();
   const { formatMoney, currencySymbol, currency, language } = useCurrency();
 
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
@@ -596,7 +598,7 @@ export default function Stock() {
       }
 
       return matchesSearch && matchesCategory && matchesReplenish && matchesExpiring && matchesPromo && matchesDuplicates;
-    });
+    }).sort((a,b)=>compareAlphabetical(a.name,b.name));
   }, [products, searchTerm, selectedCategory, filterReplenishOnly, filterExpiringOnly, filterPromoOnly, filterDuplicatesOnly, duplicateAnalysis]);
 
   const replenishCount = useMemo(() => {
@@ -1228,11 +1230,11 @@ export default function Stock() {
                         {p.type === 'cigarro' ? <span>{formatProductStock(p)}</span> : getPackageUnits(p) > 1 ? (
                           <>
                             <span>{Math.floor(p.stock / getPackageUnits(p))} fardos</span>
-                            <span className="text-xs font-normal text-muted-foreground">+ {p.stock % getPackageUnits(p)} un.</span>
+                            <span className="text-xs font-normal text-muted-foreground">+ {formatStockNumber(p.stock % getPackageUnits(p))} un.</span>
                           </>
                         ) : (
                           <>
-                            <span>{p.stock}</span>
+                            <span>{formatStockNumber(p.stock)}</span>
                             <span className="text-xs font-normal text-muted-foreground">un.</span>
                           </>
                         )}
@@ -1293,16 +1295,16 @@ export default function Stock() {
                       </div>
                       <div className="flex justify-between items-center text-muted-foreground">
                         <span>{v('stock.min', 'Quando Pedir Mais (Mínimo)')}:</span>
-                        <strong className="text-foreground">{reorderPoint.toLocaleString(languageLocales[normalizeLanguage(language)], {maximumFractionDigits: 2})} {p.type === 'cigarro' ? 'carteiras' : 'un.'} (reserva: {p.safetyStock})</strong>
+                        <strong className="text-foreground">{formatProductStock(p, reorderPoint)} (reserva: {formatProductStock(p, p.safetyStock)})</strong>
                       </div>
                       <div className="flex justify-between items-center text-muted-foreground">
                         <span>{v('stock.max', 'Limite para Não Sobrar (Máximo)')}:</span>
-                        <strong className="text-foreground">{maxStockVal} {p.type === 'cigarro' ? 'carteiras' : 'un.'}</strong>
+                        <strong className="text-foreground">{formatProductStock(p, maxStockVal)}</strong>
                       </div>
                       {needsReplenish && (
                         <div className="flex justify-between items-center text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-950/40 p-2 rounded-lg">
                           <span>{v('purchases.suggestion', 'O Que Comprar Agora')}:</span>
-                          <span>+{suggestedBuyUnits} un. ({suggestedPackages} fardos)</span>
+                          <span>+{formatProductStock(p, suggestedBuyUnits)} ({suggestedPackages} fardos)</span>
                         </div>
                       )}
                       <div className="flex justify-between items-center text-muted-foreground">
@@ -1507,7 +1509,7 @@ export default function Stock() {
                       {p.type === 'cigarro' ? <span>{formatProductStock(p, p.initialStock ?? p.stock)}</span> : getPackageUnits(p) > 1 ? (
                         <div>
                           <div className="font-bold text-foreground">
-                            {Math.floor((p.initialStock !== undefined ? p.initialStock : p.stock) / getPackageUnits(p))} fardos + {((p.initialStock !== undefined ? p.initialStock : p.stock) % getPackageUnits(p))} un.
+                            {Math.floor((p.initialStock !== undefined ? p.initialStock : p.stock) / getPackageUnits(p))} fardos + {formatStockNumber((p.initialStock ?? p.stock) % getPackageUnits(p))} un.
                           </div>
                           <div className="text-xs text-muted-foreground font-medium">
                             ({formatProductStock(p, p.initialStock ?? p.stock)} no total)
@@ -1536,7 +1538,7 @@ export default function Stock() {
                       {p.type === 'cigarro' ? <span>{formatProductStock(p)}</span> : getPackageUnits(p) > 1 ? (
                         <div>
                           <div className={`font-bold text-base ${needsReplenish ? 'text-red-600' : 'text-foreground'}`}>
-                            {Math.floor(p.stock / getPackageUnits(p))} fardos + {p.stock % getPackageUnits(p)} un.
+                            {Math.floor(p.stock / getPackageUnits(p))} fardos + {formatStockNumber(p.stock % getPackageUnits(p))} un.
                           </div>
                           <div className="text-xs text-muted-foreground font-medium">
                             {formatProductStock(p)} físicas no total
@@ -1545,7 +1547,7 @@ export default function Stock() {
                       ) : (
                         <div className="flex items-center gap-2">
                           <span className={`font-bold text-base ${needsReplenish ? 'text-red-600' : 'text-foreground'}`}>
-                            {p.stock}
+                            {formatStockNumber(p.stock)}
                           </span>
                           <span className="text-xs text-muted-foreground">un.</span>
                         </div>
@@ -1565,17 +1567,17 @@ export default function Stock() {
                       <div>
                         <span className="text-muted-foreground">Segurança: </span>
                         <span className="font-semibold text-foreground">
-                          {p.type === 'cigarro' ? formatProductStock(p, p.safetyStock) : getPackageUnits(p) > 1 ? `${p.safetyStock} un. (${Math.floor(p.safetyStock / getPackageUnits(p))} fardos)` : `${p.safetyStock} un.`}
+                          {p.type === 'cigarro' ? formatProductStock(p, p.safetyStock) : getPackageUnits(p) > 1 ? `${formatProductStock(p, p.safetyStock)} (${Math.floor(p.safetyStock / getPackageUnits(p))} fardos)` : `${formatProductStock(p, p.safetyStock)}`}
                         </span>
                       </div>
                       <div className="mt-0.5">
                         <span className="text-muted-foreground">Ponto Repor: </span>
-                        <span className="font-semibold text-foreground">{reorderPoint.toLocaleString(languageLocales[normalizeLanguage(language)], {maximumFractionDigits: 2})} {p.type === 'cigarro' ? 'carteiras' : 'un.'}</span>
+                        <span className="font-semibold text-foreground">{formatProductStock(p, reorderPoint)}</span>
                       </div>
                       <div className="mt-0.5 text-primary font-bold">
                         <span>Estoque Máximo: </span>
                         <span>
-                          {p.type === 'cigarro' ? formatProductStock(p, maxStockVal) : getPackageUnits(p) > 1 ? `${maxStockVal} un. (${Math.floor(maxStockVal / getPackageUnits(p))} fardos)` : `${maxStockVal} un.`}
+                          {p.type === 'cigarro' ? formatProductStock(p, maxStockVal) : getPackageUnits(p) > 1 ? `${formatProductStock(p, maxStockVal)} (${Math.floor(maxStockVal / getPackageUnits(p))} fardos)` : `${formatProductStock(p, maxStockVal)}`}
                         </span>
                       </div>
                     </td>
@@ -1585,7 +1587,7 @@ export default function Stock() {
                       {suggestedBuyUnits > 0 ? (
                         <div>
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-palette-1 text-primary">
-                            + {suggestedBuyUnits} un. ({suggestedPackages} {p.purchaseForm === 'fardo' ? 'fardos' : p.purchaseForm || 'emb.'})
+                            + {formatProductStock(p, suggestedBuyUnits)} ({suggestedPackages} {p.purchaseForm === 'fardo' ? 'fardos' : p.purchaseForm || 'emb.'})
                           </span>
                           <div className="text-[11px] text-muted-foreground mt-1">
                             Est. {formatMoney((suggestedBuyUnits * p.unitCost))}
@@ -1886,7 +1888,7 @@ export default function Stock() {
                     }} 
                     className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground cursor-pointer"
                   >
-                    {Array.from(new Set([...categories, formData.category])).map(c => <option key={c} value={c}>{c}</option>)}
+                    {sortCategories(Array.from(new Set([...categories, formData.category]))).map(c => <option key={c} value={c}>{c}</option>)}
                     <option value="__new__">➕ + Cadastrar Nova Categoria...</option>
                   </select>
                 </div>
@@ -2731,7 +2733,7 @@ export default function Stock() {
                           type="number"
                           min={0}
                           step={formData.type === 'cigarro' ? '0.05' : '1'}
-                          value={Number(formData.initialStock !== undefined ? formData.initialStock : formData.stock) % formUnitsPerPackage}
+                          value={stockInputValue(Number(formData.initialStock !== undefined ? formData.initialStock : formData.stock) % formUnitsPerPackage)}
                           onChange={e => {
                             const loose = Math.max(0, Number(e.target.value) || 0);
                             const currentTotal = Number(formData.initialStock !== undefined ? formData.initialStock : formData.stock);
@@ -2751,7 +2753,7 @@ export default function Stock() {
                       type="number" 
                       required 
                       min={0} 
-                      value={formData.initialStock !== undefined ? formData.initialStock : formData.stock} 
+                      value={stockInputValue(formData.initialStock !== undefined ? formData.initialStock : formData.stock)}
                       onChange={e => setFormData({...formData, initialStock: e.target.value})} 
                       className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground font-semibold" 
                     />
@@ -2839,7 +2841,7 @@ export default function Stock() {
                           type="number"
                           min={0}
                           step={formData.type === 'cigarro' ? '0.05' : '1'}
-                          value={Number(formData.stock || 0) % formUnitsPerPackage}
+                          value={stockInputValue(Number(formData.stock || 0) % formUnitsPerPackage)}
                           onChange={e => {
                             const loose = Math.max(0, Number(e.target.value) || 0);
                             const pkgs = Math.floor(Number(formData.stock || 0) / formUnitsPerPackage);
@@ -2858,7 +2860,7 @@ export default function Stock() {
                       type="number" 
                       required 
                       min={0}
-                      value={formData.stock} 
+                      value={stockInputValue(formData.stock)}
                       onChange={e => setFormData({...formData, stock: e.target.value})} 
                       className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground font-bold" 
                     />
@@ -2874,7 +2876,7 @@ export default function Stock() {
                     required 
                     min={formData.type === 'cigarro' ? 0.05 : 1}
                     step={formData.type === 'cigarro' ? '0.05' : '1'}
-                    value={formData.maxStock || ''} 
+                    value={formData.maxStock ? stockInputValue(formData.maxStock) : ''}
                     placeholder="Ex: 50"
                     onChange={e => setFormData({...formData, maxStock: e.target.value})} 
                     className="w-full border-2 border-primary p-2.5 rounded-lg bg-surface text-foreground font-bold shadow-xs" 
@@ -2888,7 +2890,7 @@ export default function Stock() {
                     required 
                     min={0}
                     step={formData.type === 'cigarro' ? '0.05' : '1'}
-                      value={formData.safetyStock}
+                      value={stockInputValue(formData.safetyStock)}
                     onChange={e => setFormData({...formData, safetyStock: e.target.value})} 
                     className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground" 
                   />
@@ -3076,7 +3078,7 @@ export default function Stock() {
                         type="number"
                         min={0}
                         step={editingInitialStockProduct.type === 'cigarro' ? '0.05' : '1'}
-                        value={initialStockEditLoose}
+                        value={stockInputValue(initialStockEditLoose)}
                         onChange={e => setInitialStockEditLoose(Math.max(0, Number(e.target.value) || 0))}
                         className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground font-bold"
                       />
@@ -3090,7 +3092,7 @@ export default function Stock() {
                     <input
                       type="number"
                       min={0}
-                      value={initialStockEditUnits}
+                      value={stockInputValue(initialStockEditUnits)}
                       onChange={e => setInitialStockEditUnits(Math.max(0, parseInt(e.target.value) || 0))}
                       className="w-full border border-border p-2.5 rounded-lg bg-surface text-foreground text-lg font-bold"
                     />
@@ -3279,7 +3281,7 @@ export default function Stock() {
               <div className="text-xs text-muted-foreground grid grid-cols-2 gap-2 pt-1 border-t border-border/50">
                 <div>
                   <span className="block font-medium">Estoque atual:</span>
-                  <span className="font-bold text-foreground">{formatProductStock(productToDelete)}idades</span>
+                  <span className="font-bold text-foreground">{formatProductStock(productToDelete)}</span>
                 </div>
                 <div>
                   <span className="block font-medium">Preço de venda:</span>

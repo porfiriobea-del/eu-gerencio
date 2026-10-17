@@ -1,3 +1,4 @@
+import { sortCategories } from '../lib/alphabetical';
 import { useState } from 'react';
 import { User } from 'firebase/auth';
 import { saveStoreProfile, addMultipleProducts } from '../lib/api';
@@ -469,7 +470,7 @@ export default function Onboarding({ user, onComplete }: { user: User, onComplet
 
               {/* Tags Interativas de Categorias */}
               <div className="flex flex-wrap gap-1.5 mb-3.5">
-                {sectorCategories.map(cat => (
+                {sortCategories(sectorCategories).map(cat => (
                   <span
                     key={cat}
                     className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold bg-white border border-gray-200 text-gray-800 shadow-2xs group"

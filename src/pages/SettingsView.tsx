@@ -1,3 +1,4 @@
+import { sortCategories } from '../lib/alphabetical';
 import { formatDate, normalizeLanguage, languageLocales } from '../lib/language';
 import { useCurrency } from '../lib/useCurrency';
 import { saleFee, pixTotals } from '../lib/paymentFees';
@@ -1270,7 +1271,7 @@ function doPost(e) {
               </div>
 
               <div className="flex flex-wrap gap-1.5">
-                {categoriesList.map(cat => (
+                {sortCategories(categoriesList).map(cat => (
                   <span
                     key={cat}
                     className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold bg-surface border border-border text-foreground shadow-2xs"

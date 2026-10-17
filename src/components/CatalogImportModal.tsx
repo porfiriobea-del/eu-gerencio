@@ -1,3 +1,4 @@
+import { sortCategories } from '../lib/alphabetical';
 import { useCurrency } from '../lib/useCurrency';
 import { useModalViewport } from '../lib/useModalViewport';
 import { usePreferences } from '../lib/preferencesContext';
@@ -199,7 +200,7 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
           <p className="text-xs text-muted-foreground">{copy('catalog.fileHelp', 'PDF: até 3 MB. Fotos: JPEG, PNG ou WebP. Até 200 produtos por vez. Estoque inicial opcional. Preços não encontrados ficam em branco.')}</p>
           {(status || isReading) && <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-xl bg-muted p-3 text-sm">{(isReading || isSaving) && <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}{status}{isReading && <button type="button" onClick={cancelReading} className="ml-auto shrink-0 font-semibold text-primary">Interromper</button>}</div>}
           {error && <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950 dark:text-amber-100">{error}</p>}
-          <datalist id={categoriesId}>{availableCategories.map(category => <option key={category} value={category} />)}</datalist>
+          <datalist id={categoriesId}>{sortCategories(availableCategories).map(category => <option key={category} value={category} />)}</datalist>
           <fieldset disabled={isReading || isSaving} className="space-y-3 disabled:opacity-70">
             {drafts.map((row, index) => (
               <article key={row.id} id={`catalog-row-${row.id}`} tabIndex={-1} aria-describedby={rowErrors[row.id] ? `catalog-error-${row.id}` : undefined} className={`rounded-2xl border p-3 ${rowErrors[row.id] ? 'border-red-500 ring-1 ring-red-500' : 'border-border'}`}>

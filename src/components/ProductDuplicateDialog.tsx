@@ -1,9 +1,12 @@
+import { sortByName } from '../lib/alphabetical';
+import { useStockFormatting } from '../lib/useStockFormatting';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Product } from '../types';
 
 export type DuplicateDecision = { action: 'open' | 'add' | 'allow' | 'cancel'; product?: Product; quantity?: number };
 export function ProductDuplicateDialog({ matches, quantity, isMerge, onDecision }: { matches: Product[]; quantity: number; isMerge?: boolean; onDecision: (decision: DuplicateDecision) => void }) {
+  const { formatProductStock } = useStockFormatting();
   const [targetId, setTargetId] = useState(matches[0].id);
   const [amount, setAmount] = useState(String(quantity));
   const heading = useRef<HTMLHeadingElement>(null);
@@ -26,7 +29,7 @@ export function ProductDuplicateDialog({ matches, quantity, isMerge, onDecision 
     <section role="dialog" aria-modal="true" aria-labelledby="duplicate-product-title" className="w-full max-w-md space-y-4 rounded-2xl border border-border bg-surface p-6 text-foreground">
       <h2 ref={heading} tabIndex={-1} id="duplicate-product-title" className="text-lg font-bold">Produto já cadastrado</h2>
       <p className="text-sm">O nome ou código de barras coincide com um produto da loja.</p>
-      <label className="block text-sm">Produto existente<select value={targetId} onChange={event => setTargetId(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background p-2">{matches.map(product => <option key={product.id} value={product.id} className="notranslate normal-case" translate="no">{product.name} — estoque {product.stock}</option>)}</select></label>
+      <label className="block text-sm">Produto existente<select value={targetId} onChange={event => setTargetId(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background p-2">{sortByName(matches).map(product => <option key={product.id} value={product.id} className="notranslate normal-case" translate="no">{product.name} — estoque {formatProductStock(product)}</option>)}</select></label>
       <p className="text-xs text-muted-foreground">{target.category || 'Sem categoria'}{target.barcode ? ` · Código: ${target.barcode}` : ''}</p>
       {isMerge ? <p className="text-sm">O estoque atual do produto editado será transferido e o registro ficará arquivado. Os dados do produto existente serão mantidos.</p> : <label className="block text-sm">Quantidade a somar ({target.type === 'cigarro' ? 'carteiras' : 'unidades'})<input type="number" min="0" step={target.type === 'cigarro' ? '0.05' : '1'} value={amount} onChange={event => setAmount(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background p-2" /></label>}
       <div className="grid gap-2">

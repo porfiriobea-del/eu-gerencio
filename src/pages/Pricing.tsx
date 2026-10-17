@@ -1,3 +1,4 @@
+import { sortByName } from '../lib/alphabetical';
 import { useCurrency } from '../lib/useCurrency';
 import { ProductPricingCard } from '../components/ProductPricingCard';
 import { showToast, showActionError } from '../lib/actionFeedback';
@@ -32,7 +33,7 @@ export default function Pricing() {
   };
 
   useEffect(() => {
-    const unsubProducts = subscribeProducts(setProducts);
+    const unsubProducts = subscribeProducts(items => setProducts(sortByName(items)));
     loadFinancials(selectedMonthOffset);
     return () => {
       unsubProducts();
@@ -373,7 +374,7 @@ export default function Pricing() {
           </div>
           <span className="rounded-lg bg-muted px-2.5 py-1 text-xs text-muted-foreground">{products.length} {entityName(true).toLowerCase()} cadastrados</span>
         </div>
-        {products.map(product => (
+        {sortByName(products).map(product => (
           <ProductPricingCard key={product.id} product={product} isSaving={savingPriceIds.has(product.id!)} onUpdatePrice={handleUpdatePrice} />
         ))}
         {products.length === 0 && <p className="rounded-2xl border border-border p-8 text-center text-muted-foreground">Nenhum produto cadastrado para precificar.</p>}

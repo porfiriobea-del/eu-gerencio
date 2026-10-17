@@ -1,3 +1,4 @@
+import { moneyLocale } from './currency';
 import type { Product } from '../types';
 
 export const CIGARETTE_UNITS = { unit: 0.05, halfCart: 0.5, cart: 1, pack: 10 } as const;
@@ -83,17 +84,32 @@ export function cigaretteStockFields(product: Partial<Product>): Partial<Product
 }
 
 /** Display the physical balance using integer cigarettes, never supplier packages. */
-export function formatCigaretteStock(stock: number): string {
-  const count = Math.round(stock * 20);
-  if (!Number.isSafeInteger(count) || count < 0) return 'Estoque inválido';
-  const wallets = Math.floor(count / 20), loose = count % 20;
-  const whole = `${wallets} ${wallets === 1 ? 'carteira' : 'carteiras'}`;
-  if (!loose) return whole;
-  if (loose === 10) return wallets ? `${whole} e meia` : 'meia carteira';
-  const remainder = `${loose} ${loose === 1 ? 'cigarro' : 'cigarros'}`;
-  return wallets ? `${whole} e ${remainder}` : remainder;
+export function stockInputValue(stock: number | undefined): number | '' {
+  return stock === undefined || !Number.isFinite(stock) ? '' : Math.round((stock + Number.EPSILON) * 100) / 100;
 }
 
-export function formatProductStock(product: Pick<Product, 'type' | 'stock'>, stock = product.stock): string {
-  return product.type === 'cigarro' ? formatCigaretteStock(stock) : `${stock.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ${stock === 1 ? 'unidade' : 'unidades'}`;
+export function formatStockNumber(stock: number, language = 'pt-BR'): string {
+  if (!Number.isFinite(stock)) return '—';
+  const rounded = Math.round((stock + Number.EPSILON) * 100) / 100;
+  return (Object.is(rounded, -0) ? 0 : rounded).toLocaleString(moneyLocale(language), { maximumFractionDigits: 2 });
+}
+export function formatCigaretteStock(stock: number, language = 'pt-BR'): string {
+  const count = Math.round(stock * 20);
+  if (!Number.isSafeInteger(count) || count < 0) return '—';
+  const wallets = Math.floor(count / 20), loose = count % 20;
+  const en = language === 'en', es = language === 'es';
+  const wallet = en ? (wallets === 1 ? 'pack' : 'packs') : es ? (wallets === 1 ? 'cajetilla' : 'cajetillas') : (wallets === 1 ? 'carteira' : 'carteiras');
+  const whole = `${formatStockNumber(wallets, language)} ${wallet}`;
+  if (!loose) return whole;
+  const and = en ? 'and' : es ? 'y' : 'e';
+  if (loose === 10) return wallets ? `${whole} ${and} ${en ? 'a half' : es ? 'media' : 'meia'}` : en ? 'half a pack' : es ? 'media cajetilla' : 'meia carteira';
+  const unit = en ? (loose === 1 ? 'cigarette' : 'cigarettes') : es ? (loose === 1 ? 'cigarrillo' : 'cigarrillos') : (loose === 1 ? 'cigarro' : 'cigarros');
+  const remainder = `${loose} ${unit}`;
+  return wallets ? `${whole} ${and} ${remainder}` : remainder;
+}
+
+export function formatProductStock(product: Pick<Product, 'type' | 'stock'>, stock = product.stock, language = 'pt-BR'): string {
+  if (product.type === 'cigarro') return formatCigaretteStock(stock, language);
+  const unit = language === 'en' ? (stock === 1 ? 'unit' : 'units') : stock === 1 ? 'unidade' : 'unidades';
+  return `${formatStockNumber(stock, language)} ${language === 'es' ? (stock === 1 ? 'unidad' : 'unidades') : unit}`;
 }

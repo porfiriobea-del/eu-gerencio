@@ -1,3 +1,4 @@
+import { sortCategories } from '../lib/alphabetical';
 import { useCurrency } from '../lib/useCurrency';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import { isValidStockQuantity } from '../lib/productUnits';
@@ -570,7 +571,7 @@ export function CameraCaptureModal({
                       }}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-primary"
                     >
-                      {Array.from(new Set([...availableCategories, editCategory, 'Bebidas', 'Cigarros', 'Doces & Balas', 'Salgadinhos & Snacks', 'Mercearia', 'Diversos'])).map(cat => (
+                      {sortCategories(Array.from(new Set([...availableCategories, editCategory, 'Bebidas', 'Cigarros', 'Doces & Balas', 'Salgadinhos & Snacks', 'Mercearia', 'Diversos']))).map(cat => (
                         <option key={cat} value={cat}>{cat}</option>
                       ))}
                     </select>

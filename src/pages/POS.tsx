@@ -1,7 +1,8 @@
+import { useStockFormatting } from '../lib/useStockFormatting';
+import { sortByName } from '../lib/alphabetical';
 import { ProductImage } from '../components/ProductImage';
 import { useCurrency } from '../lib/useCurrency';
 import { calculatePayment } from '../lib/paymentFees';
-import { formatProductStock } from '../lib/productUnits';
 import { rankProductsBySales } from '../lib/productSalesRanking';
 import { CartDrawer, type CartItem } from '../components/CartDrawer';
 import { showToast, showActionError } from '../lib/actionFeedback';
@@ -48,6 +49,7 @@ import { calculateExpirationStatus } from '../lib/promoUtils';
 import { useEmployee } from '../lib/employeeContext';
 
 export default function POS() {
+  const { formatProductStock, formatStockNumber } = useStockFormatting();
   const { formatMoney, currencySymbol, isBrazil } = useCurrency();
 
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
@@ -94,7 +96,7 @@ export default function POS() {
 
   useEffect(() => {
     const unsubP = subscribeProducts(setProducts);
-    const unsubC = subscribeCustomers(setCustomers);
+    const unsubC = subscribeCustomers(items => setCustomers(sortByName(items)));
     const unsubS = subscribeTodaySales(setTodaySales);
     const unsubClosures = subscribeCashClosures(setCashClosures);
     const unsubSettings = subscribeSettings(setSettings);
@@ -492,7 +494,7 @@ export default function POS() {
             onChange={e => setSelectedCategory(e.target.value)}
             className="px-3 py-2.5 rounded-xl border border-border bg-surface text-foreground shadow-xs cursor-pointer text-sm"
           >
-            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            {categories.map(c => <option key={c} value={c}>{c === 'Todas' ? v('ui.categories', 'Todas as categorias') : c}</option>)}
           </select>
           <button
             type="button"
@@ -536,10 +538,10 @@ export default function POS() {
                   </span>
                   {p.type === 'cigarro' ? <span className="text-[11px] text-muted-foreground">{formatProductStock(p)}</span> : getPackageUnits(p) > 1 ? (
                     <span className="text-[11px] text-muted-foreground font-medium">
-                      📦 {Math.floor(p.stock / getPackageUnits(p))} {p.purchaseForm === 'fardo' ? 'fardos' : 'pac.'} + {Number((p.stock % getPackageUnits(p)).toFixed(2))} un.
+                      📦 {Math.floor(p.stock / getPackageUnits(p))} {p.purchaseForm === 'fardo' ? 'fardos' : 'pac.'} + {formatStockNumber(p.stock % getPackageUnits(p))} un.
                     </span>
                   ) : (
-                    <span className="text-[11px] text-muted-foreground">{p.stock} un.</span>
+                    <span className="text-[11px] text-muted-foreground">{formatStockNumber(p.stock)} un.</span>
                   )}
                 </div>
 
@@ -1023,7 +1025,7 @@ export default function POS() {
                             <option value="__NEW__" className="font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950">
                               ➕ [+ Cadastrar Novo Cliente Agora nesta Compra]
                             </option>
-                            {customers.map(c => (
+                            {sortByName(customers).map(c => (
                               <option key={c.id} value={c.id} className="notranslate normal-case" translate="no">
                                 {c.name} {c.totalDebt > 0 ? `(Já deve ${formatMoney(c.totalDebt)})` : '(Sem dívida)'}
                               </option>

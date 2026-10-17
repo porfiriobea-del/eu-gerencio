@@ -1,3 +1,4 @@
+import { sortByName } from '../lib/alphabetical';
 import { useCurrency } from '../lib/useCurrency';
 import { formatProductStock } from '../lib/productUnits';
 import { usePreferences } from '../lib/preferencesContext';
@@ -83,7 +84,7 @@ export default function Movements() {
     });
 
     const unsubProd = subscribeProducts((list) => {
-      setProducts(list);
+      setProducts(sortByName(list));
     });
 
     return () => {
@@ -133,7 +134,7 @@ export default function Movements() {
       }
 
       return true;
-    });
+    }).sort((a,b)=>b.timestamp-a.timestamp);
   }, [movements, selectedPeriodFilter, selectedEmployeeFilter, selectedTypeFilter, searchQuery]);
 
   // Metrics summary
