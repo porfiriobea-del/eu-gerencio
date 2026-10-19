@@ -90,6 +90,9 @@ function corrigirPlanilhaOriginal() {
 }
 
 function corrigirResumo(book) {
+  // The Apps Script editor calls selected functions without arguments.
+  // Use the verified repair entry point instead of dereferencing undefined.
+  if (!book) return corrigirPlanilhaOriginal();
   const summary = book.getSheetByName('Resumo');
   const feedback = book.getSheetByName('Feedback');
   if (!summary || !feedback) return {updated: false, reason: 'Abas Resumo ou Feedback não encontradas.'};

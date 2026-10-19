@@ -93,7 +93,8 @@ test('empty summary writes zeros rather than formula errors', () => {
  assert.ok(Object.values(values).every(value => value === 0));
 });
 
-test('manual repair targets original workbook and explicitly verifies numeric cells', () => {
+for (const entryPoint of ['corrigirPlanilhaOriginal', 'corrigirResumo']) {
+test(`${entryPoint} can run directly from the editor and verifies the original workbook`, () => {
  const values = {};
  let target, destination, toast;
  const summary = {getRange: cell => ({getValue: () => values[cell], getFormula: () => '', setValue: value => { values[cell] = value; }})};
@@ -101,13 +102,14 @@ test('manual repair targets original workbook and explicitly verifies numeric ce
  const book = {getSpreadsheetTimeZone: () => 'UTC',getSheetByName: name => name === 'Resumo' ? summary : data,toast: message => {toast=message;}};
  const context=vm.createContext({Date,Set, console:{log(){}},SpreadsheetApp:{openById: id => {target=id;return book;},flush(){}},PropertiesService:{getScriptProperties:()=>({setProperty:(key,value)=>{destination=value;}})}});
  vm.runInContext(source,context);
- const result=context.corrigirPlanilhaOriginal();
+ const result=context[entryPoint]();
  assert.equal(result.updated,true);
  assert.equal(target,'13oh-mdCTnX-8aBAd8oVdBarglzaMYTZXrd7FRqsX4Ck');
  assert.equal(destination,target);
  assert.match(toast,/14 indicadores/);
  assert.equal(Object.keys(values).length,14);
 });
+}
 
 test('a saved usage row stays confirmed even when summary cannot be updated', () => {
  const {result,rows}=run({categoria:'uso',evento:'venda',valor:10},false,false,true);

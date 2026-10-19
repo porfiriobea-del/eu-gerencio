@@ -47,6 +47,17 @@ Depois de atualizar o código no editor, execute `corrigirPlanilhaOriginal` para
 
 Se os erros persistirem, `corrigirPlanilhaOriginal` agora abre obrigatoriamente a planilha original, confirma após flush que as 14 células contêm os números esperados e nenhuma fórmula, grava SPREADSHEET_ID correto e mostra toast. Só essa execução registra `RESUMO_CORRIGIDO`. Abas ausentes, cabeçalhos desconhecidos e resultados não confirmados causam erro explícito no editor. Não há mais retorno silencioso quando o texto do título A3 for diferente. Uma implantação nova não executa a função de reparo por si só: selecione-a e execute no editor. Se houver funções antigas de mesmo nome em outros arquivos .gs, remova as duplicatas antes de executar; preserve funções de integrações não relacionadas.
 
+Também é seguro selecionar `corrigirResumo` diretamente no editor: sem argumento, ela chama a mesma rotina de reparo e verifica a planilha original. Isso corrige o erro `Cannot read properties of undefined (reading 'getSheetByName')`. Chamadas internas com a planilha como argumento continuam usando o destino do relatório recebido.
+
+### Pendências de publicação e conferência
+
+- Atualizar o Apps Script com o arquivo atual e publicar nova versão na implantação `/exec` existente. Publicar no GitHub não atualiza o Apps Script.
+- Executar `corrigirPlanilhaOriginal` ou `corrigirResumo` pelo editor e confirmar `RESUMO_CORRIGIDO` no registro de execução.
+- Conferir um feedback real e um evento real de uso, verificando as linhas e os indicadores do Resumo. Zeros sem novos registros não comprovam recebimento.
+- Para a aba Comércios, confirmar separadamente a migração `20261016_registered_stores_count.sql` e abrir uma loja cadastrada. A migração de permissões e turnos não substitui essa migração. O total deve vir do Supabase; não preencher com estimativa ou zero para ocultar falhas.
+
+Essas etapas exigem acesso à conta Google e, para conferir configuração e implantação, à Vercel. Testes locais não confirmam que a planilha original recebeu os dados.
+
 ### Diferenciar falha de acesso, segredo e cálculo
 
 Os logs da Vercel mantêm `EXPORT_NOT_CONFIRMED` e incluem `reason`: `APPS_SCRIPT_ACCESS_DENIED` quando Google devolve HTML com 401/403, `APPS_SCRIPT_SECRET_MISMATCH` quando o doPost responde JSON com INVALID_SECRET, ou `SHEET_SCHEMA_MISMATCH` para colunas desconhecidas. Acesso negado pelo Google ocorre antes da validação do segredo do script; não se corrige com alterações no Supabase ou fórmulas. Na implantação do Apps Script, use Executar como Eu e acesso Qualquer pessoa (inclusive sem login), preservando a validação do segredo. Se a organização impedir essa opção, o administrador precisa liberar ou aprovar outra implantação.
