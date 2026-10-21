@@ -1,3 +1,4 @@
+import {PreferencesProvider} from '../src/lib/preferencesContext.tsx';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
@@ -40,7 +41,7 @@ test('cigarette pricing scales carteira cost for each enabled format without inf
 });
 
 test('standard pricing renders a detailed card with suggestions and no table', () => {
-  const markup = renderToStaticMarkup(React.createElement(ProductPricingCard, { product, isSaving: false, onUpdatePrice() {} }));
+  const markup = renderToStaticMarkup(React.createElement(PreferencesProvider,null,React.createElement(ProductPricingCard, { product, isSaving: false, onUpdatePrice() {} })));
   assert.match(markup, /<article/);
   assert.ok(!markup.includes('<table'));
   assert.match(markup, /64,3%/);
@@ -48,9 +49,9 @@ test('standard pricing renders a detailed card with suggestions and no table', (
 });
 
 test('fractional card shows only priced formats and targets the correct price field', () => {
-  const markup = renderToStaticMarkup(React.createElement(ProductPricingCard, {
+  const markup = renderToStaticMarkup(React.createElement(PreferencesProvider,null,React.createElement(ProductPricingCard, {
     product: { ...product, category: 'Cigarros', unitCost: 8, priceCart: 12, priceUnit: 0 }, isSaving: false, onUpdatePrice() {}
-  }));
+  })));
   assert.match(markup, /xl:grid-cols-4/);
   assert.match(markup, /20 cigarros/);
   assert.match(markup, /no formato Carteira/);

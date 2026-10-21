@@ -1,3 +1,4 @@
+import {CostPriceReview,ProductCosts} from './CostPriceReview';
 import { useCurrency } from '../lib/useCurrency';
 import type { Product } from '../types';
 import { calculateMargin, getPricingFormats, isFractionalCigarette, priceForMargin } from '../lib/pricing';
@@ -49,6 +50,8 @@ export function ProductPricingCard({ product, isSaving, onUpdatePrice }: Product
         <div><h3 className="text-base font-bold notranslate normal-case" translate="no">{product.name}</h3><p className="mt-1 text-sm font-medium text-blue-700 dark:text-blue-400">{product.category || 'Sem categoria'}</p></div>
         {isSaving && <span role="status" className="text-xs text-muted-foreground">Salvando preço...</span>}
       </header>
+      <ProductCosts product={product}/>
+      <CostPriceReview product={product}/>
       {fractional ? (
         <>
           <p className="mb-3 text-xs text-muted-foreground">Custo proporcional ao estoque contado em carteiras. Apenas formatos com preço cadastrado.</p>

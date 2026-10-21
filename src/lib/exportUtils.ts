@@ -37,7 +37,7 @@ export function exportPurchasesToCSV(purchases: Purchase[], filenamePrefix = 're
       ("Custo Unitário (" + csvCurrency + ")"),
       ("Total Pago (" + csvCurrency + ")"),
       'Fornecedor / Local',
-      'Observações', 'Quantidade bonificada', 'Produto bonificado', 'Medida do bônus', 'Custo efetivo (' + csvCurrency + ')', 'Economia estimada (' + csvCurrency + ')'
+      'Observações', 'Quantidade bonificada', 'Produto bonificado', 'Medida do bônus', 'Custo efetivo (' + csvCurrency + ')', 'Economia estimada (' + csvCurrency + ')', 'Custo médio após compra (' + csvCurrency + ')'
     ]
   ];
 
@@ -67,7 +67,7 @@ export function exportPurchasesToCSV(purchases: Purchase[], filenamePrefix = 're
       `"${(p.supplier || 'Não informado').replace(/"/g, '""')}"`,
       `"${(p.notes || '').replace(/"/g, '""')}"`,
       String(p.bonusQuantity || 0), `"${(p.bonusProductName || '').replace(/"/g, '""')}"`, p.bonusStockUnit || '',
-      formatAmount(p.effectiveUnitCost ?? p.unitCost ?? 0,csvOptions), formatAmount(p.bonusSavings || 0,csvOptions)
+      formatAmount(p.effectiveUnitCost ?? p.unitCost ?? 0,csvOptions), formatAmount(p.bonusSavings || 0,csvOptions), p.averageCostAfter===undefined?'':formatAmount(p.averageCostAfter,csvOptions)
     ]);
   });
 

@@ -8,7 +8,7 @@ for(const name of ['window','document','navigator','HTMLElement','Node','CustomE
 window.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});globalThis.IS_REACT_ACT_ENVIRONMENT=true;
 const React=await import('react');const {render,fireEvent,act,cleanup}=await import('@testing-library/react');
 const folder=await mkdtemp(new URL('../.replenish-ui-',import.meta.url).pathname);
-const names=['subscribeProducts','subscribePurchases','recordPurchase','deletePurchase','getReplenishmentSales','mergeProducts','subscribeSettings','saveBonusRule'];
+const names=['subscribeProducts','subscribePurchases','recordPurchase','deletePurchase','getReplenishmentSales','mergeProducts','subscribeSettings','saveBonusRule','resolvePriceReview'];
 await build({stdin:{contents:"export {default as Purchases} from './src/pages/Purchases';export {PreferencesProvider} from './src/lib/preferencesContext';",resolveDir:new URL('..',import.meta.url).pathname,loader:'tsx'},bundle:true,packages:'external',platform:'node',format:'esm',jsx:'automatic',outfile:folder+'/ui.mjs',plugins:[{name:'bank',setup(b){b.onResolve({filter:/\/lib\/api$/},a=>({path:a.path,namespace:'mock'}));b.onLoad({filter:/.*/,namespace:'mock'},()=>({loader:'js',contents:names.map(n=>`export const ${n}=(...args)=>globalThis.__replenish.${n}(...args);`).join('\n')}));}}]});
 const {Purchases,PreferencesProvider}=await import(folder+'/ui.mjs');
 const product={id:'p',name:'Água Mineral ORIGINAL',type:'comum',purchaseForm:'fardo',unitsPerPackage:6,stock:3,safetyStock:4,maxStock:10,unitCost:2,dailyAverageSales:9999,category:'Bebidas'};
@@ -62,4 +62,18 @@ test('supplier rule warns near a bonus, calculates a different product bonus and
  let saved;globalThis.__replenish.recordPurchase=async data=>{saved=data;};
  await act(async()=>fireEvent.submit(bonusInput.closest('form')));
  assert.equal(saved.bonusQuantity,5);assert.equal(saved.bonusProductId,'q');assert.equal(saved.quantity,18);assert.equal(saved.bonusRuleId,'r');
+});
+
+test('cost notice waits for Accept or Keep in all three language modes, and low margin is warned in Reposição',async()=>{
+ for(const mode of ['basic','neutral','technical'])for(const accept of [false,true]){
+  localStorage.setItem('app_lang_mode',mode);bank();
+  const p={...product,stock:100,unitCost:11,lastCost:12,basePrice:15,pendingPriceReview:{id:'review',oldCost:10,newCost:11,changePercent:10,prices:[{field:'basePrice',oldPrice:15,newPrice:16.5}],createdAt:Date.now()}};
+  globalThis.__replenish.subscribeProducts=cb=>{cb([p]);return()=>{};};
+  let decision;globalThis.__replenish.resolvePriceReview=async(...args)=>{decision=args;};
+  const ui=await view();assert.match(ui.container.textContent,/Custo subiu de/);assert.match(ui.container.textContent,/\+10%/);assert.match(ui.container.textContent,/16,50/);
+  assert.equal(decision,undefined);assert.equal(p.basePrice,15);
+  assert.match(ui.container.textContent,mode==='basic'?/está sobrando menos/:mode==='technical'?/Margem bruta abaixo/:/margem abaixo/);
+  await act(async()=>fireEvent.click(ui.getByRole('button',{name:accept?'Aceitar':'Manter'})));
+  assert.deepEqual(decision,['p','review',accept]);cleanup();
+ }
 });

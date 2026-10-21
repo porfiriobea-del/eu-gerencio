@@ -1,3 +1,4 @@
+import {CostPriceReview,ProductCosts} from '../components/CostPriceReview';
 import {usePermissions} from '../lib/permissionsContext';
 import {ReplenishmentDuplicates} from '../components/ReplenishmentDuplicates';
 import { stockLimitError } from '../lib/replenishment';
@@ -132,6 +133,8 @@ export default function Stock() {
   const formUnitsPerPackage = getPurchasePackageUnits(formData);
   const formCostPerUnit = Number(formData.unitCost) / (formData.type === 'cigarro' ? 20 : 1);
 
+  const originalEditingCost=useRef<number|null>(null);
+  const originalEditingPrices=useRef<Record<string,unknown>>({});
   const [isReadingLabel, setIsReadingLabel] = useState(false);
   const [labelReadError, setLabelReadError] = useState<string | null>(null);
   const labelRequestRef = useRef(0);
@@ -269,6 +272,8 @@ export default function Stock() {
   };
 
   const openModal = (product?: Product) => {
+    originalEditingCost.current=product?.unitCost ?? null;
+    originalEditingPrices.current=product?{...product,pricePackage:product.pricePackage ?? (getPackageUnits(product)>1?Number((product.basePrice*getPackageUnits(product)).toFixed(2)):undefined),priceUnit:product.type==='cigarro'?product.priceUnit:product.basePrice}:{};
     if (product) {
       const unitsPkg = getPackageUnits(product);
       const calculatedPkgCost = product.unitCost && getPurchasePackageUnits(product) > 1
@@ -360,6 +365,9 @@ export default function Stock() {
     };
 
     delete payload.purchaseTotalCost;
+    delete payload.lastCost;
+    delete payload.pendingPriceReview;
+    if(editingId && originalEditingCost.current===Number(formData.unitCost)) delete payload.unitCost;
 
     if (formData.expirationDate && String(formData.expirationDate).trim() !== '') {
       payload.expirationDate = String(formData.expirationDate).trim();
@@ -444,6 +452,13 @@ export default function Stock() {
     try {
       if (!await checkProductDuplicate(payload, editingId || undefined)) return;
       submitted = true;
+      if(editingId && originalEditingPrices.current.type===formData.type) {
+        if(Number(formData.stock)===Number(originalEditingPrices.current.stock)) delete payload.stock;
+        if(Number(formData.initialStock)===Number(originalEditingPrices.current.initialStock ?? originalEditingPrices.current.stock)) delete payload.initialStock;
+        for(const field of ['basePrice','pricePackage','pricePack','priceCart','priceHalfCart','priceUnit','promoPrice']) {
+          if(typeof payload[field]!=='object' && Number(payload[field] || 0)===Number(originalEditingPrices.current[field] || 0)) delete payload[field];
+        }
+      }
       if (editingId) await updateProduct(editingId, payload);
       else await addProduct(payload);
       showToast(editingId ? '✓ Alterações salvas!' : '✓ Produto cadastrado com sucesso!');
@@ -825,6 +840,7 @@ export default function Stock() {
         </div>
       </div>
 
+      <div className="space-y-3 mb-4">{products.filter(p=>p.pendingPriceReview).map(product=><CostPriceReview key={product.id} product={product}/>)}</div>
       {/* Banner de Alerta de Produtos Duplicados (se houver) */}
       {isOwner && <button type="button" onClick={() => setShowDuplicateReview(true)} className="mb-3 rounded-xl border border-border px-4 py-2 text-sm font-semibold">{v('duplicates.review','Revisar duplicados')}</button>}
 
@@ -1311,8 +1327,9 @@ export default function Stock() {
                         </div>
                       )}
                       <div className="flex justify-between items-center text-muted-foreground">
-                        <span>{v('purchases.unitCost', 'Quanto Você Paga (Custo)')}:</span>
+                        <span>{v('cost.average')}:</span>
                         <strong className="text-foreground">{formatMoney(p.unitCost)}/un.</strong>
+                        <ProductCosts product={p}/>
                       </div>
                       {p.expirationDate && (
                         <div className="flex justify-between items-center text-muted-foreground">
@@ -1471,7 +1488,8 @@ export default function Stock() {
                           <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-1.5 mt-0.5">
                             <span className="bg-muted px-1.5 py-0.5 rounded text-[11px] font-medium">{p.category}</span>
                             <span>•</span>
-                            <span>Custo: {formatMoney(p.unitCost)}/un.</span>
+                            <span>{v('cost.average')}: {formatMoney(p.unitCost)}/un.</span>
+                            <ProductCosts product={p}/>
                           </div>
 
                           {/* Badges de Validade e Promoção */}
@@ -2094,7 +2112,7 @@ export default function Stock() {
                     <div className={`p-3 bg-surface rounded-xl border border-border ${formData.purchaseForm === 'unidade' ? 'col-span-1 sm:col-span-2' : ''}`}>
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-foreground">
-                          Custo por {formData.type === 'cigarro' ? 'Carteira' : 'Unidade'} ({currencySymbol}) *
+                          {v('cost.average')} / {formData.type === 'cigarro' ? 'carteira' : 'unidade'} ({currencySymbol}) *
                         </label>
                         <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
                           Automático & Editável

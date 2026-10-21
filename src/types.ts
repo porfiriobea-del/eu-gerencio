@@ -1,3 +1,7 @@
+export type PriceField = 'basePrice' | 'pricePackage' | 'pricePack' | 'priceCart' | 'priceHalfCart' | 'priceUnit' | 'promoPrice';
+export interface PriceChange {field:PriceField;oldPrice:number;newPrice:number;}
+export interface PriceReview {id:string;oldCost:number;newCost:number;changePercent:number;prices:PriceChange[];createdAt:number;}
+
 export interface Product {
   id?: string;
   name: string;
@@ -12,7 +16,10 @@ export interface Product {
   purchaseForm: 'pacote' | 'fardo' | 'unidade';
   unitsPerPackage: number;
   supplierPackageUnits?: 5 | 10; // Cigarette purchase packaging; sale pack remains 10 carteiras.
-  unitCost: number; // Per stock unit: carteira for cigarettes, individual unit otherwise.
+  lastCost?: number; // Effective unit cost of the most recent receipt; never the weighted average.
+  pendingPriceReview?: PriceReview | null;
+  desiredMargin?: number;
+  unitCost: number; // Weighted average per stock unit: carteira for cigarettes, individual unit otherwise.
   stock: number;
   safetyStock: number;
   maxStock?: number;
@@ -116,6 +123,8 @@ export type MovementType =
   | 'manual_entry';
 
 export interface Movement {
+  priceChanges?: PriceChange[];
+  actorUserId?: string;
   entryKind?: 'bonus';
   id?: string;
   timestamp: number;
@@ -219,6 +228,9 @@ export interface Purchase {
   effectiveUnitCost?: number;
   bonusSavings?: number; // Estimated value at the pre-bonus acquisition cost.
   stockUpdated?: boolean;
+  previousAverageCost?: number;
+  averageCostAfter?: number;
+  bonusAverageCostAfter?: number;
   id?: string;
   productId: string;
   productName: string;

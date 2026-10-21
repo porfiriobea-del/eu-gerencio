@@ -229,7 +229,7 @@ test('supplier half-pack choice recalculates cost, persists five carteiras and p
  fireEvent.change(selector,{target:{value:'5'}});
  await act(async()=>{fireEvent.submit(ui.getByRole('button',{name:'Salvar Produto'}).closest('form'));});
  assert.equal(saved.id,'cig');assert.equal(saved.payload.supplierPackageUnits,5);
- assert.equal(saved.payload.unitsPerPackage,10);assert.equal(saved.payload.unitCost,8);assert.equal(saved.payload.stock,20);
+ assert.equal(saved.payload.unitsPerPackage,10);assert.equal(saved.payload.unitCost,8);assert.equal(saved.payload.stock,undefined);
  ui.unmount();ui=render(React.createElement(MemoryRouter,null,React.createElement(Stock)));
  fireEvent.click(ui.getByTitle('Editar Produto e Estoque'));
  assert.equal(ui.getByRole('combobox',{name:'purchase.size'}).value,'5');

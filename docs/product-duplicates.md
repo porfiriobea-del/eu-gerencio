@@ -17,7 +17,7 @@ A tela mostra abrir o existente, somar ao estoque dele ou cadastrar mesmo assim.
 
 O catálogo marca linhas suspeitas e as deixa desmarcadas por padrão, inclusive repetições dentro do arquivo. Para cadastrar uma cópia é necessário escolher **Cadastrar mesmo assim**. Somar usa uma quantidade informada e o saldo atual do banco, sem cadastrar a linha de novo. O estoque inicial continua opcional, informado manualmente.
 
-**Revisar duplicados**, em Estoque, só aparece para o dono. A lista contém pares diretamente comparados: não cria correspondências transitivas entre A e C apenas porque ambos parecem com B. Juntar abre uma conferência e exige confirmação. O primeiro registro mantém nome, preços, custos e medidas, e recebe estoque e estoque inicial do segundo. Tipos de estoque incompatíveis não podem ser unidos.
+**Revisar duplicados**, em Estoque, só aparece para o dono. A lista contém pares diretamente comparados: não cria correspondências transitivas entre A e C apenas porque ambos parecem com B. Juntar abre uma conferência e exige confirmação. O primeiro registro mantém nome, preços e medidas, recebe estoque e estoque inicial do segundo e pondera o custo pelos valores dos dois saldos. A eventual sugestão de preço exige confirmação separada. Tipos de estoque incompatíveis não podem ser unidos.
 
 A transação relê os saldos e revisões; conflitos são tratados pelo fluxo existente. O segundo produto permanece arquivado com `mergedIntoId`, `mergedAt` e estoque zero. Vendas, compras e seus IDs históricos são preservados. O destino guarda `mergedProductIds` para incluir as vendas anteriores na média da Reposição. Compras antigas são resolvidas até o produto ativo ao estornar. Carrinhos desatualizados com produtos arquivados são recusados.
 

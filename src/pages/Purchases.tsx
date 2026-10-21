@@ -1,3 +1,5 @@
+import {CostPriceReview,ProductCosts} from '../components/CostPriceReview';
+import {lowMarginFormats} from '../lib/averageCost';
 import {BonusRules} from '../components/BonusRules';
 import {bonusCost, calculateBonus, nearBonus, monthlyBonusSavings, supplierKey, bonusUnits, bonusUnitKey} from '../lib/purchaseBonus';
 import { useStockFormatting } from '../lib/useStockFormatting';
@@ -78,7 +80,7 @@ export default function Purchases() {
   const [bonusRuleId,setBonusRuleId]=useState('');
   const [bonusProductId,setBonusProductId]=useState('');
   const [bonusQuantity,setBonusQuantity]=useState(0);
-  useEffect(()=>subscribeSettings(settings=>{setBonusRules(settings?.bonusRules || []);setBonusReady(true);},()=>setBonusReady(false)),[]);
+  useEffect(()=>subscribeSettings(settings=>{setBonusRules(settings?.bonusRules || []);setDesiredMargin(settings?.defaultMargin ?? 30);setBonusReady(true);},()=>setBonusReady(false)),[]);
   const matchingBonusRules=useMemo(()=>bonusRules.filter(r=>r.productId===selectedProduct?.id && supplierKey(r.supplier)===supplierKey(supplier)),[bonusRules,selectedProduct?.id,supplier]);
   const activeBonusRule=matchingBonusRules.find(r=>r.id===bonusRuleId) || matchingBonusRules[0];
   const bonusRuleSignature=JSON.stringify(activeBonusRule);
@@ -92,7 +94,7 @@ export default function Purchases() {
   },[bonusRuleSignature,selectedProduct?.id,purchaseType,packageQty,looseUnitsQty]);
   const [purchaseDate, setPurchaseDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [notes, setNotes] = useState<string>('');
-  const [updateProductUnitCost, setUpdateProductUnitCost] = useState<boolean>(true);
+  const [desiredMargin,setDesiredMargin]=useState(30);
   // Expiration & Promo state for purchase
   const [expirationDate, setExpirationDate] = useState<string>('');
   const [updateProductExpiration, setUpdateProductExpiration] = useState<boolean>(true);
@@ -274,7 +276,7 @@ export default function Purchases() {
     setSupplier([...purchases].sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt-a.createdAt).find(p=>p.productId===product.id && p.supplier?.trim())?.supplier || '');
     setPurchaseDate(format(new Date(), 'yyyy-MM-dd'));
     setNotes('');
-    setUpdateProductUnitCost(true);
+
     // Initialize expiration & promo from product if available
     setExpirationDate(product.expirationDate || '');
     setUpdateProductExpiration(true);
@@ -350,7 +352,7 @@ export default function Purchases() {
         },
         {
           updateProductStock: true,
-          updateUnitCost: updateProductUnitCost && unitCost > 0,
+          updateUnitCost: true,
           updateExpirationDate: updateProductExpiration && !!expirationDate.trim(),
           updatePromoPrice: applyPromoToProduct && suggestPromo && Number(suggestedPromoPrice) > 0
         }
@@ -451,6 +453,7 @@ export default function Purchases() {
         </div>
       </div>
 
+      <div className="space-y-3">{products.filter(p=>p.pendingPriceReview).map(product=><CostPriceReview key={product.id} product={product}/>)}</div>
       {/* Primary Indicator Cards: Time Saved & Replenish Overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Core User-Requested Metric: Horas/semana gastas repondo estoque */}
@@ -611,6 +614,7 @@ export default function Purchases() {
           </div>
 
           <ReplenishmentDuplicates products={products} />
+          {products.some(p=>lowMarginFormats(p,desiredMargin).length>0) && <details className="rounded-2xl border border-amber-500/40 p-4"><summary className="font-semibold cursor-pointer">{v('cost.lowMargin')}</summary>{products.filter(p=>lowMarginFormats(p,desiredMargin).length>0).map(p=><div key={p.id} className="text-sm mt-2"><span className="notranslate" translate="no">{p.name}</span>: {lowMarginFormats(p,desiredMargin).map(f=>`${v(`cost.format.${f.field}`)} ${f.margin.toLocaleString(language,{maximumFractionDigits:1})}% (${v('cost.goal')} ${f.desired.toLocaleString(language,{maximumFractionDigits:1})}%)`).join('; ')}</div>)}</details>}
           {!salesReady && !salesError && <p role="status">{v('replenish.loading')}</p>}
           {salesError && <p role="alert" className="text-amber-600">{v('replenish.loadFailed')}</p>}
           {salesReady && !salesError && filteredReplenish.length === 0 && <p className="p-6 bg-surface rounded-2xl border border-border">{v('replenish.empty')}</p>}
@@ -630,6 +634,7 @@ export default function Purchases() {
                 <p>{v('replenish.coverage').replace('{days}', formatStockNumber(item.coverage!))}</p>
               </>}
               {nearBonus(bonusRules,item.supplier,item.product,item.suggestedBuyUnits).map(({rule,missing})=><p key={rule.id} className="text-sm text-emerald-600">{v('bonus.near').replace('{more}',`${formatStockNumber(missing/bonusUnits(item.product,rule.buyUnit))} ${v(bonusUnitKey(rule.buyUnit,missing/bonusUnits(item.product,rule.buyUnit)))}`).replace('{quantity}',String(rule.bonusQuantity)).replace('{unit}',v(bonusUnitKey(rule.bonusUnit,rule.bonusQuantity)))} — <span className="notranslate" translate="no">{products.find(p=>p.id===rule.bonusProductId)?.name}</span></p>)}
+              {lowMarginFormats(item.product,desiredMargin).length>0 && <p className="text-amber-600 text-sm">{v('cost.lowMargin')}</p>}
               {item.invalidLimits && <p role="alert" className="text-amber-600">{v('replenish.invalidLimits')}</p>}
               {item.aboveMaximum && <p className="text-amber-600">{v('replenish.aboveMax')}</p>}
               <div className="flex flex-wrap justify-between items-center gap-3">
@@ -1077,25 +1082,7 @@ export default function Purchases() {
                 </div>
               </div>
 
-              {/* Option to update product registered cost */}
-              {bonusQuantity === 0 && unitCost > 0 && Math.abs(unitCost - selectedProduct.unitCost) > 0.001 && (
-                <div className="p-3 bg-palette-1/50 rounded-xl border border-primary/20 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-semibold text-foreground block">
-                      Atualizar custo unitário no cadastro?
-                    </span>
-                    <span className="text-muted-foreground text-[11px]">
-                      Mudará de {formatMoney(selectedProduct.unitCost)} para {formatMoney(unitCost)} (mantém a margem de lucro real).
-                    </span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={updateProductUnitCost}
-                    onChange={e => setUpdateProductUnitCost(e.target.checked)}
-                    className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer shrink-0"
-                  />
-                </div>
-              )}
+              <div className="rounded-xl border border-border p-3 space-y-2"><p className="text-xs text-muted-foreground">{v('cost.explanation')}</p><ProductCosts product={selectedProduct}/></div>
 
                 <div>
                   <label htmlFor="purchase-supplier" className="block text-xs font-semibold text-muted-foreground mb-1">
