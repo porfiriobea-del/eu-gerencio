@@ -8,7 +8,7 @@ import { Camera, FileText, Image, Loader2, Plus, Trash2, X } from 'lucide-react'
 import { prepareCatalogFile, recognizeCatalog } from '../lib/geminiCatalogScanner';
 import { blankSupplierDraft, buildSupplierProducts, type SupplierDraft } from '../lib/supplierCatalog';
 import type { Product } from '../types';
-import { normalizeProductName, findDuplicateProducts, isDuplicateProduct } from '../lib/duplicateDetector';
+import { findDuplicateProducts, isDuplicateProduct, similarProductNames } from '../lib/duplicateDetector';
 import { importSupplierCatalog, adjustProductStock } from '../lib/api';
 import { showActionError, showToast } from '../lib/actionFeedback';
 
@@ -39,9 +39,9 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
   onCloseRef.current = onClose;
   const headingId = useId();
   const categoriesId = useId();
-  const existing = new Set(existingProductNames.map(normalizeProductName));
+  const nameMatch = (name: string) => existingProductNames.some(existing => similarProductNames(name,existing));
   const match = (row: SupplierDraft) => findDuplicateProducts(row, existingProducts)[0];
-  const duplicated = (row: SupplierDraft, index: number) => !!match(row) || existing.has(normalizeProductName(row.name)) || drafts.some((other, otherIndex) => otherIndex < index && isDuplicateProduct(row, other));
+  const duplicated = (row: SupplierDraft, index: number) => !!match(row) || nameMatch(row.name) || drafts.some((other, otherIndex) => otherIndex < index && isDuplicateProduct(row, other));
 
   useEffect(() => {
     if (!isOpen) return;
@@ -83,7 +83,7 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
     const next = { ...row, ...patch };
     if ('name' in patch || 'barcode' in patch) {
       next.allowDuplicate = false;
-      if (match(next) || existing.has(normalizeProductName(next.name)) || previous.some((other, i) => i < index && isDuplicateProduct(next, other))) next.selected = false;
+      if (match(next) || nameMatch(next.name) || previous.some((other, i) => i < index && isDuplicateProduct(next, other))) next.selected = false;
     }
     return next;
   }));
@@ -107,7 +107,7 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
         setDrafts(previous => {
           const added = result.products.map((row, index) => ({ ...row, initialStock: '' as const,
             costBasis: row.type === 'cigarro' ? row.costBasis === 'embalagem' ? 'maco' : ['maco','meio_maco','carteira'].includes(row.costBasis) ? row.costBasis : '' : row.costBasis,
-            selected: !match(row) && !existing.has(normalizeProductName(row.name)) && ![...previous, ...result.products.slice(0, index)].some(other => isDuplicateProduct(row, other)) }));
+            selected: !match(row) && !nameMatch(row.name) && ![...previous, ...result.products.slice(0, index)].some(other => isDuplicateProduct(row, other)) }));
           return [...previous, ...added];
         });
         if (!result.products.length) setError(copy('catalog.empty', 'Nenhum produto foi encontrado neste arquivo. Tente outra foto ou preencha manualmente.'));
@@ -207,15 +207,15 @@ export function CatalogImportModal({ isOpen, onClose, availableCategories, exist
                 {rowErrors[row.id] && <p id={`catalog-error-${row.id}`} className="mb-3 text-sm font-semibold text-red-700 dark:text-red-300">{rowErrors[row.id]}</p>}
                 <div className="mb-3 flex items-center justify-between gap-2"><label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" className="h-5 w-5" checked={row.selected} onChange={event => update(row.id, { selected: event.target.checked && (!duplicated(row, index) || !!row.allowDuplicate) })} />Produto {index + 1}</label><button type="button" aria-label={`Remover produto ${index + 1}`} onClick={() => setDrafts(previous => previous.filter(item => item.id !== row.id))} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg p-2 text-red-600 hover:bg-muted"><Trash2 className="h-4 w-4" /></button></div>
                 {duplicated(row, index) && <div className="mb-3 rounded-lg border border-amber-500 p-3 text-xs">
-                  <p className="font-semibold notranslate normal-case" translate="no">Duplicado suspeito: {match(row)?.name || row.name}. Desmarcado por padrão.</p>
+                  <p className="font-semibold notranslate normal-case" translate="no">{v('duplicates.suspect','Produto parecido')}: {match(row)?.name || row.name}. {v('duplicates.unchecked','Desmarcado por padrão.')}</p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <button type="button" disabled={!match(row) || !onOpenExisting} onClick={() => onOpenExisting?.(match(row)!)} className="rounded border border-border px-2 py-1">Abrir o existente</button>
+                    <button type="button" disabled={!match(row) || !onOpenExisting} onClick={() => onOpenExisting?.(match(row)!)} className="rounded border border-border px-2 py-1">{v('duplicates.open','Abrir o existente')}</button>
                     <input aria-label={`Quantidade a somar de ${row.name}`} type="number" min="0" step={row.type === 'cigarro' ? '0.05' : '1'} value={row.stockToAdd ?? 1} onChange={event => update(row.id, { stockToAdd: Number(event.target.value) })} className="w-20 rounded border border-border bg-background p-1 notranslate normal-case"  translate="no"/>
                     <button type="button" disabled={!match(row) || match(row)?.type !== row.type} onClick={async () => {
                       try { await adjustProductStock(match(row)!.id!, row.stockToAdd ?? 1); update(row.id, { selected: false }); showToast('✓ Estoque atualizado!'); }
                       catch (error) { setError(error instanceof Error ? error.message : 'Não foi possível somar ao estoque.'); }
-                    }} className="rounded border border-border px-2 py-1">Somar ao estoque dele</button>
-                    <button type="button" onClick={() => update(row.id, { allowDuplicate: true, selected: true })} className="rounded border border-amber-500 px-2 py-1">Cadastrar mesmo assim</button>
+                    }} className="rounded border border-border px-2 py-1">{v('duplicates.add','Somar ao estoque dele')}</button>
+                    <button type="button" onClick={() => update(row.id, { allowDuplicate: true, selected: true })} className="rounded border border-amber-500 px-2 py-1">{v('duplicates.allow','Cadastrar mesmo assim')}</button>
                   </div>
                   {row.allowDuplicate && <p className="mt-2">Novo cadastro duplicado autorizado.</p>}
                 </div>}

@@ -1,3 +1,5 @@
+import {useStockFormatting} from '../lib/useStockFormatting';
+import {usePermissions} from '../lib/permissionsContext';
 import { useMemo, useState } from 'react';
 import type { Product } from '../types';
 import { suspiciousProductPairs } from '../lib/duplicateDetector';
@@ -5,17 +7,19 @@ import { mergeProducts } from '../lib/api';
 import { usePreferences } from '../lib/preferencesContext';
 import { showToast, showActionError } from '../lib/actionFeedback';
 
-export function ReplenishmentDuplicates({products}: {products: Product[]}) {
+export function ReplenishmentDuplicates({products,expanded=false}: {products: Product[];expanded?:boolean}) {
   const {v} = usePreferences();
+  const {isOwner}=usePermissions();
+  const {formatProductStock}=useStockFormatting();
   const pairs = useMemo(()=>suspiciousProductPairs(products),[products]);
   const [selected,setSelected] = useState<[Product,Product] | null>(null);
   const [busy,setBusy] = useState(false);
-  if (!pairs.length && !selected) return null;
+  if (!isOwner || (!pairs.length && !selected)) return null;
   return <aside className="rounded-2xl border border-amber-500/40 p-4 space-y-3">
-    <details><summary className="cursor-pointer font-semibold">{v('replenish.similar')} ({pairs.length})</summary>
+    <details open={expanded || undefined}><summary className="cursor-pointer font-semibold">{v('replenish.similar')} ({pairs.length})</summary>
       <p className="text-sm text-muted-foreground my-2">{v('replenish.reviewNames')}</p>
       <div className="max-h-64 overflow-y-auto space-y-2">{pairs.map(([a,b])=><div key={`${a.id}:${b.id}`} className="flex flex-wrap items-center justify-between gap-2 border-t border-border py-2">
-        <span className="notranslate" translate="no">{a.name} / {b.name}</span>
+        <span className="notranslate" translate="no">{a.name} ({formatProductStock(a)}) / {b.name} ({formatProductStock(b)})</span>
         <button type="button" onClick={()=>setSelected([a,b])} disabled={busy} className="rounded-lg border border-border px-3 py-2">{v('replenish.merge')}</button>
       </div>)}</div>
     </details>

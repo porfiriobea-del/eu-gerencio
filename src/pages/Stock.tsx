@@ -1,3 +1,5 @@
+import {usePermissions} from '../lib/permissionsContext';
+import {ReplenishmentDuplicates} from '../components/ReplenishmentDuplicates';
 import { stockLimitError } from '../lib/replenishment';
 import { MobileStockList } from '../components/MobileStockList';
 import { useStockFormatting } from '../lib/useStockFormatting';
@@ -41,10 +43,10 @@ export default function Stock() {
   const { formatMoney, currencySymbol, currency, language } = useCurrency();
 
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
+  const {isOwner}=usePermissions();
   const [products, setProducts] = useState<Product[]>([]);
   const [duplicateRequest, setDuplicateRequest] = useState<{ matches: Product[]; quantity: number; isMerge: boolean; resolve: (decision: DuplicateDecision) => void } | null>(null);
   const [showDuplicateReview, setShowDuplicateReview] = useState(false);
-  const [mergingPair, setMergingPair] = useState('');
   const duplicateResolverRef = useRef<((decision: DuplicateDecision) => void) | null>(null);
   useEffect(() => () => { duplicateResolverRef.current?.({ action: 'cancel' }); }, []);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -195,7 +197,7 @@ export default function Stock() {
     if (decision.action === 'add' && decision.product?.id) {
       if (draft.type !== decision.product.type) throw new Error('Os produtos usam medidas diferentes. Corrija o tipo antes de somar.');
       if (excludeId) {
-        await mergeProducts(decision.product.id, excludeId);
+        await mergeProducts(decision.product.id, excludeId, true);
         setIsModalOpen(false);
       } else await adjustProductStock(decision.product.id, decision.quantity!);
       showToast('✓ Estoque somado ao produto existente!');
@@ -565,17 +567,7 @@ export default function Stock() {
     return analyzeDuplicates(products);
   }, [products]);
 
-  const duplicatePairs = useMemo(() => {
-    const pairs = new Map<string, { target: Product; source: Product }>();
-    for (const group of duplicateAnalysis.duplicateGroups.values()) {
-      const target = group[0];
-      for (const source of group.slice(1)) {
-        const key = [target.id, source.id].sort().join('/');
-        if (!pairs.has(key)) pairs.set(key, { target, source });
-      }
-    }
-    return Array.from(pairs.entries());
-  }, [duplicateAnalysis]);
+
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
@@ -834,7 +826,7 @@ export default function Stock() {
       </div>
 
       {/* Banner de Alerta de Produtos Duplicados (se houver) */}
-      <button type="button" onClick={() => setShowDuplicateReview(true)} className="mb-3 rounded-xl border border-border px-4 py-2 text-sm font-semibold">{v('ui.duplicates', "Verificar duplicados")}</button>
+      {isOwner && <button type="button" onClick={() => setShowDuplicateReview(true)} className="mb-3 rounded-xl border border-border px-4 py-2 text-sm font-semibold">{v('duplicates.review','Revisar duplicados')}</button>}
 
       {duplicateAnalysis.totalDuplicates > 0 && (
         <div className="p-4 sm:p-5 rounded-2xl bg-rose-500/10 border-2 border-rose-500/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
@@ -844,13 +836,13 @@ export default function Stock() {
             </div>
             <div>
               <h4 className="text-sm sm:text-base font-bold text-rose-700 dark:text-rose-400 flex items-center gap-2">
-                Atenção: {duplicateAnalysis.totalDuplicates} {duplicateAnalysis.totalDuplicates === 1 ? 'produto duplicado' : 'produtos duplicados'} identificados no estoque!
+                {v('duplicates.banner','Produtos parecidos encontrados: {count}').replace('{count}',String(duplicateAnalysis.totalDuplicates))}
                 <span className="text-[11px] bg-rose-600 text-white px-2 py-0.5 rounded-full font-bold">
-                  Cadastrado 2x ou mais
+                  {v('duplicates.suspect','Produto parecido')}
                 </span>
               </h4>
               <p className="text-xs text-rose-600/90 dark:text-rose-300 mt-1 max-w-2xl leading-relaxed">
-                Detectamos produtos com o mesmo nome ou código de barras cadastrados repetidamente. Eles estão destacados em <strong>vermelho com tarja de aviso</strong> para você identificar facilmente e excluir as cópias excedentes.
+                {v('duplicates.bannerHelp','Os nomes ou códigos podem corresponder. Confira marca, tamanho e embalagem. Nada será unido ou excluído automaticamente.')}
               </p>
             </div>
           </div>
@@ -1126,7 +1118,7 @@ export default function Stock() {
                     <div className="mb-3 px-3 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold flex items-center justify-between shadow-2xs">
                       <span className="flex items-center gap-1.5">
                         <AlertTriangle className="w-3.5 h-3.5" />
-                        PRODUTO DUPLICADO ({duplicateCount}x cadastrado)
+                        {v('duplicates.suspect','Produto parecido')} ({duplicateCount})
                       </span>
                       <button
                         type="button"
@@ -1472,7 +1464,7 @@ export default function Stock() {
                             {isDuplicate && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-600 text-white shadow-2xs shrink-0 animate-pulse">
                                 <AlertTriangle className="w-3 h-3" />
-                                Duplicado ({duplicateCount}x)
+                                {v('duplicates.suspect','Produto parecido')} ({duplicateCount})
                               </span>
                             )}
                           </div>
@@ -1810,7 +1802,7 @@ export default function Stock() {
                     <div className="mt-2 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2 animate-in fade-in">
                       <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
                       <span>
-                        <strong>Atenção (Produto Duplicado):</strong> Existe um produto com este nome ou código de barras. Ao salvar, você poderá abrir o existente, somar estoque ou cadastrar mesmo assim.
+                        {v('duplicates.inline')}
                       </span>
                     </div>
                   )}
@@ -3478,16 +3470,10 @@ export default function Stock() {
       )}
 
       {duplicateRequest && <ProductDuplicateDialog matches={duplicateRequest.matches} quantity={duplicateRequest.quantity} isMerge={duplicateRequest.isMerge} onDecision={duplicateRequest.resolve} />}
-      {showDuplicateReview && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"><section role="dialog" aria-modal="true" aria-label="Verificar duplicados" className="max-h-[85vh] w-full max-w-2xl overflow-auto rounded-2xl border border-border bg-surface p-6">
-        <div className="mb-4 flex justify-between"><h2 className="text-lg font-bold">{v('ui.duplicates', "Verificar duplicados")}</h2><button type="button" onClick={() => setShowDuplicateReview(false)}>{v('ui.close', "Fechar")}</button></div>
-        <p className="mb-4 text-sm text-muted-foreground">A mesclagem soma o estoque e mantém nome, preços e medidas do primeiro produto. O segundo fica arquivado para preservar o histórico.</p>
-        {!duplicateAnalysis.duplicateGroups.size && <p>Nenhum par suspeito encontrado.</p>}
-        {duplicatePairs.map(([key, { target, source }]) => <div key={key} className="mb-3 rounded-xl border border-border p-3"><strong className="notranslate normal-case" translate="no">{target.name} — estoque {formatProductStock(target)}</strong><div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span className="notranslate normal-case" translate="no">{source.name} — {formatProductStock(source)}</span><button type="button" disabled={!!mergingPair || source.type !== target.type} onClick={async () => {
-          setMergingPair(source.id!);
-          try { await mergeProducts(target.id!, source.id!); showToast('✓ Produtos mesclados!'); }
-          catch (error) { showActionError(error, error instanceof Error ? error.message : 'Não foi possível mesclar.'); }
-          finally { setMergingPair(''); }
-        }} className="rounded-lg bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50">{mergingPair === source.id ? 'Mesclando...' : 'Mesclar neste produto'}</button></div></div>)}
+      {isOwner && showDuplicateReview && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"><section role="dialog" aria-modal="true" aria-label={v('duplicates.review','Revisar duplicados')} className="max-h-[85vh] w-full max-w-2xl overflow-auto rounded-2xl border border-border bg-surface p-6">
+        <div className="mb-4 flex justify-between"><h2 className="text-lg font-bold">{v('duplicates.review','Revisar duplicados')}</h2><button type="button" onClick={()=>setShowDuplicateReview(false)}>{v('ui.close','Fechar')}</button></div>
+        {!duplicateAnalysis.totalDuplicates && <p>{v('duplicates.empty','Nenhum par suspeito encontrado.')}</p>}
+        <ReplenishmentDuplicates products={products} expanded/>
       </section></div>}
 
       <CatalogImportModal isOpen={isCatalogImportOpen} onClose={() => setIsCatalogImportOpen(false)}
@@ -3497,6 +3483,7 @@ export default function Stock() {
       {/* Camera AI Recognition Modal */}
       <CameraCaptureModal
         isOpen={isCameraModalOpen}
+        existingProducts={products}
         onBeforeSave={checkProductDuplicate}
         onClose={() => setIsCameraModalOpen(false)}
         availableCategories={categories}

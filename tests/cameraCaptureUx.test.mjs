@@ -23,18 +23,18 @@ await mkdir(cache, { recursive: true });
 const dir = await mkdtemp(new URL('camera-ui-', cache));
 const entry = `${dir}/Camera.mjs`;
 await build({
-  entryPoints: [new URL('../src/components/CameraCaptureModal.tsx', import.meta.url).pathname],
+  stdin: {contents:"export {CameraCaptureModal} from './src/components/CameraCaptureModal';export {PreferencesProvider} from './src/lib/preferencesContext';",resolveDir:new URL('..',import.meta.url).pathname,loader:'tsx'},
   bundle: true, packages: 'external', format: 'esm', platform: 'node', jsx: 'automatic', outfile: entry,
   plugins: [{ name: 'mock-database', setup(builder) {
     builder.onResolve({ filter: /\/lib\/api$/ }, () => ({ path: 'api', namespace: 'camera-test' }));
     builder.onLoad({ filter: /.*/, namespace: 'camera-test' }, () => ({ contents: 'export const addMultipleProducts = async () => { globalThis.__cameraDatabaseCalls = (globalThis.__cameraDatabaseCalls || 0) + 1; throw new Error("No database writes permitted in this test"); };', loader: 'js' }));
   } }]
 });
-const { CameraCaptureModal } = await import(pathToFileURL(entry).href);
+const { CameraCaptureModal, PreferencesProvider } = await import(pathToFileURL(entry).href);
 function setup(props = {}) {
   dom.window.HTMLCanvasElement.prototype.getContext = () => ({ drawImage() {} });
   dom.window.HTMLCanvasElement.prototype.toDataURL = () => 'data:image/jpeg;base64,aW1hZ2U=';
-  return render(React.createElement(CameraCaptureModal, { isOpen: true, onClose() { assert.fail('analysis must not close the modal'); }, availableCategories: ['Bebidas', 'Diversos'], ...props }));
+  return render(React.createElement(PreferencesProvider,null,React.createElement(CameraCaptureModal, { isOpen: true, onClose() { assert.fail('analysis must not close the modal'); }, availableCategories: ['Bebidas', 'Diversos'], ...props })));
 }
 async function capture(ui) {
   const button = await ui.findByRole('button', { name: 'Tirar Foto do Produto' });
@@ -145,4 +145,14 @@ test('photo confirmation waits for duplicate resolution before attempting any pr
  await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Confirmar e Salvar no Estoque'}));});
  assert.equal(checked.name,'Café');assert.equal(checked.stock,3);assert.equal(closed,1);
  assert.equal(globalThis.__cameraDatabaseCalls || 0,before);
+});
+test('a photo typo flags the existing product and the save awaits a duplicate decision',async t=>{
+ t.mock.method(globalThis,'fetch',async()=>Response.json({success:true,product:{name:'Bhrama Latão',category:'Bebidas'}}));
+ let checked=false;
+ const ui=setup({onClose(){},existingProducts:[{id:'brahma',name:'Brahma (LATAO)',type:'comum',stock:2}],onBeforeSave:async candidate=>{checked=true;assert.equal(candidate.name,'Bhrama Latão');return false;}});
+ await capture(ui);assert.ok(await ui.findByDisplayValue('Bhrama Latão'));assert.ok(ui.getByText('Brahma (LATAO)'));
+ const fields=ui.container.querySelectorAll('input[type="number"]');
+ for(const input of fields)fireEvent.change(input,{target:{value:'1'}});
+ const save=ui.getByRole('button',{name:'Confirmar e Salvar no Estoque'});
+ await act(async()=>fireEvent.click(save));assert.equal(checked,true);assert.ok(ui.getByDisplayValue('Bhrama Latão'));
 });

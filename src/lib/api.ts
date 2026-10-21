@@ -1641,7 +1641,7 @@ export async function getProductDuplicates(candidate: Pick<Product, 'name' | 'ba
 
 // Preserve the original record for historical sales and purchases; hide it from active lists.
 export const mergeProducts = withProductWriteQueue(async (targetId: string, sourceId: string, allowSimilar = false) => {
-  requireManagement();
+  requireOwner();
   if (targetId === sourceId) throw new Error('Escolha dois produtos diferentes.');
   const uid = getEffectiveOwnerId();
   await runTransaction(db, async transaction => {

@@ -14,7 +14,7 @@ for (const name of ['window', 'document', 'navigator', 'HTMLElement', 'Node', 'C
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import('react');
 const { MemoryRouter } = await import('react-router-dom');
-const { render, fireEvent, act, cleanup } = await import('@testing-library/react');
+const { render, fireEvent, act, cleanup, within } = await import('@testing-library/react');
 const { AppToast } = await import('../src/components/AppToast.tsx');
 let desktop = false;
 window.matchMedia = () => ({ matches: desktop, addEventListener() {}, removeEventListener() {} });
@@ -26,7 +26,8 @@ const mocks = {
   api: apiExports.map(name => `export const ${name} = (...args) => globalThis.__uiApi.${name}(...args);`).join('\n'),
   usageReporting: 'export const reportUsage=()=>{};',
   auth: 'export const logout = () => {};',
-  preferencesContext: "export const usePreferences=()=>({t:k=>k,v:(k,f)=>f||k,entityName:()=> 'Produto',languageMode:'neutral',isBasicMode:false,simpleViewMode:false,darkMode:false,setDarkMode:()=>{},toggleSimpleViewMode:()=>{}});",
+  permissionsContext: "export const usePermissions=()=>({isOwner:globalThis.__testRole!=='manager',role:globalThis.__testRole||'owner',ready:true,isEmployee:false,canAccess:()=>true});",
+  preferencesContext: "export const usePreferences=()=>({t:k=>k,v:(k,f)=>({'replenish.merge':'Juntar produtos','replenish.mergeConfirm':'Confirmar união dos produtos?','replenish.cancel':'Cancelar','replenish.saving':'Salvando...'}[k]||f||k),entityName:()=> 'Produto',languageMode:'neutral',isBasicMode:false,simpleViewMode:false,darkMode:false,setDarkMode:()=>{},toggleSimpleViewMode:()=>{}});",
   employeeContext: 'export const useEmployee=()=>({currentEmployee:null,activeAnnouncement:null,clearAnnouncement:()=>{},openSwitchModal:()=>{}});',
   useOnlineStatus: 'export const useOnlineStatus=()=>({isOnline:true,wasOffline:false,syncNow:()=>{}});',
   cloudStore: "export const deleteField=()=>({__eu_delete_field:true});",
@@ -58,7 +59,7 @@ function api() {
     importSupplierCatalog:()=>assert.fail('Unexpected save')
   };
 }
-afterEach(()=>{cleanup();delete globalThis.__uiApi;delete globalThis.__prepareFile;delete globalThis.__recognizeCatalog;});
+afterEach(()=>{cleanup();delete globalThis.__uiApi;delete globalThis.__prepareFile;delete globalThis.__recognizeCatalog;delete globalThis.__testRole;});
 after(async()=>{
   await rm(dir,{recursive:true,force:true});dom.window.close();
   for(const [name,descriptor]of previous){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}
@@ -163,7 +164,7 @@ test('catalog barcode duplicates start unchecked and require an explicit overrid
  globalThis.__recognizeCatalog=async()=>({products:[{...draft,barcode:'001234',basePrice:8}],truncated:false});
  await upload(ui);
  assert.equal(ui.getByRole('checkbox',{name:'Produto 1'}).checked,false);
- assert.ok(ui.getByText(/Duplicado suspeito: Outra apresentação/));
+ assert.ok(ui.getByText(/Produto parecido: Outra apresentação/));
  fireEvent.click(ui.getByRole('button',{name:'Cadastrar mesmo assim'}));
  assert.equal(ui.getByRole('checkbox',{name:'Produto 1'}).checked,true);
  let saved;
@@ -192,10 +193,10 @@ test('manual save checks fresh cloud duplicates and opens the existing product w
  fireEvent.click(ui.getByRole('button',{name:'Novo Produto'}));
  fireEvent.change(ui.getByPlaceholderText('Ex: Coca-Cola 350ml, Sabonete Dove...'),{target:{value:'cafe existente'}});
  await act(async()=>{fireEvent.submit(ui.getByRole('button',{name:'Salvar Produto'}).closest('form'));});
- assert.ok(ui.getByRole('dialog',{name:'Produto já cadastrado'}));
+ assert.ok(ui.getByRole('dialog',{name:'Produto parecido já cadastrado'}));
  await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Abrir o existente'}));});
  assert.ok(ui.getByDisplayValue('Café existente'));
- assert.equal(ui.queryByRole('dialog',{name:'Produto já cadastrado'}),null);
+ assert.equal(ui.queryByRole('dialog',{name:'Produto parecido já cadastrado'}),null);
 });
 
 
@@ -206,9 +207,12 @@ test('stock duplicate review deduplicates name/barcode pairs and provides an exp
  let merged;
  globalThis.__uiApi.mergeProducts=async(target,source)=>{merged={target,source};};
  const ui=render(React.createElement(MemoryRouter,null,React.createElement(Stock)));
- fireEvent.click(ui.getByRole('button',{name:'Verificar duplicados'}));
- assert.equal(ui.getAllByRole('button',{name:'Mesclar neste produto'}).length,1);
- await act(async()=>{fireEvent.click(ui.getByRole('button',{name:'Mesclar neste produto'}));});
+ fireEvent.click(ui.getByRole('button',{name:'Revisar duplicados'}));
+ assert.equal(ui.getAllByRole('button',{name:'Juntar produtos'}).length,1);
+ fireEvent.click(ui.getByRole('button',{name:'Juntar produtos'}));
+ assert.equal(merged,undefined);
+ const confirmation=ui.getByRole('dialog',{name:'Juntar produtos'});
+ await act(async()=>{fireEvent.click(within(confirmation).getByRole('button',{name:'Juntar produtos'}));});
  assert.deepEqual(merged,{target:'a',source:'b'});
 });
 
@@ -353,4 +357,38 @@ test('catalogue provider rejection appears once and keeps manual entry available
  assert.equal(ui.getAllByText(alert.textContent).length,1);
  assert.ok(ui.getByRole('button',{name:'Adicionar produto manualmente'}));
  assert.ok(ui.getByRole('dialog'));
+});
+
+test('owner review contains all three real typo/abbreviation pairs, and excludes a different presentation',()=>{
+ api();
+ const names=['Brahma (LATAO)','Bhrama Latão','Budwiser latao','Budweiser Latão','Budweiser (long)','Budweiser Long Neck','Brahma Long Neck'];
+ globalThis.__uiApi.subscribeProducts=cb=>{cb(names.map((name,i)=>({id:String(i),name,stock:1,type:'comum',category:'Bebidas',unitCost:1,basePrice:2,safetyStock:0})));return()=>{};};
+ const ui=render(React.createElement(MemoryRouter,null,React.createElement(Stock)));
+ fireEvent.click(ui.getByRole('button',{name:'Revisar duplicados'}));
+ const review=within(ui.getByRole('dialog',{name:'Revisar duplicados'}));
+ assert.equal(review.getAllByRole('button',{name:'Juntar produtos'}).length,3);
+ for(const name of names.slice(0,6))assert.match(review.getByText(new RegExp(name.replace(/[()]/g,'\\$&'))).textContent,new RegExp(name.replace(/[()]/g,'\\$&')));
+ assert.equal(review.queryByText(/Brahma Long Neck/),null);
+});
+test('manager cannot open stock duplicate review',()=>{
+ api();globalThis.__testRole='manager';
+ const ui=render(React.createElement(MemoryRouter,null,React.createElement(Stock)));
+ assert.equal(ui.queryByRole('button',{name:'Revisar duplicados'}),null);
+});
+for(const [existingName,readName] of [['Brahma (LATAO)','Bhrama Latão'],['Budwiser latao','Budweiser Latão'],['Budweiser (long)','Budweiser Long Neck']])test(`catalog ${readName} is flagged and unchecked against ${existingName}`,async()=>{
+ const existing={id:'existing',name:existingName,type:'comum',stock:2};
+ const ui=importer({existingProducts:[existing]});
+ globalThis.__recognizeCatalog=async()=>({products:[{...draft,name:readName}],truncated:false});await upload(ui);
+ assert.equal(ui.getByRole('checkbox',{name:'Produto 1'}).checked,false);
+ assert.match(ui.getByText(/Desmarcado por padrão/).textContent,new RegExp(existingName.replace(/[()]/g,'\\$&')));
+ assert.ok(ui.getByRole('button',{name:'Abrir o existente'}));assert.ok(ui.getByRole('button',{name:'Somar ao estoque dele'}));assert.ok(ui.getByRole('button',{name:'Cadastrar mesmo assim'}));
+});
+test('editing an existing product requires a second confirmation to merge and blocks that option for managers',()=>{
+ const decisions=[];
+ let ui=render(React.createElement(ProductDuplicateDialog,{matches:[{id:'p',name:'Brahma Latão',stock:1,type:'comum'}],quantity:2,isMerge:true,onDecision:d=>decisions.push(d)}));
+ fireEvent.click(ui.getByRole('button',{name:'Somar ao estoque dele'}));assert.equal(decisions.length,0);
+ fireEvent.click(ui.getByRole('button',{name:'Confirmar união'}));assert.equal(decisions[0].action,'add');cleanup();
+ globalThis.__testRole='manager';
+ ui=render(React.createElement(ProductDuplicateDialog,{matches:[{id:'p',name:'Brahma Latão',stock:1,type:'comum'}],quantity:2,isMerge:true,onDecision:()=>assert.fail('Manager cannot merge')}));
+ assert.equal(ui.getByRole('button',{name:'Somar ao estoque dele'}).disabled,true);
 });

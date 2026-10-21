@@ -12,6 +12,7 @@ before(async()=>{
  db=new PGlite();await db.exec(`create role authenticated;create role anon;create schema auth;create function auth.jwt() returns jsonb language sql stable as $$select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb$$;grant usage on schema public,auth to authenticated,anon;grant execute on function auth.jwt() to authenticated,anon;`);
  await db.exec(await readFile(new URL('../supabase/migrations/20261014_cloud_source_of_truth.sql',import.meta.url),'utf8'));
  await db.exec(migration);await db.exec(migration);
+ const merges=await readFile(new URL('../supabase/migrations/20261021_owner_product_merges.sql',import.meta.url),'utf8');await db.exec(merges);await db.exec(merges);
  await user('owner');await apply([op('store_settings','owner',{ownerId:'owner',storeName:'Loja',dailyGoal:100,enableCardFees:true,pixRate:.49,creditCardRate:3.5,passCardFeeToCustomer:true,cardFeeCalculationMode:'surcharge'}),op('products','p',{ownerId:'owner',name:'Produto',type:'comum',stock:10,unitCost:3,basePrice:5,unitsPerPackage:6}),op('products','c',{ownerId:'owner',name:'Cigarro',type:'cigarro',stockUnit:'carteira',stock:2,unitCost:10,priceCart:20,priceHalfCart:11,priceUnit:2,pricePack:180,unitsPerPackage:10}),op('customers','customer',{ownerId:'owner',name:'Cliente',totalDebt:20})]);
  for(const [id,role]of [['staff','Operador de Caixa'],['manager','Gerente de Loja']]){
   await user('owner');await apply([op('employees',id+'-record',{ownerId:'owner',name:id,email:id+'@test.invalid',role,pin:'6248',isActive:true,mustChangePin:false}),op('team_invitations','invite-'+id,{ownerId:'owner',email:id+'@test.invalid',name:id,role,status:'pending'})]);
@@ -95,6 +96,15 @@ test('disabled latest employee stays denied even with an older active duplicate 
  await user('staff');await assert.rejects(rpc('eu_access_context',['owner']),/Permission denied/);
  await assert.rejects(rpc('eu_staff_read',['owner','eu_employees','employees',null,'[]',0]),/Permission denied/);
 });
+test('only the owner may archive a merged product or change historical merge IDs, including raw REST-style updates',async()=>{
+ await user('owner');await apply([op('products','merge-guard',{ownerId:'owner',name:'Guard',type:'comum',stock:2,unitCost:1})]);
+ await user('manager');await apply([op('products','merge-guard',{stock:3},'update')]);
+ await assert.rejects(apply([op('products','merge-guard',{mergedIntoId:'p',stock:0},'update')]),/Only the store owner/);
+ await assert.rejects(db.query("update eu_products set data=data || '{\"mergedProductIds\":[\"source\"]}'::jsonb where id='merge-guard'"),/Only the store owner/);
+ await user('owner');await apply([op('products','merge-guard',{mergedIntoId:'p',mergedAt:Date.now(),stock:0},'update')]);
+ assert.equal((await db.query("select data->>'mergedIntoId' as target from eu_products where id='merge-guard'")).rows[0].target,'p');
+});
+
 test('clear-all also needs a correctly scoped approval and cannot call the private primitive',async()=>{
  await user('manager');await assert.rejects(rpc('eu_clear_account_data_internal',[]),/permission denied/);
  await assert.rejects(rpc('eu_clear_account_data',[null]),/Owner PIN required/);

@@ -1,3 +1,5 @@
+import {findDuplicateProducts} from '../lib/duplicateDetector';
+import {usePreferences} from '../lib/preferencesContext';
 import { sortCategories } from '../lib/alphabetical';
 import { useCurrency } from '../lib/useCurrency';
 import { showToast, showActionError } from '../lib/actionFeedback';
@@ -24,6 +26,7 @@ export interface CameraProductDraft extends RecognizedProduct {
 }
 
 interface CameraCaptureModalProps {
+  existingProducts?: Product[];
   isOpen: boolean;
   onClose: () => void;
   availableCategories: string[];
@@ -35,6 +38,7 @@ interface CameraCaptureModalProps {
 
 export function CameraCaptureModal({
   isOpen,
+  existingProducts = [],
   onClose,
   availableCategories,
   onProductSaved,
@@ -42,6 +46,7 @@ export function CameraCaptureModal({
   onRecognized,
   onSelectForEdit
 }: CameraCaptureModalProps) {
+  const {v}=usePreferences();
   const { formatMoney, currencySymbol } = useCurrency();
 
   const [mode, setMode] = useState<'camera' | 'preview'>('camera');
@@ -530,6 +535,7 @@ export function CameraCaptureModal({
                 </div>
               </div>
 
+              {findDuplicateProducts({name:editName,barcode:editBarcode},existingProducts).length>0 && <div role="status" className="rounded-xl border border-amber-500 p-3 text-sm"><p>{v('duplicates.inline','Já existe um produto parecido. Ao salvar, escolha abrir o existente, somar estoque ou cadastrar mesmo assim.')}</p><ul>{findDuplicateProducts({name:editName,barcode:editBarcode},existingProducts).map(p=><li key={p.id} className="notranslate" translate="no">{p.name}</li>)}</ul></div>}
               {/* Editable Fields Form */}
               <div className="space-y-4 bg-surface p-4 sm:p-5 rounded-2xl border border-border">
                 <h3 className="font-bold text-sm text-foreground flex items-center gap-2">

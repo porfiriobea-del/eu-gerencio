@@ -1,6 +1,6 @@
 import type { Product } from '../types';
 import { isValidStockQuantity } from './productUnits';
-import { normalizeProductName } from './duplicateDetector';
+import { normalizeProductName, similarProductNames } from './duplicateDetector';
 
 export interface SupplierDraft {
   id: string;
@@ -57,7 +57,7 @@ export function buildSupplierProducts(drafts: SupplierDraft[], existingNames: st
     const name = row.name.trim(); const category = row.category.trim();
     if (!name || name.length > 100 || !category || category.length > 50) throw new Error('Preencha nome e categoria de todos os produtos selecionados.');
     const key = normalizeProductName(name);
-    if (names.has(key) && !row.allowDuplicate) continue;
+    if ([...names].some(existing=>similarProductNames(name,existing)) && !row.allowDuplicate) continue;
     if (row.purchaseCost === '' || !Number.isFinite(row.purchaseCost) || row.purchaseCost < 0 || !row.costBasis) throw new Error(`Confira o custo e a medida da compra de ${name}.`);
     const cigarette = row.type === 'cigarro';
     const initialStock = row.initialStock === '' || row.initialStock == null ? 0 : row.initialStock;
