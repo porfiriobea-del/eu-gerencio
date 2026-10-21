@@ -1,3 +1,4 @@
+import { bonusCost, validBonusRule } from './purchaseBonus';
 import { stockLimitError } from './replenishment';
 import {configureAccess,normalizeAccessRole,getAccessState,requireManagement,requireOwner,requestDeletionApproval} from './accessControl';
 import {workforceRpc} from './workforceApi';
@@ -24,7 +25,8 @@ import {
   Sale, 
   SaleItem, 
   Payment, 
-  Settings, 
+  Settings,
+  BonusRule,
   CashClosure, 
   MonthlyFinancials, 
   Purchase, 
@@ -965,50 +967,52 @@ export const recordPurchase = withActionDeadline(async (
   const now = Date.now();
   const purchaseRef = doc(collection(db, 'purchases'));
 
-  const cleanPurchase = removeUndefinedFields(purchase as any);
+  requireManagement();
+  const bonusQuantity=purchase.bonusQuantity ?? 0;
+  const costs=bonusCost(purchase.quantity,bonusQuantity,purchase.totalCost);
+  if (!isValidStockQuantity(purchase.quantity) || !isValidStockQuantity(bonusQuantity)) throw new Error('Quantidade inválida: use unidades inteiras ou frações de carteira em passos de 0,05.');
+  const activeEmployee=getActiveEmployeeStorage();
+  const bonusMovementRef=doc(collection(db,'movements'));
   try {
     await runTransaction(db, async batch => {
-      batch.set(purchaseRef, {
-        ...cleanPurchase,
-        ownerId: uid,
-        createdAt: now
-      });
-
-      // Atualizar automaticamente o estoque do produto sem precisar abrir o modal
-      if (purchase.productId && (options?.updateProductStock !== false || options?.updateUnitCost || options?.updateExpirationDate || options?.updatePromoPrice)) {
-        const prodDoc = await resolveActiveProduct(batch, purchase.productId);
-        const prodRef = prodDoc.ref;
-        if (prodDoc.exists()) {
-          const p = normalizeCigaretteStock(prodDoc.data() as Product);
-          const updatePayload: any = {
-            ...cigaretteStockFields(p),
-            updatedAt: now
-          };
-
-          if (options?.updateProductStock !== false) {
-            updatePayload.stock = Math.max(0, Math.round(((p.stock || 0) + purchase.quantity) * 20) / 20);
-          }
-
-          if (options?.updateUnitCost && purchase.unitCost > 0) {
-            updatePayload.unitCost = purchase.unitCost;
-          }
-
-          if (options?.updateExpirationDate && purchase.expirationDate) {
-            updatePayload.expirationDate = purchase.expirationDate;
-          }
-
-          if (options?.updatePromoPrice && purchase.suggestedPromoPrice !== undefined && purchase.suggestedPromoPrice > 0) {
-            updatePayload.hasPromoSuggestion = purchase.suggestPromo !== false;
-            updatePayload.promoPrice = purchase.suggestedPromoPrice;
-            if (purchase.promoDiscountPercent !== undefined) {
-              updatePayload.promoDiscountPercent = purchase.promoDiscountPercent;
-            }
-          }
-
-          batch.update(prodRef, removeUndefinedFields(updatePayload));
-        }
+      let prodDoc=await resolveActiveProduct(batch,purchase.productId);
+      if (!prodDoc.exists() || prodDoc.data().ownerId!==uid) throw new Error('Produto não encontrado nesta loja.');
+      const requestedBonus=purchase.bonusProductId || purchase.productId;
+      const bonusDoc=bonusQuantity>0 && requestedBonus!==purchase.productId && requestedBonus!==prodDoc.id ? await resolveActiveProduct(batch,requestedBonus) : prodDoc;
+      if (bonusDoc.id===prodDoc.id) prodDoc=bonusDoc;
+      const p=normalizeCigaretteStock(prodDoc.data() as Product);
+      if (p.type!=='cigarro' && !Number.isSafeInteger(purchase.quantity)) throw new Error('Informe unidades inteiras.');
+      if (!bonusDoc.exists() || bonusDoc.data().ownerId!==uid) throw new Error('Produto da bonificação não encontrado.');
+      const bonusProduct=normalizeCigaretteStock(bonusDoc.data() as Product);
+      if (bonusProduct.type!=='cigarro' && !Number.isSafeInteger(bonusQuantity)) throw new Error('Informe bônus em unidades inteiras.');
+      const same=prodDoc.id===bonusDoc.id;
+      const stockUpdated=options?.updateProductStock!==false;
+      const updatePayload: Partial<Product>={...cigaretteStockFields(p),updatedAt:now};
+      if (stockUpdated) updatePayload.stock=(Math.round(p.stock*20)+Math.round(purchase.quantity*20)+(same?Math.round(bonusQuantity*20):0))/20;
+      if ((bonusQuantity>0 || options?.updateUnitCost) && (purchase.totalCost>0 || bonusQuantity>0)) updatePayload.unitCost=costs.effectiveUnitCost;
+      if (options?.updateExpirationDate && purchase.expirationDate) updatePayload.expirationDate=purchase.expirationDate;
+      if (options?.updatePromoPrice && purchase.suggestedPromoPrice!==undefined && purchase.suggestedPromoPrice>0) {
+        updatePayload.hasPromoSuggestion=purchase.suggestPromo!==false;
+        updatePayload.promoPrice=purchase.suggestedPromoPrice;
+        if (purchase.promoDiscountPercent!==undefined) updatePayload.promoDiscountPercent=purchase.promoDiscountPercent;
       }
-
+      batch.update(prodDoc.ref,removeUndefinedFields(updatePayload));
+      if (bonusQuantity>0 && !same) batch.update(bonusDoc.ref,removeUndefinedFields({
+        ...cigaretteStockFields(bonusProduct),updatedAt:now,
+        ...(stockUpdated?{stock:(Math.round(bonusProduct.stock*20)+Math.round(bonusQuantity*20))/20}:{}),
+        unitCost:costs.effectiveUnitCost
+      }));
+      batch.set(purchaseRef,removeUndefinedFields({...purchase, productId:prodDoc.id,
+        bonusQuantity,bonusProductId:bonusQuantity>0?bonusDoc.id:undefined,
+        bonusProductName:bonusQuantity>0?bonusProduct.name:undefined,bonusStockUnit:bonusQuantity>0?(bonusProduct.type==='cigarro'?'carteira':'unidade'):undefined,
+        ...costs,stockUpdated,ownerId:uid,createdAt:now}));
+      if (bonusQuantity>0 && stockUpdated) batch.set(bonusMovementRef,{
+        ownerId:uid,createdAt:now,timestamp:now,
+        employeeId:purchase.employeeId || activeEmployee.id,employeeName:purchase.employeeName || activeEmployee.name,
+        type:'stock_in',entryKind:'bonus',entityId:bonusDoc.id,entityName:bonusProduct.name,
+        description:`Bonificação: +${formatProductStock(bonusProduct,bonusQuantity)} de "${bonusProduct.name}"`,
+        quantity:bonusQuantity,amount:0,notes:`Compra ${purchaseRef.id}`
+      });
     });
 
     reportUsage('compra_registrada', uid, purchase.totalCost || 0);
@@ -1038,20 +1042,31 @@ export const deletePurchase = withActionDeadline(async (purchaseId: string, reve
   if (!uid) throw new Error('Unauthenticated');
 
   try {
+    requireManagement();
     await runTransaction(db, async batch => {
-      batch.delete(doc(db, 'purchases', purchaseId));
-
-      if (revertStock?.productId && revertStock.quantityToSubtract > 0) {
-        const prodDoc = await resolveActiveProduct(batch, revertStock.productId);
-        const prodRef = prodDoc.ref;
-        if (prodDoc.exists()) {
-          const p = prodDoc.data() as Product;
-          const newStock = Math.max(0, Math.round(((p.stock || 0) - revertStock.quantityToSubtract) * 20) / 20);
-          batch.update(prodRef, { stock: newStock, updatedAt: Date.now() });
+      const ref=doc(db,'purchases',purchaseId),snapshot=await batch.get(ref);
+      if (!snapshot.exists()) return;
+      const purchase=snapshot.data() as Purchase;
+      if (purchase.ownerId!==uid) throw new Error('Sem acesso a esta compra.');
+      if (revertStock && purchase.stockUpdated!==false) {
+        const deductions=new Map<string,{snapshot:Awaited<ReturnType<typeof resolveActiveProduct>>;quantity:number}>();
+        for (const [id,quantity] of [[purchase.productId,purchase.quantity],[purchase.bonusProductId || purchase.productId,purchase.bonusQuantity || 0]] as [string,number][]) {
+          if (!quantity) continue;
+          const product=await resolveActiveProduct(batch,id);
+          if (!product.exists() || product.data().ownerId!==uid) throw new Error('Produto não encontrado para estornar a compra.');
+          const old=deductions.get(product.id);
+          deductions.set(product.id,{snapshot:product,quantity:(old?.quantity || 0)+quantity});
+        }
+        for (const {snapshot:product,quantity} of deductions.values()) {
+          const current=normalizeCigaretteStock(product.data() as Product);
+          const stock=(Math.round(current.stock*20)-Math.round(quantity*20))/20;
+          if (stock<0) throw new Error('Parte da compra já saiu do estoque. Confira antes de estornar.');
+          batch.update(product.ref,{...cigaretteStockFields(current),stock,updatedAt:Date.now()});
         }
       }
-
+      batch.delete(ref);
     });
+
   } catch (err) {
     handleCloudError(err, OperationType.DELETE, `purchases/${purchaseId}`);
     throw err;
@@ -1780,3 +1795,23 @@ export async function getReplenishmentSales(signal?: AbortSignal): Promise<SaleI
     if (rows.length < 1000) return items;
   }
 }
+
+export const saveBonusRule = withActionDeadline(async (rule: BonusRule | null, removeId?: string) => {
+  requireManagement();
+  const uid=getEffectiveOwnerId();
+  if (!uid) throw new Error('Entre na sua conta.');
+  await runTransaction(db,async transaction=>{
+    const ref=doc(db,'settings',uid),snapshot=await transaction.get(ref);
+    if (!snapshot.exists()) throw new Error('Cadastre a loja antes de salvar a regra.');
+    if (rule) {
+      const products=await Promise.all([...new Set([rule.productId,rule.bonusProductId])].map(async id=>{
+        const p=await transaction.get(doc(db,'products',id));
+        if (!p.exists() || p.data().ownerId!==uid) throw new Error('Produto não disponível nesta loja.');
+        return {id:p.id,...p.data()} as Product;
+      }));
+      validBonusRule(rule,products);
+    }
+    const rules=(snapshot.data().bonusRules || []) as BonusRule[];
+    transaction.update(ref,{bonusRules:[...rules.filter(r=>r.id!==(rule?.id || removeId)),...(rule?[{...rule,supplier:rule.supplier.trim()}]:[])],updatedAt:Date.now()});
+  });
+});

@@ -116,6 +116,7 @@ export type MovementType =
   | 'manual_entry';
 
 export interface Movement {
+  entryKind?: 'bonus';
   id?: string;
   timestamp: number;
   employeeId: string;
@@ -197,7 +198,27 @@ export interface Payment {
   createdAt: number;
 }
 
+export type BonusUnit = 'maco' | 'pacote' | 'carteira' | 'unidade' | 'fardo';
+export interface BonusRule {
+  id: string;
+  supplier: string;
+  productId: string;
+  buyQuantity: number;
+  buyUnit: BonusUnit;
+  bonusProductId: string;
+  bonusQuantity: number;
+  bonusUnit: BonusUnit;
+}
+
 export interface Purchase {
+  bonusQuantity?: number; // In the bonus product's base stock unit, not packages.
+  bonusProductId?: string;
+  bonusProductName?: string;
+  bonusStockUnit?: 'carteira' | 'unidade';
+  bonusRuleId?: string;
+  effectiveUnitCost?: number;
+  bonusSavings?: number; // Estimated value at the pre-bonus acquisition cost.
+  stockUpdated?: boolean;
   id?: string;
   productId: string;
   productName: string;
@@ -221,6 +242,7 @@ export interface Purchase {
 }
 
 export interface Settings {
+  bonusRules?: BonusRule[];
   currency?: 'BRL' | 'USD' | 'EUR';
   googleSheetsWebhookUrl?: string;
   googleSheetsWebhookEnabled?: boolean;

@@ -1,3 +1,5 @@
+import {BonusRules} from '../components/BonusRules';
+import {bonusCost, calculateBonus, nearBonus, monthlyBonusSavings, supplierKey, bonusUnits, bonusUnitKey} from '../lib/purchaseBonus';
 import { useStockFormatting } from '../lib/useStockFormatting';
 import { compareAlphabetical, sortCategories, sortByName } from '../lib/alphabetical';
 import { useCurrency } from '../lib/useCurrency';
@@ -6,9 +8,9 @@ import { buildReplenishment, usedSuppliers } from '../lib/replenishment';
 import { ReplenishmentDuplicates } from '../components/ReplenishmentDuplicates';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import { useState, useEffect, useMemo } from 'react';
-import { subscribeProducts, subscribePurchases, recordPurchase, deletePurchase, getReplenishmentSales } from '../lib/api';
+import { subscribeProducts, subscribePurchases, recordPurchase, deletePurchase, getReplenishmentSales, subscribeSettings } from '../lib/api';
 import { exportPurchasesToCSV } from '../lib/exportUtils';
-import { Product, Purchase, SaleItem } from '../types';
+import { Product, Purchase, SaleItem, BonusRule } from '../types';
 import { 
   ShoppingBag, Plus, Check, Clock, Calendar, AlertTriangle, 
   Search, Trash2, Printer, CheckCircle2,
@@ -54,7 +56,7 @@ export default function Purchases() {
     window.addEventListener('cloud-refresh', refresh);
     return () => {controller.abort();clearInterval(timer);window.removeEventListener('focus',refresh);window.removeEventListener('cloud-refresh',refresh);};
   }, [products]);
-  const [activeTab, setActiveTab] = useState<'replenish' | 'history' | 'checklist'>('replenish');
+  const [activeTab, setActiveTab] = useState<'replenish' | 'history' | 'checklist' | 'bonus'>('replenish');
   const [isOptionalPurchaseFieldsOpen, setIsOptionalPurchaseFieldsOpen] = useState(() => !(simpleViewMode || isBasicMode));
 
   // Search and filters
@@ -71,6 +73,23 @@ export default function Purchases() {
   const [unitCost, setUnitCost] = useState<number>(0);
   const [totalCost, setTotalCost] = useState<number>(0);
   const [supplier, setSupplier] = useState<string>('');
+  const [bonusRules,setBonusRules]=useState<BonusRule[]>([]);
+  const [bonusReady,setBonusReady]=useState(false);
+  const [bonusRuleId,setBonusRuleId]=useState('');
+  const [bonusProductId,setBonusProductId]=useState('');
+  const [bonusQuantity,setBonusQuantity]=useState(0);
+  useEffect(()=>subscribeSettings(settings=>{setBonusRules(settings?.bonusRules || []);setBonusReady(true);},()=>setBonusReady(false)),[]);
+  const matchingBonusRules=useMemo(()=>bonusRules.filter(r=>r.productId===selectedProduct?.id && supplierKey(r.supplier)===supplierKey(supplier)),[bonusRules,selectedProduct?.id,supplier]);
+  const activeBonusRule=matchingBonusRules.find(r=>r.id===bonusRuleId) || matchingBonusRules[0];
+  const bonusRuleSignature=JSON.stringify(activeBonusRule);
+  useEffect(()=>{
+    if(!selectedProduct)return;
+    const bonusProduct=products.find(p=>p.id===activeBonusRule?.bonusProductId);
+    if(activeBonusRule && bonusProduct) {
+      const quantity=purchaseType==='package'?packageQty*getPurchasePackageUnits(selectedProduct):looseUnitsQty;
+      try {setBonusProductId(bonusProduct.id!);setBonusQuantity(calculateBonus(activeBonusRule,selectedProduct,bonusProduct,quantity));} catch {setBonusQuantity(0);showToast(v('bonus.ruleInvalid'));}
+    } else {setBonusQuantity(0);setBonusProductId(selectedProduct.id || '');}
+  },[bonusRuleSignature,selectedProduct?.id,purchaseType,packageQty,looseUnitsQty]);
   const [purchaseDate, setPurchaseDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [notes, setNotes] = useState<string>('');
   const [updateProductUnitCost, setUpdateProductUnitCost] = useState<boolean>(true);
@@ -227,7 +246,7 @@ export default function Purchases() {
 
   // Open register purchase modal
   const handleOpenPurchaseModal = (product: Product, suggestedUnits?: number) => {
-    setSelectedProduct(product);
+    setSelectedProduct(product);setBonusRuleId('');setBonusQuantity(0);setBonusProductId(product.id || '');
     const unitsPerPkg = getPurchasePackageUnits(product);
     const isPackaged = unitsPerPkg > 1;
 
@@ -316,6 +335,7 @@ export default function Purchases() {
           productName: selectedProduct.name,
           category: selectedProduct.category || 'Diversos',
           quantity: finalUnits,
+          bonusQuantity, bonusProductId:bonusQuantity>0?bonusProductId:undefined, bonusRuleId:activeBonusRule?.id,
           packageQuantity: purchaseType === 'package' && unitsPerPkg > 1 ? packageQty : undefined,
           packageType: selectedProduct.purchaseForm || (unitsPerPkg > 1 ? 'fardo' : 'unidade'),
           unitCost: unitCost,
@@ -382,7 +402,7 @@ export default function Purchases() {
     window.print();
   };
 
-  const quickSuppliers = useMemo(() => usedSuppliers(purchases), [purchases]);
+  const quickSuppliers = useMemo(() => usedSuppliers([...purchases,...bonusRules.map(r=>({supplier:r.supplier} as Purchase))]), [purchases,bonusRules]);
   const supplierGroups = useMemo(() => {
     const groups = new Map<string, typeof filteredReplenish>();
     for (const item of filteredReplenish) {
@@ -506,7 +526,8 @@ export default function Purchases() {
       </div>
 
       {/* Tabs Navigation */}
-      <div className="flex border-b border-border gap-6">
+      <div className="flex border-b border-border gap-6 overflow-x-auto [&>button]:shrink-0">
+        <button onClick={()=>setActiveTab('bonus')} className={`pb-3 text-sm font-semibold border-b-2 ${activeTab==='bonus'?'border-primary text-primary':'border-transparent'}`}>{v('bonus.tab')}</button>
         <button
           onClick={() => setActiveTab('replenish')}
           className={`pb-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
@@ -550,6 +571,8 @@ export default function Purchases() {
         </button>
       </div>
 
+      {activeTab==='bonus' && <BonusRules rules={bonusRules} products={products} suppliers={quickSuppliers} ready={bonusReady}/>}
+      <div className="rounded-2xl border border-border bg-surface p-4"><span>{v('bonus.monthly')}: </span><strong className="text-emerald-600">{formatMoney(monthlyBonusSavings(purchases))}</strong><p className="text-xs text-muted-foreground">{v('bonus.savingsExplanation')}</p></div>
       {/* TAB 1: REPLENISH LIST */}
       {activeTab === 'replenish' && (
         <div className="space-y-4">
@@ -606,6 +629,7 @@ export default function Purchases() {
                 <p className="text-sm text-muted-foreground">{v('replenish.average')}: {formatStockNumber(item.average)} · {v('replenish.period')}: {formatStockNumber(item.days)}</p>
                 <p>{v('replenish.coverage').replace('{days}', formatStockNumber(item.coverage!))}</p>
               </>}
+              {nearBonus(bonusRules,item.supplier,item.product,item.suggestedBuyUnits).map(({rule,missing})=><p key={rule.id} className="text-sm text-emerald-600">{v('bonus.near').replace('{more}',`${formatStockNumber(missing/bonusUnits(item.product,rule.buyUnit))} ${v(bonusUnitKey(rule.buyUnit,missing/bonusUnits(item.product,rule.buyUnit)))}`).replace('{quantity}',String(rule.bonusQuantity)).replace('{unit}',v(bonusUnitKey(rule.bonusUnit,rule.bonusQuantity)))} — <span className="notranslate" translate="no">{products.find(p=>p.id===rule.bonusProductId)?.name}</span></p>)}
               {item.invalidLimits && <p role="alert" className="text-amber-600">{v('replenish.invalidLimits')}</p>}
               {item.aboveMaximum && <p className="text-amber-600">{v('replenish.aboveMax')}</p>}
               <div className="flex flex-wrap justify-between items-center gap-3">
@@ -813,6 +837,7 @@ export default function Purchases() {
                             <div className="font-semibold text-foreground text-sm notranslate normal-case" translate="no">
                               {item.productName}
                             </div>
+                            {!!item.bonusQuantity && <p className="text-xs text-emerald-600">{v('bonus.history')}: {formatStockNumber(item.bonusQuantity)} {v(item.bonusStockUnit==='carteira'?'bonus.unit.carteira':'bonus.unit.unidade')} · <span className="notranslate" translate="no">{item.bonusProductName}</span></p>}
                             {item.category && (
                               <div className="text-[11px] text-muted-foreground">
                                 {item.category}
@@ -850,7 +875,7 @@ export default function Purchases() {
                           </td>
 
                           <td className="p-3 text-right text-xs text-muted-foreground">
-                            {formatMoney(item.unitCost)}
+                            {formatMoney(item.effectiveUnitCost ?? item.unitCost)}
                           </td>
 
                           <td className="p-3 text-right font-bold text-primary">
@@ -1053,7 +1078,7 @@ export default function Purchases() {
               </div>
 
               {/* Option to update product registered cost */}
-              {unitCost > 0 && Math.abs(unitCost - selectedProduct.unitCost) > 0.001 && (
+              {bonusQuantity === 0 && unitCost > 0 && Math.abs(unitCost - selectedProduct.unitCost) > 0.001 && (
                 <div className="p-3 bg-palette-1/50 rounded-xl border border-primary/20 flex items-center justify-between text-xs">
                   <div>
                     <span className="font-semibold text-foreground block">
@@ -1087,6 +1112,15 @@ export default function Purchases() {
                   />
                 </div>
               <datalist id="used-suppliers">{quickSuppliers.map(name=><option key={name} value={name} />)}</datalist>
+              <div className="border border-emerald-500/30 rounded-xl p-3 space-y-3">
+                <h3 className="font-semibold">{v('bonus.tab')}</h3>
+                {!bonusReady && <p role="alert">{v('bonus.notReady')}</p>}
+                {matchingBonusRules.length>0 && <label className="block text-sm">{v('bonus.rule')}<select value={activeBonusRule?.id || ''} onChange={e=>setBonusRuleId(e.target.value)} className="block w-full border border-border bg-surface rounded-xl p-2">{matchingBonusRules.map(r=><option key={r.id} value={r.id}>{v('bonus.every')} {r.buyQuantity} {v(bonusUnitKey(r.buyUnit,r.buyQuantity))} / {v('bonus.gains')} {r.bonusQuantity} {v(bonusUnitKey(r.bonusUnit,r.bonusQuantity))}</option>)}</select></label>}
+                <label className="block text-sm">{v('bonus.receivedProduct')}<select value={bonusProductId} onChange={e=>{setBonusProductId(e.target.value);setBonusQuantity(0);}} className="block w-full border border-border bg-surface rounded-xl p-2 notranslate" translate="no">{products.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+                <label className="block text-sm">{v('bonus.receivedQuantity')} ({products.find(p=>p.id===bonusProductId)?.type==='cigarro'?v('bonus.unit.carteira'):v('bonus.unit.unidade')})<input type="number" min="0" step={products.find(p=>p.id===bonusProductId)?.type==='cigarro'?'0.05':'1'} value={stockInputValue(bonusQuantity)} onChange={e=>setBonusQuantity(Number(e.target.value))} className="block w-full border border-border bg-surface rounded-xl p-2"/></label>
+                <p className="text-xs text-muted-foreground">{v('bonus.adjust')}</p>
+                {bonusQuantity>0 && looseUnitsQty>0 && <><p>{v('bonus.effective')}: <strong>{formatMoney(bonusCost(looseUnitsQty,bonusQuantity,totalCost).effectiveUnitCost)}</strong></p><p className="text-xs text-muted-foreground">{v('bonus.allocation')}</p></>}
+              </div>
               {/* Detalhes opcionais da compra */}
               <div className="rounded-xl border border-border bg-muted/30 overflow-hidden">
                 <button
@@ -1390,7 +1424,7 @@ export default function Purchases() {
                         <div className="p-2 rounded-lg bg-muted/40 border border-border/80 text-[11px] space-y-0.5">
                           {(() => {
                             const pPrice = Number(suggestedPromoPrice) || 0;
-                            const cost = unitCost > 0 ? unitCost : selectedProduct.unitCost;
+                            const cost = bonusQuantity>0 && looseUnitsQty>0 ? bonusCost(looseUnitsQty,bonusQuantity,totalCost).effectiveUnitCost : unitCost > 0 ? unitCost : selectedProduct.unitCost;
                             const profit = pPrice - cost;
                             const marginPct = cost > 0 ? ((profit / cost) * 100).toFixed(1) : '0';
                             return (
@@ -1534,6 +1568,7 @@ export default function Purchases() {
               Você está prestes a excluir a compra de <strong>{purchaseToDelete.quantity} un.</strong> de "{purchaseToDelete.productName}".
             </p>
 
+            {!!purchaseToDelete.bonusQuantity && <p className="text-xs text-amber-600 mb-3">{v('bonus.reverse')}</p>}
             <div className="bg-muted/50 p-3 rounded-xl mb-4 text-xs">
               <label className="flex items-start gap-2 cursor-pointer">
                 <input

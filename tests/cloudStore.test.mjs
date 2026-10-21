@@ -433,3 +433,49 @@ test('team invitation creates only one employee, uses store name and never place
  assert.equal(employees.docs.filter(row=>row.data().email==='invite@test.invalid').length,1);
  assert.ok(employees.docs.some(row=>row.data().email==='ana@example.com'));
 });
+
+test('bonus rules persist per store without overwriting settings and validate both products',async()=>{
+ const products=['bonus-camel','bonus-winston'];
+ for(const id of products)await store.setDoc(store.doc(store.db,'products',id),{ownerId:'owner',name:id,type:'cigarro',stockUnit:'carteira',stock:0,unitCost:10,basePrice:15,unitsPerPackage:10});
+ const settingsRef=store.doc(store.db,'settings','owner'),before=(await store.getDoc(settingsRef)).data();
+ const rule={id:'bonus-rule',supplier:'Distribuidora',productId:products[0],buyQuantity:10,buyUnit:'maco',bonusProductId:products[1],bonusQuantity:1,bonusUnit:'maco'};
+ await api.saveBonusRule(rule);
+ const settings=(await store.getDoc(settingsRef)).data();assert.equal(settings.storeName,before.storeName);assert.deepEqual(settings.bonusRules,[rule]);
+ await assert.rejects(api.saveBonusRule({...rule,buyQuantity:0}),/quantidades/);
+ await api.saveBonusRule(null,rule.id);assert.deepEqual((await store.getDoc(settingsRef)).data().bonusRules,[]);
+});
+test('same-product bonus updates stock and effective cost atomically, retries do not duplicate bonus entries or create sales',async()=>{
+ const id='bonus-camel',ref=store.doc(store.db,'products',id);await store.updateDoc(ref,{stock:0,unitCost:10});
+ const salesBefore=(await store.getDocs(store.collection(store.db,'sales'))).size;
+ forcedConflicts=2;
+ const purchaseId=await api.recordPurchase({productId:id,productName:'Camel',quantity:100,bonusQuantity:10,bonusProductId:id,unitCost:10,totalCost:1000,date:'2026-10-21'},{updateUnitCost:true});
+ const p=(await store.getDoc(ref)).data(),purchase=(await store.getDoc(store.doc(store.db,'purchases',purchaseId))).data();
+ assert.equal(p.stock,110);assert.equal(p.unitCost,1000/110);assert.equal(purchase.effectiveUnitCost,1000/110);assert.equal(purchase.bonusSavings,100);
+ const bonusEntries=(await store.getDocs(store.collection(store.db,'movements'))).docs.map(d=>d.data()).filter(m=>m.entryKind==='bonus' && m.notes===`Compra ${purchaseId}`);
+ assert.equal(bonusEntries.length,1);assert.equal(bonusEntries[0].quantity,10);assert.equal(bonusEntries[0].type,'stock_in');assert.equal(bonusEntries[0].amount,0);
+ assert.equal((await store.getDocs(store.collection(store.db,'sales'))).size,salesBefore);
+ await api.deletePurchase(purchaseId,{productId:id,quantityToSubtract:1});assert.equal((await store.getDoc(ref)).data().stock,0);
+});
+test('cross-product bonus splits acquisition cost, uses actual stock and rolls back both products on deletion',async()=>{
+ const ref=store.doc(store.db,'products','bonus-camel'),other=store.doc(store.db,'products','bonus-winston');
+ await store.updateDoc(ref,{stock:5});await store.updateDoc(other,{stock:2});
+ const id=await api.recordPurchase({productId:ref.id,productName:'Camel',quantity:100,bonusProductId:other.id,bonusQuantity:10,unitCost:10,totalCost:1000,date:'2026-10-21'},{updateUnitCost:false});
+ assert.equal((await store.getDoc(ref)).data().stock,105);assert.equal((await store.getDoc(other)).data().stock,12);
+ assert.equal((await store.getDoc(ref)).data().unitCost,1000/110);assert.equal((await store.getDoc(other)).data().unitCost,1000/110);
+ await store.updateDoc(other,{stock:1});
+ await assert.rejects(api.deletePurchase(id,{productId:ref.id,quantityToSubtract:100}),/já saiu/);
+ assert.ok((await store.getDoc(store.doc(store.db,'purchases',id))).exists());assert.equal((await store.getDoc(ref)).data().stock,105);
+ await store.updateDoc(other,{stock:12});await api.deletePurchase(id,{productId:ref.id,quantityToSubtract:100});
+ assert.equal((await store.getDoc(ref)).data().stock,5);assert.equal((await store.getDoc(other)).data().stock,2);
+});
+test('a later sale uses the effective purchase cost for profit, while bonus itself creates no revenue',async()=>{
+ const ref=store.doc(store.db,'products','bonus-profit');
+ await store.setDoc(ref,{ownerId:'owner',name:'Produto bônus',type:'comum',stock:0,unitCost:10,basePrice:15,unitsPerPackage:1});
+ await api.recordPurchase({productId:ref.id,productName:'Produto bônus',quantity:100,bonusQuantity:10,bonusProductId:ref.id,unitCost:10,totalCost:1000,date:'2026-10-21'});
+ await api.recordSale({total:15,type:'cash',customerId:''},[{productId:ref.id,name:'Produto bônus',format:'Padrão',quantity:1,price:15,unitCost:999,stockDeduction:1}],[]);
+ const sales=(await store.getDocs(store.collection(store.db,'sales'))).docs.filter(d=>d.data().itemsSummary?.includes('Produto bônus'));
+ assert.equal(sales.length,1);assert.equal(sales[0].data().total,15);
+ const items=await api.getSaleItems(sales[0].id);assert.equal(items[0].unitCost,1000/110);
+ assert.ok(Math.abs((items[0].price-items[0].unitCost)-(15-1000/110))<1e-10);
+ assert.equal((await store.getDoc(ref)).data().stock,109);
+});

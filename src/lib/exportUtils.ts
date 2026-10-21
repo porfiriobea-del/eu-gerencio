@@ -37,7 +37,7 @@ export function exportPurchasesToCSV(purchases: Purchase[], filenamePrefix = 're
       ("Custo Unitário (" + csvCurrency + ")"),
       ("Total Pago (" + csvCurrency + ")"),
       'Fornecedor / Local',
-      'Observações'
+      'Observações', 'Quantidade bonificada', 'Produto bonificado', 'Medida do bônus', 'Custo efetivo (' + csvCurrency + ')', 'Economia estimada (' + csvCurrency + ')'
     ]
   ];
 
@@ -65,7 +65,9 @@ export function exportPurchasesToCSV(purchases: Purchase[], filenamePrefix = 're
       formatAmount(Number(p.unitCost || 0), csvOptions),
       formatAmount(Number(p.totalCost || 0), csvOptions),
       `"${(p.supplier || 'Não informado').replace(/"/g, '""')}"`,
-      `"${(p.notes || '').replace(/"/g, '""')}"`
+      `"${(p.notes || '').replace(/"/g, '""')}"`,
+      String(p.bonusQuantity || 0), `"${(p.bonusProductName || '').replace(/"/g, '""')}"`, p.bonusStockUnit || '',
+      formatAmount(p.effectiveUnitCost ?? p.unitCost ?? 0,csvOptions), formatAmount(p.bonusSavings || 0,csvOptions)
     ]);
   });
 
