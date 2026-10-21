@@ -1,3 +1,4 @@
+import { stockLimitError } from '../lib/replenishment';
 import { MobileStockList } from '../components/MobileStockList';
 import { useStockFormatting } from '../lib/useStockFormatting';
 import { compareAlphabetical, sortCategories } from '../lib/alphabetical';
@@ -280,7 +281,7 @@ export default function Stock() {
         purchaseTotalCost: calculatedPkgCost ? String(calculatedPkgCost) : '',
         initialStock: product.initialStock !== undefined ? product.initialStock : product.stock,
         initialStockDate: product.initialStockDate || (product.createdAt ? format(new Date(product.createdAt), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')),
-        maxStock: product.maxStock || Math.max(product.stock, product.safetyStock * 2 || 20),
+        maxStock: product.maxStock ?? Math.max(product.stock, product.safetyStock * 2 || 20),
         pricePackage: product.pricePackage !== undefined ? product.pricePackage : (unitsPkg > 1 ? Number((product.basePrice * unitsPkg).toFixed(2)) : undefined),
         pricePack: product.pricePack ?? '',
         priceCart: product.priceCart ?? '',
@@ -321,7 +322,10 @@ export default function Stock() {
     e.preventDefault();
     const stockNum = Number(formData.stock);
     const safetyNum = Number(formData.safetyStock);
-    const maxNum = Number(formData.maxStock) || Math.max(stockNum, safetyNum * 2, 10);
+    const maxNum = Number(formData.maxStock);
+    if (stockLimitError({maxStock:maxNum, safetyStock:safetyNum}) || !Number.isFinite(safetyNum) || safetyNum<0) {
+      showToast(v('replenish.invalidLimits')); return;
+    }
     const initStockNum = Number(formData.initialStock !== undefined ? formData.initialStock : stockNum);
     const unitsPkg = getPackageUnits(formData);
     if (!(formData.type === 'cigarro' ? isValidStockQuantity(stockNum) && isValidStockQuantity(initStockNum) : Number.isSafeInteger(stockNum) && stockNum >= 0 && Number.isSafeInteger(initStockNum) && initStockNum >= 0)) {
@@ -2882,13 +2886,15 @@ export default function Stock() {
                   <input 
                     type="number" 
                     required 
-                    min={formData.type === 'cigarro' ? 0.05 : 1}
+                    min={Math.max(0, Number(formData.safetyStock) || 0)}
                     step={formData.type === 'cigarro' ? '0.05' : '1'}
-                    value={formData.maxStock ? stockInputValue(formData.maxStock) : ''}
+                    value={formData.maxStock === undefined || formData.maxStock === '' ? '' : stockInputValue(formData.maxStock)}
                     placeholder="Ex: 50"
                     onChange={e => setFormData({...formData, maxStock: e.target.value})} 
                     className="w-full border-2 border-primary p-2.5 rounded-lg bg-surface text-foreground font-bold shadow-xs" 
                   />
+                  {stockLimitError({maxStock:Number(formData.maxStock),safetyStock:Number(formData.safetyStock)}) && <p role="alert" className="text-xs text-red-600 mt-1">{v('replenish.invalidLimits')}</p>}
+                  {Number(formData.maxStock) < Number(formData.stock) && <p className="text-xs text-amber-600 mt-1">{v('replenish.aboveMax')}</p>}
                 </div>
 
                 <div>

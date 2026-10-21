@@ -1,3 +1,4 @@
+import { stockLimitError } from './replenishment';
 import {configureAccess,normalizeAccessRole,getAccessState,requireManagement,requireOwner,requestDeletionApproval} from './accessControl';
 import {workforceRpc} from './workforceApi';
 import { assertEmployeePin, assertTemporaryEmployeePin, invitationStoreName } from './teamInvitation';
@@ -5,7 +6,7 @@ import { validateNotebook, moneyCents, notebookSum, type NotebookEntry } from '.
 import { storeProductImage, isEmbeddedProductImage } from './productImages';
 import { calculatePayment, paymentLabel } from './paymentFees';
 import { soldBaseQuantity } from './productSalesRanking';
-import { findDuplicateProducts, isDuplicateProduct } from './duplicateDetector';
+import { findDuplicateProducts, isDuplicateProduct, similarProductNames } from './duplicateDetector';
 import { supabase } from './supabase';
 import { reportUsage } from './usageReporting';
 import { exportFeedbackToSheets } from './feedbackSheets';
@@ -192,6 +193,7 @@ export const subscribeProducts = (callback: (p: Product[]) => void) => {
 };
 
 export const addProduct = withActionDeadline(async (product: Omit<Product, 'id'|'ownerId'|'createdAt'|'updatedAt'>) => {
+  if (stockLimitError(product)) throw new Error('O estoque máximo precisa ser igual ou maior que o estoque de segurança.');
   requireManagement();
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
@@ -232,6 +234,7 @@ export const addMultipleProducts = withActionDeadline(async (productsList: Omit<
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   if (!productsList || productsList.length === 0) return 0;
+  if (productsList.some(stockLimitError)) throw new Error('O estoque máximo precisa ser igual ou maior que o estoque de segurança.');
 
   const path = 'products';
   const now = Date.now();
@@ -332,6 +335,7 @@ export const updateProduct = withProductWriteQueue(async (id: string, data: Part
       if (current.data().mergedIntoId) throw new Error('Este produto foi mesclado. Abra o produto existente.');
       const stockFields = cigaretteStockFields(current.data() as Product);
       const merged = normalizeCigaretteStock({ ...current.data(), ...stockFields, ...data } as Product);
+      if ((data.maxStock !== undefined || data.safetyStock !== undefined) && stockLimitError(merged)) throw new Error('O estoque máximo precisa ser igual ou maior que o estoque de segurança.');
       if (merged.type === 'cigarro' && (!isValidStockQuantity(merged.stock) || (merged.initialStock !== undefined && !isValidStockQuantity(merged.initialStock)))) throw new Error('Estoque inválido: use carteiras em passos de 0,05.');
       transaction.update(ref, { ...removeUndefinedFields({ ...stockFields, ...data, ...cigaretteStockFields(merged) }), updatedAt: now });
       return merged;
@@ -1621,7 +1625,8 @@ export async function getProductDuplicates(candidate: Pick<Product, 'name' | 'ba
 }
 
 // Preserve the original record for historical sales and purchases; hide it from active lists.
-export const mergeProducts = withProductWriteQueue(async (targetId: string, sourceId: string) => {
+export const mergeProducts = withProductWriteQueue(async (targetId: string, sourceId: string, allowSimilar = false) => {
+  requireManagement();
   if (targetId === sourceId) throw new Error('Escolha dois produtos diferentes.');
   const uid = getEffectiveOwnerId();
   await runTransaction(db, async transaction => {
@@ -1630,12 +1635,12 @@ export const mergeProducts = withProductWriteQueue(async (targetId: string, sour
     if (!targetDoc.exists() || !sourceDoc.exists()) throw new Error('Produto não encontrado.');
     const target = normalizeCigaretteStock(targetDoc.data() as Product), source = normalizeCigaretteStock(sourceDoc.data() as Product);
     if (target.ownerId !== uid || source.ownerId !== uid || target.mergedIntoId || source.mergedIntoId) throw new Error('Estes produtos não estão disponíveis para mesclar.');
-    if (!isDuplicateProduct(target, source)) throw new Error('Os produtos não correspondem. Atualize a lista.');
+    if (!isDuplicateProduct(target, source) && !(allowSimilar && similarProductNames(target.name, source.name))) throw new Error('Os produtos não correspondem. Atualize a lista.');
     if (target.type !== source.type) throw new Error('Não é possível somar carteiras de cigarro com unidades comuns. Corrija o tipo antes de mesclar.');
     const stock = (Math.round(target.stock * 20) + Math.round(source.stock * 20)) / 20;
     if (!isValidStockQuantity(stock)) throw new Error('Estoque inválido.');
     const now = Date.now();
-    transaction.update(targetRef, { ...cigaretteStockFields(target), stock, initialStock: (Math.round((target.initialStock ?? target.stock) * 20) + Math.round((source.initialStock ?? source.stock) * 20)) / 20, updatedAt: now });
+    transaction.update(targetRef, { ...cigaretteStockFields(target), mergedProductIds: [...new Set([...(target.mergedProductIds || []), sourceId, ...(source.mergedProductIds || [])])], stock, initialStock: (Math.round((target.initialStock ?? target.stock) * 20) + Math.round((source.initialStock ?? source.stock) * 20)) / 20, updatedAt: now });
     transaction.update(sourceRef, { ...cigaretteStockFields(source), stock: 0, initialStock: 0, mergedIntoId: targetId, mergedAt: now, updatedAt: now });
   });
 });
@@ -1755,3 +1760,23 @@ export const changeEmployeeFirstPin = withActionDeadline(async (id:string,oldPin
   transaction.update(ref,{pin:newPin.trim(),mustChangePin:false,pinChangedAt:Date.now(),updatedAt:Date.now()});
  });
 });
+
+/** Recent owner-scoped sale lines, including fractional formats. Never use cached averages. */
+export async function getReplenishmentSales(signal?: AbortSignal): Promise<SaleItem[]> {
+  requireManagement();
+  const ownerId = getEffectiveOwnerId();
+  if (!ownerId) throw new Error('Entre na sua conta.');
+  const since = Date.now() - 14 * 86400000;
+  const items: SaleItem[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const result = await supabase.from('eu_sale_items').select('id,collection_path,data')
+      .eq('owner_id', ownerId).gte('data->>createdAt', String(since))
+      .order('collection_path').order('id').range(offset, offset + 999)
+      .abortSignal(signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000));
+    if (result.error) throw new Error('Não foi possível consultar as vendas para reposição.');
+    if (getEffectiveOwnerId() !== ownerId) throw new Error('A sessão da loja mudou.');
+    const rows = result.data || [];
+    items.push(...rows.map(row => ({...row.data, id: row.id} as SaleItem)));
+    if (rows.length < 1000) return items;
+  }
+}

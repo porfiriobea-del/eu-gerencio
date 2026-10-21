@@ -111,3 +111,25 @@ export function isDuplicateProduct(candidate: Pick<Product, 'name' | 'barcode'>,
 export function findDuplicateProducts(candidate: Pick<Product, 'name' | 'barcode'>, products: Product[], excludeId?: string): Product[] {
   return products.filter(product => product.id !== excludeId && !product.mergedIntoId && isDuplicateProduct(candidate, product));
 }
+
+/** Ignore accents/case/spacing; allow a single typo, but never conflate sizes or numbers. */
+export function similarProductNames(a: string, b: string): boolean {
+  const clean = (s: string) => normalizeProductName(s).replace(/\s/g, '');
+  const x = clean(a), y = clean(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  if (Math.min(x.length,y.length) < 7 || Math.abs(x.length-y.length)>1 || (x.match(/\d+/g)||[]).join() !== (y.match(/\d+/g)||[]).join()) return false;
+  let previous = Array.from({length:y.length+1},(_,i)=>i);
+  for(let i=1;i<=x.length;i++) {
+    const next=[i];
+    for(let j=1;j<=y.length;j++) next[j]=Math.min(previous[j]+1,next[j-1]+1,previous[j-1]+Number(x[i-1]!==y[j-1]));
+    previous=next;
+  }
+  return previous[y.length]<=1;
+}
+export function suspiciousProductPairs(products: Product[]): [Product,Product][] {
+  const active=products.filter(p=>p.id && !p.mergedIntoId), pairs: [Product,Product][]=[];
+  for(let i=0;i<active.length;i++) for(let j=i+1;j<active.length;j++)
+    if (isDuplicateProduct(active[i],active[j]) || similarProductNames(active[i].name,active[j].name)) pairs.push([active[i],active[j]]);
+  return pairs;
+}

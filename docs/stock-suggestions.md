@@ -23,3 +23,17 @@ Exemplo: média de 4 unidades/dia, entrega em 3 dias e cobertura de 7 dias resul
 Todos os textos do painel de sugestão usam o vocabulário central nos modos técnico, neutro e simples. No simples, use Quando comprar mais, Quanto manter na loja e Preencher para mim; a explicação de 25% fica recolhida em Como fizemos a conta?. Mensagens de estoque zerado, excedente, reposição, confirmação e falta de média também seguem o modo selecionado.
 
 Para cigarros, o cadastro oferece exclusivamente maço inteiro (10 carteiras, padrão) e meio maço (5 carteiras). A preferência é persistida no campo opcional supplierPackageUnits. O campo unitsPerPackage e as conversões do Caixa continuam com maço de venda igual a 10 carteiras. O custo por carteira, a conversão de embalagens no formulário de estoque e as entradas na tela Compras usam getPurchasePackageUnits; a opção de meio maço não transforma uma venda de maço em cinco carteiras. Ao mudar a embalagem, o total de compra informado é dividido pela quantidade escolhida; confira o valor pago antes de salvar.
+
+## Lista de Reposição: vendas reais e fornecedor
+
+A tela Compras consulta os itens vendidos no Supabase, com filtro da loja, paginação e janela móvel dos últimos 14 dias. Recalcula ao abrir, quando o estoque muda, ao retomar a janela e a cada minuto. Falha na consulta exibe aviso e impede apresentar ausência de histórico como se fosse um resultado confirmado.
+
+A data do estoque inicial, quando mais recente, limita o início do período. O divisor é o tempo decorrido em dias (incluindo dias sem venda), com mínimo de um dia. As quantidades usam unidades de estoque: carteiras e suas frações para cigarros, unidades para os demais. A média gravada no cadastro não participa da lista.
+
+Um produto entra se esgotado, abaixo da segurança ou com estoque/média menor que os dias desejados (`stockCoverageDays`, padrão 7). Sem vendas no período, média e cobertura ficam indisponíveis e a tela informa “Ainda sem histórico de vendas”; esgotamento e segurança continuam valendo.
+
+O alvo é `max(maxStock, média × dias desejados)`. A diferença positiva para o estoque é arredondada para cima por embalagens completas; o custo usa essa quantidade final × custo por unidade de estoque. Pacotes de cigarro respeitam a compra de 5 ou 10 carteiras; os formatos de venda não são alterados. Comprar por embalagem pode ultrapassar o alvo: o valor sugerido não deve cortar uma embalagem no meio.
+
+O máximo não pode ser menor que a segurança no cadastro. Máximo abaixo do saldo atual gera aviso, sem ajustar o saldo. Fornecedor continua opcional nas compras, com sugestões de nomes já registrados. A lista agrupa pela última compra datada com fornecedor de cada produto (não existe vínculo obrigatório ou fornecedor inferido pela categoria). Grupos e seus itens aparecem pela urgência: esgotamento, segurança e menor cobertura; produtos empatados ficam em ordem alfabética. Sem informação, o grupo é “Sem fornecedor”.
+
+A revisão de nomes parecidos ignora acentos, maiúsculas e espaços. Detecta também um erro de letra em nomes longos, preservando números de tamanho/volume. A união exige conferência explícita: mantém o primeiro produto, soma estoques e oculta o segundo, preservando históricos. Tipos de estoque incompatíveis não podem ser unidos. Recomendações nunca movimentam estoque automaticamente.

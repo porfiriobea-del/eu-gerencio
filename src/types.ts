@@ -7,6 +7,7 @@ export interface Product {
   imageUrl?: string;
   barcode?: string;
   mergedIntoId?: string;
+  mergedProductIds?: string[]; // Historical source IDs retained when joining products.
   mergedAt?: number;
   purchaseForm: 'pacote' | 'fardo' | 'unidade';
   unitsPerPackage: number;

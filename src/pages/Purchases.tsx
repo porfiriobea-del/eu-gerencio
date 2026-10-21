@@ -2,12 +2,13 @@ import { useStockFormatting } from '../lib/useStockFormatting';
 import { compareAlphabetical, sortCategories, sortByName } from '../lib/alphabetical';
 import { useCurrency } from '../lib/useCurrency';
 import { getPurchasePackageUnits } from '../lib/productUnits';
-import { getReorderPoint } from '../lib/stockSuggestions';
+import { buildReplenishment, usedSuppliers } from '../lib/replenishment';
+import { ReplenishmentDuplicates } from '../components/ReplenishmentDuplicates';
 import { showToast, showActionError } from '../lib/actionFeedback';
 import { useState, useEffect, useMemo } from 'react';
-import { subscribeProducts, subscribePurchases, recordPurchase, deletePurchase } from '../lib/api';
+import { subscribeProducts, subscribePurchases, recordPurchase, deletePurchase, getReplenishmentSales } from '../lib/api';
 import { exportPurchasesToCSV } from '../lib/exportUtils';
-import { Product, Purchase } from '../types';
+import { Product, Purchase, SaleItem } from '../types';
 import { 
   ShoppingBag, Plus, Check, Clock, Calendar, AlertTriangle, 
   Search, Trash2, Printer, CheckCircle2,
@@ -33,6 +34,26 @@ export default function Purchases() {
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
   const [products, setProducts] = useState<Product[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [sales, setSales] = useState<SaleItem[]>([]);
+  const [salesReady, setSalesReady] = useState(false);
+  const [salesError, setSalesError] = useState(false);
+  const [clock, setClock] = useState(Date.now());
+  useEffect(() => {
+    const controller = new AbortController();
+    let request = 0;
+    const refresh = async () => {
+      const current = ++request;
+      try {
+        const items = await getReplenishmentSales(controller.signal);
+        if (!controller.signal.aborted && current === request) {setSales(items);setClock(Date.now());setSalesReady(true);setSalesError(false);}
+      } catch {if (!controller.signal.aborted && current === request) setSalesError(true);}
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 60000);
+    window.addEventListener('focus', refresh);
+    window.addEventListener('cloud-refresh', refresh);
+    return () => {controller.abort();clearInterval(timer);window.removeEventListener('focus',refresh);window.removeEventListener('cloud-refresh',refresh);};
+  }, [products]);
   const [activeTab, setActiveTab] = useState<'replenish' | 'history' | 'checklist'>('replenish');
   const [isOptionalPurchaseFieldsOpen, setIsOptionalPurchaseFieldsOpen] = useState(() => !(simpleViewMode || isBasicMode));
 
@@ -98,33 +119,8 @@ export default function Purchases() {
 
   // Products needing replenishment ("Repor agora")
   const replenishList = useMemo(() => {
-    return sortByName(products)
-      .map(p => {
-        const reorderPoint = getReorderPoint(p);
-        const needsReplenish = p.stock <= reorderPoint;
-        const isCritical = p.stock === 0;
-        const isBelowSafety = p.stock <= p.safetyStock;
-        
-        const maxStock = p.maxStock || Math.max(p.stock, p.safetyStock * 2, 10);
-        const suggestedBuyUnits = Math.max(0, maxStock - p.stock);
-        const unitsPerPkg = getPurchasePackageUnits(p);
-        const suggestedPackages = unitsPerPkg > 1 ? Math.ceil(suggestedBuyUnits / unitsPerPkg) : suggestedBuyUnits;
-        const estimatedCost = suggestedBuyUnits * p.unitCost;
-
-        return {
-          product: p,
-          reorderPoint,
-          needsReplenish,
-          isCritical,
-          isBelowSafety,
-          maxStock,
-          suggestedBuyUnits,
-          suggestedPackages,
-          estimatedCost
-        };
-      })
-      .filter(item => item.needsReplenish);
-  }, [products]);
+    return salesError || !salesReady ? [] : buildReplenishment(products, sales, purchases, clock);
+  }, [products, sales, purchases, clock, salesReady, salesError]);
 
   // Filtered replenish items based on search/category/urgency
   const filteredReplenish = useMemo(() => {
@@ -256,7 +252,7 @@ export default function Purchases() {
       setTotalCost(Number((qtyToUse * cost).toFixed(2)));
     }
 
-    setSupplier('');
+    setSupplier([...purchases].sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt-a.createdAt).find(p=>p.productId===product.id && p.supplier?.trim())?.supplier || '');
     setPurchaseDate(format(new Date(), 'yyyy-MM-dd'));
     setNotes('');
     setUpdateProductUnitCost(true);
@@ -386,7 +382,15 @@ export default function Purchases() {
     window.print();
   };
 
-  const quickSuppliers = ['Atacadão', 'Assaí', 'Distribuidora', 'Ambev', 'Coca-Cola', 'Mercado Central', 'Atacado Local'];
+  const quickSuppliers = useMemo(() => usedSuppliers(purchases), [purchases]);
+  const supplierGroups = useMemo(() => {
+    const groups = new Map<string, typeof filteredReplenish>();
+    for (const item of filteredReplenish) {
+      const key = item.supplier.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').toLowerCase();
+      const group = groups.get(key) || []; group.push(item); groups.set(key,group);
+    }
+    return [...groups.entries()];
+  }, [filteredReplenish]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -583,138 +587,36 @@ export default function Purchases() {
             </select>
           </div>
 
-          {/* List Content */}
-          {filteredReplenish.length === 0 ? (
-            <div className="bg-surface rounded-2xl border border-border p-12 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 mx-auto flex items-center justify-center mb-4">
-                <CheckCircle2 className="w-8 h-8" />
-              </div>
-              <h3 className="text-lg font-bold text-foreground">Nenhum produto precisando de reposição!</h3>
-              <p className="text-sm text-muted-foreground max-w-md mx-auto mt-1 mb-6">
-                Todos os seus produtos estão com estoque acima do ponto de reposição. Caso tenha feito uma compra preventiva, você pode registrar manualmente.
-              </p>
-              <button
-                onClick={() => setIsProductPickerOpen(true)}
-                className="px-5 py-2.5 rounded-xl bg-primary text-white font-medium text-sm hover:opacity-90 transition-opacity cursor-pointer inline-flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" /> Registrar Compra Manual
-              </button>
+          <ReplenishmentDuplicates products={products} />
+          {!salesReady && !salesError && <p role="status">{v('replenish.loading')}</p>}
+          {salesError && <p role="alert" className="text-amber-600">{v('replenish.loadFailed')}</p>}
+          {salesReady && !salesError && filteredReplenish.length === 0 && <p className="p-6 bg-surface rounded-2xl border border-border">{v('replenish.empty')}</p>}
+          {supplierGroups.map(([key, items]) => <section key={key} className="space-y-3">
+            <div className="flex flex-wrap justify-between gap-2 border-b border-border pb-2">
+              <h2 className="font-bold notranslate" translate="no">{items[0].supplier || v('replenish.noSupplier')}</h2>
+              <span>{v('replenish.estimated')}: {formatMoney(items.reduce((sum,item)=>sum+item.estimatedCost,0))}</span>
             </div>
-          ) : (
-            <div className="bg-surface rounded-2xl border border-border overflow-hidden shadow-xs">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/40">
-                      <th className="p-3.5 text-muted-foreground font-medium">Produto</th>
-                      <th className="p-3.5 text-muted-foreground font-medium text-center">Estoque Atual</th>
-                      <th className="p-3.5 text-muted-foreground font-medium">Sugestão de Compra</th>
-                      <th className="p-3.5 text-muted-foreground font-medium">Custo Estimado</th>
-                      <th className="p-3.5 text-muted-foreground font-medium text-center">Status</th>
-                      <th className="p-3.5 text-muted-foreground font-medium text-right">Ação</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {filteredReplenish.map(item => {
-                      const p = item.product;
-                      const unitsPerPkg = getPurchasePackageUnits(p);
-                      const isPkg = unitsPerPkg > 1;
-
-                      return (
-                        <tr key={p.id} className="hover:bg-muted/20 transition-colors">
-                          <td className="p-3.5">
-                            <div className="font-semibold text-foreground text-sm leading-snug notranslate normal-case" translate="no">
-                              {p.name}
-                            </div>
-                            <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
-                              <span className="bg-muted px-2 py-0.5 rounded text-[11px] font-medium">
-                                {p.category}
-                              </span>
-                              {isPkg && (
-                                <span>
-                                  1 {p.purchaseForm || 'fardo'} = {unitsPerPkg} un.
-                                </span>
-                              )}
-                              {p.expirationDate && (() => {
-                                const expStatus = calculateExpirationStatus(p.expirationDate);
-                                return (
-                                  <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${expStatus.badgeClass}`}>
-                                    <Clock className="w-2.5 h-2.5" />
-                                    <span>Val: {formatExpirationDate(p.expirationDate, 'dd/MM')} ({expStatus.statusText})</span>
-                                  </span>
-                                );
-                              })()}
-                              {p.hasPromoSuggestion && p.promoPrice && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/30">
-                                  <Flame className="w-2.5 h-2.5 text-amber-500" />
-                                  <span>Promo: {formatMoney(p.promoPrice)}</span>
-                                </span>
-                              )}
-                            </div>
-                          </td>
-
-                          <td className="p-3.5 text-center">
-                            <div className={`font-bold ${item.isCritical ? 'text-red-600' : item.isBelowSafety ? 'text-amber-600' : 'text-foreground'}`}>
-                              {formatProductStock(p)}
-                            </div>
-                            <div className="text-[11px] text-muted-foreground">
-                              Segurança: {formatProductStock(p, p.safetyStock)} | Máx: {formatProductStock(p, item.maxStock)}
-                            </div>
-                          </td>
-
-                          <td className="p-3.5">
-                            <div className="font-bold text-primary">
-                              +{formatProductStock(p, item.suggestedBuyUnits)}
-                            </div>
-                            {isPkg && (
-                              <div className="text-xs font-semibold text-muted-foreground">
-                                (= {item.suggestedPackages} {p.purchaseForm === 'fardo' ? 'fardos' : p.purchaseForm || 'embalagens'})
-                              </div>
-                            )}
-                          </td>
-
-                          <td className="p-3.5">
-                            <div className="font-semibold text-foreground">
-                              {formatMoney(item.estimatedCost)}
-                            </div>
-                            <div className="text-[11px] text-muted-foreground">
-                              ({formatMoney(p.unitCost)}/un.)
-                            </div>
-                          </td>
-
-                          <td className="p-3.5 text-center">
-                            {item.isCritical ? (
-                              <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 dark:bg-red-950/40 px-2.5 py-1 rounded-full">
-                                <AlertTriangle className="w-3.5 h-3.5" /> Zerado
-                              </span>
-                            ) : item.isBelowSafety ? (
-                              <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-full">
-                                Abaixo Segurança
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-700 bg-orange-50 dark:bg-orange-950/40 px-2.5 py-1 rounded-full">
-                                Repor Agora
-                              </span>
-                            )}
-                          </td>
-
-                          <td className="p-3.5 text-right">
-                            <button
-                              onClick={() => handleOpenPurchaseModal(p, item.suggestedBuyUnits)}
-                              className="px-3.5 py-1.5 bg-primary hover:opacity-90 text-white rounded-xl text-xs font-semibold transition-opacity cursor-pointer shadow-xs inline-flex items-center gap-1.5"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                              <span>Marcar Comprado</span>
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+            {items.map(item => <article key={item.product.id} className="rounded-2xl border border-border bg-surface p-4 space-y-2">
+              <div className="flex flex-wrap justify-between gap-2">
+                <h3 className="font-semibold notranslate" translate="no">{item.product.name}</h3>
+                <span className={item.isCritical ? 'text-red-600 font-bold' : 'text-amber-600'}>{item.isCritical ? v('replenish.out') : v('replenish.low')}</span>
               </div>
-            </div>
-          )}
+              <p>{v('replenish.current')}: {formatProductStock(item.product)}</p>
+              {item.average === null ? <p className="text-muted-foreground">{v('replenish.noHistory')}</p> : <>
+                <p className="text-sm text-muted-foreground">{v('replenish.average')}: {formatStockNumber(item.average)} · {v('replenish.period')}: {formatStockNumber(item.days)}</p>
+                <p>{v('replenish.coverage').replace('{days}', formatStockNumber(item.coverage!))}</p>
+              </>}
+              {item.invalidLimits && <p role="alert" className="text-amber-600">{v('replenish.invalidLimits')}</p>}
+              {item.aboveMaximum && <p className="text-amber-600">{v('replenish.aboveMax')}</p>}
+              <div className="flex flex-wrap justify-between items-center gap-3">
+                <div><p className="font-bold text-primary">{v('replenish.buy').replace('{quantity}', formatProductStock(item.product, item.suggestedBuyUnits))}</p>
+                  {getPurchasePackageUnits(item.product)>1 && <p className="text-sm">{item.suggestedPackages} {v('replenish.packages')} ({getPurchasePackageUnits(item.product)} {item.product.type==='cigarro' ? 'carteiras' : 'un.'})</p>}
+                  <p>{v('replenish.estimated')}: {formatMoney(item.estimatedCost)}</p>
+                </div>
+                <button type="button" onClick={()=>handleOpenPurchaseModal(item.product,item.suggestedBuyUnits)} className="bg-primary text-white rounded-xl px-4 py-2">{v('replenish.register')}</button>
+              </div>
+            </article>)}
+          </section>)}
         </div>
       )}
 
@@ -1170,7 +1072,22 @@ export default function Purchases() {
                 </div>
               )}
 
-              {/* SEÇÃO OPCIONAL: Fornecedor, Data, Validade e Promoção (Minimizada por padrão no modo básico) */}
+                <div>
+                  <label htmlFor="purchase-supplier" className="block text-xs font-semibold text-muted-foreground mb-1">
+                    {v('replenish.supplier')}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={v('replenish.supplierPlaceholder')}
+                    list="used-suppliers"
+                    id="purchase-supplier"
+                    value={supplier}
+                    onChange={e => setSupplier(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-border bg-surface text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              <datalist id="used-suppliers">{quickSuppliers.map(name=><option key={name} value={name} />)}</datalist>
+              {/* Detalhes opcionais da compra */}
               <div className="rounded-xl border border-border bg-muted/30 overflow-hidden">
                 <button
                   type="button"
@@ -1186,7 +1103,7 @@ export default function Purchases() {
                       <span className="text-[11px] text-muted-foreground">
                         {isOptionalPurchaseFieldsOpen 
                           ? 'Clique para minimizar campos secundários' 
-                          : 'Fornecedor, data da compra, validade do lote e observações'}
+                          : 'Data da compra, validade do lote e observações'}
                       </span>
                     </div>
                   </div>
@@ -1200,18 +1117,7 @@ export default function Purchases() {
                   <div className="p-3 pt-2 space-y-3 border-t border-border/60">
                     {/* Supplier & Date */}
                     <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                    Fornecedor / Local:
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Atacadão, Assaí..."
-                    value={supplier}
-                    onChange={e => setSupplier(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-border bg-surface text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
+
 
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground mb-1">
@@ -1226,6 +1132,7 @@ export default function Purchases() {
                   />
                 </div>
               </div>
+
 
               {/* Quick Supplier Chips */}
               <div className="flex flex-wrap gap-1.5 items-center">
