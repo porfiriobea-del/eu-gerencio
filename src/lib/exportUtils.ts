@@ -116,9 +116,9 @@ export function exportFullReportToCSV(data: {
     [`Período de Análise: ${data.periodLabel}`],
     [`Data da Extração: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`],
     [''],
-    ['========================================'],
+    [''],
     ['RESUMO FINANCEIRO DO PERÍODO'],
-    ['========================================'],
+    [''],
     ['Indicador', ("Valor (" + csvCurrency + ")"), 'Observação'],
     [
       'Dinheiro que entrou (Vendas Faturadas)',
@@ -142,9 +142,9 @@ export function exportFullReportToCSV(data: {
       'Compras a prazo anotadas para clientes'
     ],
     [''],
-    ['========================================'],
+    [''],
     ['1. DETALHAMENTO DE VENDAS REALIZADAS'],
-    ['========================================'],
+    [''],
     ['Data e Hora', 'Forma de Pagamento', 'Itens Vendidos', ("Valor Total (" + csvCurrency + ")"), ("Taxa (" + csvCurrency + ")"), ("Valor líquido (" + csvCurrency + ")")]
   ];
 
@@ -166,9 +166,9 @@ export function exportFullReportToCSV(data: {
   rows.push(['TOTAL VENDAS', '', `${data.sales.length} vendas`, formatAmount(totalSalesAmount, csvOptions)]);
 
   rows.push(['']);
-  rows.push(['========================================'],);
+  rows.push([''],);
   rows.push(['2. COMPRAS E REPOSIÇÕES NO PERÍODO']);
-  rows.push(['========================================']);
+  rows.push(['']);
   rows.push([
     'Data da Compra',
     'Produto',
@@ -218,9 +218,9 @@ export function exportFullReportToCSV(data: {
   ]);
 
   rows.push(['']);
-  rows.push(['========================================']);
+  rows.push(['']);
   rows.push(['3. CLIENTES COM SALDO EM FIADO (CADERNETA)']);
-  rows.push(['========================================']);
+  rows.push(['']);
   rows.push(['Nome do Cliente', 'Telefone', ("Dívida Atual (" + csvCurrency + ")")]);
 
   let totalDebt = 0;
@@ -237,9 +237,9 @@ export function exportFullReportToCSV(data: {
 
   if (data.products && data.products.length > 0) {
     rows.push(['']);
-    rows.push(['========================================']);
+    rows.push(['']);
     rows.push(['4. VENDA DIÁRIA E SUGESTÃO DE ESTOQUE DE SEGURANÇA']);
-    rows.push(['========================================']);
+    rows.push(['']);
     rows.push([
       'Produto / Mercadoria',
       'Categoria',
