@@ -7,7 +7,7 @@ import {showToast,showActionError} from '../lib/actionFeedback';
 
 export function ProductCosts({product}:{product:Product}) {
   const {v}=usePreferences(),{formatMoney}=useCurrency();
-  return <dl className="text-xs space-y-1"><div className="flex justify-between gap-3"><dt>{v('cost.average')}</dt><dd>{formatMoney(product.unitCost || 0)}</dd></div><div className="flex justify-between gap-3"><dt>{v('cost.last')}</dt><dd>{formatMoney(product.lastCost ?? product.unitCost ?? 0)}</dd></div></dl>;
+  return <dl className="text-xs space-y-1"><div className="flex justify-between gap-3"><dt>{v('cost.average')}</dt><dd>{product.unitCost>0?formatMoney(product.unitCost):v('cost.enter')}</dd></div><div className="flex justify-between gap-3"><dt>{v('cost.last')}</dt><dd>{(product.lastCost ?? product.unitCost ?? 0)>0?formatMoney(product.lastCost ?? product.unitCost):v('cost.enter')}</dd></div></dl>;
 }
 export function CostPriceReview({product}:{product:Product}) {
   const {v}=usePreferences(),{formatMoney,language}=useCurrency(),{isEmployee}=usePermissions();

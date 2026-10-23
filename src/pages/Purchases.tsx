@@ -1,3 +1,5 @@
+import {createPortal} from 'react-dom';
+import {useModalViewport} from '../lib/useModalViewport';
 import {CostPriceReview,ProductCosts} from '../components/CostPriceReview';
 import {lowMarginFormats} from '../lib/averageCost';
 import {BonusRules} from '../components/BonusRules';
@@ -68,6 +70,7 @@ export default function Purchases() {
 
   // Modal / Form state for registering purchase
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+  const purchaseViewport = useModalViewport(isPurchaseModalOpen);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [purchaseType, setPurchaseType] = useState<'unit' | 'package'>('unit');
   const [packageQty, setPackageQty] = useState<number>(1);
@@ -90,7 +93,7 @@ export default function Purchases() {
     if(activeBonusRule && bonusProduct) {
       const quantity=purchaseType==='package'?packageQty*getPurchasePackageUnits(selectedProduct):looseUnitsQty;
       try {setBonusProductId(bonusProduct.id!);setBonusQuantity(calculateBonus(activeBonusRule,selectedProduct,bonusProduct,quantity));} catch {setBonusQuantity(0);showToast(v('bonus.ruleInvalid'));}
-    } else {setBonusQuantity(0);setBonusProductId(selectedProduct.id || '');}
+    } else {setBonusQuantity(0);setBonusProductId('');}
   },[bonusRuleSignature,selectedProduct?.id,purchaseType,packageQty,looseUnitsQty]);
   const [purchaseDate, setPurchaseDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [notes, setNotes] = useState<string>('');
@@ -248,7 +251,7 @@ export default function Purchases() {
 
   // Open register purchase modal
   const handleOpenPurchaseModal = (product: Product, suggestedUnits?: number) => {
-    setSelectedProduct(product);setBonusRuleId('');setBonusQuantity(0);setBonusProductId(product.id || '');
+    setSelectedProduct(product);setBonusRuleId('');setBonusQuantity(0);setBonusProductId('');
     const unitsPerPkg = getPurchasePackageUnits(product);
     const isPackaged = unitsPerPkg > 1;
 
@@ -640,7 +643,7 @@ export default function Purchases() {
               <div className="flex flex-wrap justify-between items-center gap-3">
                 <div><p className="font-bold text-primary">{v('replenish.buy').replace('{quantity}', formatProductStock(item.product, item.suggestedBuyUnits))}</p>
                   {getPurchasePackageUnits(item.product)>1 && <p className="text-sm">{item.suggestedPackages} {v('replenish.packages')} ({getPurchasePackageUnits(item.product)} {item.product.type==='cigarro' ? 'carteiras' : 'un.'})</p>}
-                  <p>{v('replenish.estimated')}: {formatMoney(item.estimatedCost)}</p>
+                  <p>{v('replenish.estimated')}: {(item.estimatedCost>0?formatMoney(item.estimatedCost):v('cost.enter'))}</p>
                 </div>
                 <button type="button" onClick={()=>handleOpenPurchaseModal(item.product,item.suggestedBuyUnits)} className="bg-primary text-white rounded-xl px-4 py-2">{v('replenish.register')}</button>
               </div>
@@ -709,7 +712,7 @@ export default function Purchases() {
                               ? `${item.suggestedPackages} ${p.purchaseForm || 'fardo(s)'} (${formatProductStock(p, item.suggestedBuyUnits)})`
                               : `${formatProductStock(p, item.suggestedBuyUnits)}`}
                           </span>
-                          <span>• Est. {formatMoney(item.estimatedCost)}</span>
+                          <span>• Est. {(item.estimatedCost>0?formatMoney(item.estimatedCost):v('cost.enter'))}</span>
                         </div>
                       </div>
                     </div>
@@ -923,16 +926,16 @@ export default function Purchases() {
       )}
 
       {/* MODAL: REGISTRAR COMPRA */}
-      {isPurchaseModalOpen && selectedProduct && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs">
-          <div className="bg-surface rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-border animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
+      {isPurchaseModalOpen && selectedProduct && createPortal(
+        <div className="fixed inset-x-0 bg-black/60 flex items-center justify-center p-0 md:p-4 z-50 backdrop-blur-xs" style={{top:purchaseViewport.top,height:purchaseViewport.height}}>
+          <div role="dialog" aria-modal="true" aria-labelledby="purchase-title" className="bg-surface rounded-2xl w-full max-w-lg flex flex-col min-h-0 max-h-full overflow-hidden shadow-2xl border border-border animate-in fade-in zoom-in-95">
+            <div className="flex shrink-0 items-center justify-between border-b border-border p-4">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-palette-1 text-primary rounded-xl">
                   <PackageCheck className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-foreground">Registrar Compra & Reposição</h3>
+                  <h3 id="purchase-title" className="text-lg font-bold text-foreground">{v('purchase.dialogTitle')}</h3>
                   <p className="text-xs text-muted-foreground">
                     O estoque será somado automaticamente sem precisar abrir o produto.
                   </p>
@@ -946,7 +949,8 @@ export default function Purchases() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitPurchase} className="space-y-4">
+            <form onSubmit={handleSubmitPurchase} className="flex min-h-0 flex-1 flex-col" style={{maxHeight:'100dvh',overflowY:'auto',overscrollBehavior:'contain',WebkitOverflowScrolling:'touch'}}>
+              <div data-purchase-fields className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4" style={{WebkitOverflowScrolling:'touch',scrollbarGutter:'stable'}}>
               {/* Product summary card */}
               <div className="bg-muted/40 p-3 rounded-xl border border-border/60 flex justify-between items-center text-xs">
                 <div>
@@ -1077,7 +1081,7 @@ export default function Purchases() {
                     className="w-full px-3 py-2 rounded-xl border border-border bg-surface text-foreground font-medium text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                   <span className="text-[11px] text-muted-foreground mt-0.5 block">
-                    Anterior: {formatMoney(selectedProduct.unitCost)}
+                    Anterior: {(selectedProduct.unitCost>0?formatMoney(selectedProduct.unitCost):v('cost.enter'))}
                   </span>
                 </div>
               </div>
@@ -1103,8 +1107,8 @@ export default function Purchases() {
                 <h3 className="font-semibold">{v('bonus.tab')}</h3>
                 {!bonusReady && <p role="alert">{v('bonus.notReady')}</p>}
                 {matchingBonusRules.length>0 && <label className="block text-sm">{v('bonus.rule')}<select value={activeBonusRule?.id || ''} onChange={e=>setBonusRuleId(e.target.value)} className="block w-full border border-border bg-surface rounded-xl p-2">{matchingBonusRules.map(r=><option key={r.id} value={r.id}>{v('bonus.every')} {r.buyQuantity} {v(bonusUnitKey(r.buyUnit,r.buyQuantity))} / {v('bonus.gains')} {r.bonusQuantity} {v(bonusUnitKey(r.bonusUnit,r.bonusQuantity))}</option>)}</select></label>}
-                <label className="block text-sm">{v('bonus.receivedProduct')}<select value={bonusProductId} onChange={e=>{setBonusProductId(e.target.value);setBonusQuantity(0);}} className="block w-full border border-border bg-surface rounded-xl p-2 notranslate" translate="no">{products.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-                <label className="block text-sm">{v('bonus.receivedQuantity')} ({products.find(p=>p.id===bonusProductId)?.type==='cigarro'?v('bonus.unit.carteira'):v('bonus.unit.unidade')})<input type="number" min="0" step={products.find(p=>p.id===bonusProductId)?.type==='cigarro'?'0.05':'1'} value={stockInputValue(bonusQuantity)} onChange={e=>setBonusQuantity(Number(e.target.value))} className="block w-full border border-border bg-surface rounded-xl p-2"/></label>
+                <label className="block text-sm">{v('bonus.receivedProduct')}<select value={bonusProductId} onChange={e=>{setBonusProductId(e.target.value);setBonusQuantity(0);}} className="block w-full border border-border bg-surface rounded-xl p-2 notranslate" translate="no"><option value="">{v('bonus.none')}</option><option value={selectedProduct.id}>{v('bonus.same')}</option>{products.filter(p=>p.id!==selectedProduct.id).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+                <label className="block text-sm">{v('bonus.receivedQuantity')} ({products.find(p=>p.id===bonusProductId)?.type==='cigarro'?v('bonus.unit.carteira'):v('bonus.unit.unidade')})<input type="number" min="0" step={products.find(p=>p.id===bonusProductId)?.type==='cigarro'?'0.05':'1'} disabled={!bonusProductId} value={stockInputValue(bonusQuantity)} onChange={e=>setBonusQuantity(Number(e.target.value))} className="block w-full border border-border bg-surface rounded-xl p-2"/></label>
                 <p className="text-xs text-muted-foreground">{v('bonus.adjust')}</p>
                 {bonusQuantity>0 && looseUnitsQty>0 && <><p>{v('bonus.effective')}: <strong>{formatMoney(bonusCost(looseUnitsQty,bonusQuantity,totalCost).effectiveUnitCost)}</strong></p><p className="text-xs text-muted-foreground">{v('bonus.allocation')}</p></>}
               </div>
@@ -1457,8 +1461,9 @@ export default function Purchases() {
           )}
         </div>
 
-              {/* Form Action Buttons */}
-              <div className="flex justify-end gap-2 pt-3 border-t border-border">
+              </div>
+              {/* Keep confirmation outside the scrolling fields, including with the keyboard open. */}
+              <div className="flex shrink-0 justify-end gap-2 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-border bg-surface">
                 <button
                   type="button"
                   onClick={() => setIsPurchaseModalOpen(false)}
@@ -1472,12 +1477,12 @@ export default function Purchases() {
                   className="px-5 py-2 rounded-xl bg-primary hover:opacity-90 text-white text-xs font-bold transition-opacity cursor-pointer flex items-center gap-1.5 shadow-sm"
                 >
                   <Check className="w-4 h-4" />
-                  <span>{isSubmitting ? 'Atualizando Estoque...' : 'Confirmar & Somar ao Estoque'}</span>
+                  <span>{v(isSubmitting ? 'purchase.saving' : 'purchase.confirm')}</span>
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>, document.body
       )}
 
       {/* MODAL: PICK OTHER PRODUCT NOT IN REPLENISH LIST */}
@@ -1527,7 +1532,7 @@ export default function Purchases() {
                       <span className="text-muted-foreground text-[11px]">{p.category} • Estoque atual: {formatProductStock(p)}</span>
                     </div>
                     <div className="text-right">
-                      <span className="font-bold text-primary block">{formatMoney(p.unitCost)}</span>
+                      <span className="font-bold text-primary block">{(p.unitCost>0?formatMoney(p.unitCost):v('cost.enter'))}</span>
                       <span className="text-[11px] text-muted-foreground">custo unit.</span>
                     </div>
                   </div>

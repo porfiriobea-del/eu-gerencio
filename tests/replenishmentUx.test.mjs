@@ -21,13 +21,13 @@ test('groups by supplier, shows no-history and package-rounded cost in all three
  assert.ok(ui.getByRole('heading',{name:'Fornecedor ORIGINAL'}));assert.ok(ui.getByText('Ainda sem histórico de vendas'));assert.match(ui.container.textContent,/24,00/);
  assert.ok(ui.getByText(mode==='basic'?/Está acabando: compre 12/:mode==='technical'?/Ressuprimento sugerido: 12/:/Compra sugerida: 12/));
  fireEvent.click(ui.getByRole('button',{name:mode==='basic'?'Anotar compra':'Registrar compra'}));
- const supplierInput=ui.container.querySelector('input[list="used-suppliers"]');assert.ok(supplierInput);assert.equal(supplierInput.value,'Fornecedor ORIGINAL');
- assert.equal(ui.container.querySelector('datalist option').value,'Fornecedor ORIGINAL');
+ const supplierInput=document.querySelector('input[list="used-suppliers"]');assert.ok(supplierInput);assert.equal(supplierInput.value,'Fornecedor ORIGINAL');
+ assert.equal(document.querySelector('datalist option').value,'Fornecedor ORIGINAL');
  let saved;globalThis.__replenish.recordPurchase=async(...args)=>{saved=args;};
  fireEvent.change(supplierInput,{target:{value:'Novo fornecedor'}});
  await act(async()=>fireEvent.submit(supplierInput.closest('form')));
  assert.equal(saved[0].supplier,'Novo fornecedor');assert.equal(saved[0].quantity,12);assert.equal(saved[0].totalCost,24);
- assert.equal(ui.container.querySelector('input[list="used-suppliers"]'),null);cleanup();
+ assert.equal(document.querySelector('input[list="used-suppliers"]'),null);cleanup();
  }
 });
 test('failed history fetch does not fabricate a zero-sales replenishment list',async()=>{bank({fail:true});const ui=await view();assert.match(ui.getByRole('alert').textContent,/Não foi possível consultar as vendas/);assert.equal(ui.queryByText('Ainda sem histórico de vendas'),null);assert.equal(ui.queryByRole('article'),null);});
@@ -55,7 +55,7 @@ test('supplier rule warns near a bonus, calculates a different product bonus and
  globalThis.__replenish.subscribeSettings=cb=>{cb({bonusRules:[rule]});return()=>{};};
  const ui=await view();assert.match(ui.container.textContent,/Compre mais 2 unidades e ganhe 1 fardo/);
  fireEvent.click(ui.getAllByRole('button',{name:'Registrar compra'})[0]);
- const packageInput=ui.container.querySelector('input[type="number"][min="1"]');
+ const packageInput=document.querySelector('input[type="number"][min="1"]');
  await act(async()=>fireEvent.change(packageInput,{target:{value:'3'}}));
  const bonusInput=ui.getByLabelText(/Quantidade de bônus/);assert.equal(bonusInput.value,'6');
  fireEvent.change(bonusInput,{target:{value:'5'}});
@@ -76,4 +76,21 @@ test('cost notice waits for Accept or Keep in all three language modes, and low 
   await act(async()=>fireEvent.click(ui.getByRole('button',{name:accept?'Aceitar':'Manter'})));
   assert.deepEqual(decision,['p','review',accept]);cleanup();
  }
+});
+
+test('purchase dialog scrolls independently, keeps confirmation outside fields and defaults to no bonus',async()=>{
+ bank();globalThis.__replenish.subscribeProducts=cb=>{cb([{...product,unitCost:0}]);return()=>{};};
+ const ui=await view();fireEvent.click(ui.getByRole('button',{name:'Registrar compra'}));
+ const dialog=ui.getByRole('dialog'),form=dialog.querySelector('form'),fields=dialog.querySelector('[data-purchase-fields]');
+ assert.equal(dialog.parentElement.parentElement,document.body);
+ assert.equal(form.style.maxHeight,'100dvh');assert.equal(form.style.overflowY,'auto');assert.equal(form.style.overscrollBehavior,'contain');
+ assert.match(fields.className,/overflow-y-auto/);
+ const confirm=ui.getByRole('button',{name:'Confirmar compra'});assert.equal(fields.contains(confirm),false);assert.equal(confirm.closest('form'),form);
+ const bonus=ui.getByLabelText('Produto recebido de bônus');assert.equal(bonus.value,'');assert.equal(bonus.selectedOptions[0].textContent,'Nenhum');
+ const quantity=ui.getByLabelText(/Quantidade de bônus/);assert.equal(quantity.disabled,true);
+ fireEvent.change(bonus,{target:{value:'p'}});assert.equal(bonus.selectedOptions[0].textContent,'O mesmo produto');assert.equal(quantity.disabled,false);
+ fireEvent.change(quantity,{target:{value:'2'}});fireEvent.change(bonus,{target:{value:''}});assert.equal(quantity.value,'0');assert.equal(quantity.disabled,true);
+ assert.ok(ui.getAllByText('Informe o custo').length>0);
+ await act(async()=>{Object.defineProperty(window,'innerHeight',{value:340,configurable:true});window.dispatchEvent(new Event('resize'));});
+ assert.equal(dialog.parentElement.style.height,'340px');
 });
