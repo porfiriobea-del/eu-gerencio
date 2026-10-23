@@ -27,10 +27,10 @@ const standard={id:'p1',name:'Suco',category:'Bebidas',type:'comum',stock:10,bas
 const cigarettes={...standard,id:'p2',name:'Cigarro',category:'Cigarros',type:'cigarro',stockUnit:'carteira',stock:20,unitsPerPackage:10,unitCost:10,basePrice:20,pricePack:180,priceCart:20,priceHalfCart:11,priceUnit:2};
 function setup(onSale=async()=>{},isDesktop=false,feeSettings={},initialCustomers=[],initialEntries=['/caixa'],role='owner'){
  desktop=isDesktop;
- globalThis.__posApi={getProductSalesTotals:async()=>globalThis.__posRanking||{},subscribeProducts(cb){cb([standard,cigarettes]);return()=>{};},subscribeCustomers(cb){cb(initialCustomers);return()=>{};},subscribeTodaySales(cb){cb([]);return()=>{};},subscribeCashClosures(cb){cb([]);return()=>{};},subscribeSettings(cb){cb({enableCardFees:false,...feeSettings});return()=>{};},recordSale:onSale};
+ globalThis.__posApi={getProductSalesTotals:async()=>globalThis.__posRanking||{},subscribeProducts(cb){globalThis.__updatePosProducts=cb;cb([standard,cigarettes]);return()=>{};},subscribeCustomers(cb){cb(initialCustomers);return()=>{};},subscribeTodaySales(cb){cb([]);return()=>{};},subscribeCashClosures(cb){cb([]);return()=>{};},subscribeSettings(cb){cb({enableCardFees:false,...feeSettings});return()=>{};},recordSale:onSale};
  return render(React.createElement(CurrencyContext.Provider,{value:{currency:feeSettings.currency||'BRL',language:feeSettings.language||'pt'}},React.createElement(React.Fragment,null,React.createElement(MemoryRouter,{initialEntries},React.createElement(PermissionsContext.Provider,{value:{role,isEmployee:role==='employee',isOwner:role==='owner',ready:true,canAccess:()=>true}},React.createElement(POS))),React.createElement(AppToast))));
 }
-afterEach(()=>{cleanup();localStorage.clear();delete globalThis.__posApi;delete globalThis.__posRanking;});
+afterEach(()=>{cleanup();localStorage.clear();delete globalThis.__posApi;delete globalThis.__posRanking;delete globalThis.__updatePosProducts;});
 after(async()=>{await rm(dir,{recursive:true,force:true});dom.window.close();for(const [name,value]of previous){if(value)Object.defineProperty(globalThis,name,value);else delete globalThis[name];}delete globalThis.IS_REACT_ACT_ENVIRONMENT;});
 const addStandard=ui=>fireEvent.click(ui.getByRole('button',{name:/Vender.*5[.,]00/}));
 const openCart=ui=>fireEvent.click(ui.getByRole('button',{name:/Abrir carrinho/}));
@@ -175,4 +175,19 @@ test('staff checkout hides closure, team switching, customer creation and fee de
  addStandard(ui);openCart(ui);await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Finalizar Compra / Receber'})));
  await act(async()=>fireEvent.click(ui.getByRole('button',{name:/Caderneta$/})));
  assert.equal(ui.queryByRole('button',{name:'+ Novo Cliente'}),null);assert.equal(ui.queryByRole('option',{name:/Cadastrar Novo Cliente Agora/}),null);
+});
+
+for(const isDesktop of [false,true])test(`POS hides depleted products in every list and restores them on replenishment (${isDesktop?'desktop':'mobile'})`,async()=>{
+ let ui;await act(async()=>{ui=setup(undefined,isDesktop,{ownerId:'owner'});});
+ const catalog=within(ui.getByRole('region',{name:'Produtos para venda'}));
+ const shortcuts=within(ui.getByRole('region',{name:'Atalhos de produtos'}));
+ fireEvent.click(shortcuts.getByRole('button',{name:'Favoritar Suco'}));fireEvent.click(shortcuts.getByRole('button',{name:'Escolher Suco'}));
+ await act(async()=>globalThis.__updatePosProducts([{...standard,stock:0},{...cigarettes,stock:.05}]));
+ assert.equal(catalog.queryByRole('heading',{name:'Suco'}),null);assert.ok(catalog.getByRole('heading',{name:'Cigarro'}));assert.equal(shortcuts.queryByRole('button',{name:'Escolher Suco'}),null);
+ for(const tab of ['Favoritos','Recentes']){fireEvent.click(shortcuts.getByRole('button',{name:tab}));assert.equal(shortcuts.queryByRole('button',{name:'Escolher Suco'}),null);}
+ fireEvent.click(ui.getByRole('button',{name:/Categoria/}));assert.equal(ui.queryByRole('option',{name:/Bebidas/}),null);fireEvent.click(ui.getByRole('option',{name:/Cigarros/}));
+ fireEvent.click(shortcuts.getByRole('button',{name:'Mais vendidos'}));fireEvent.click(shortcuts.getByRole('button',{name:'Escolher Cigarro'}));assert.ok(ui.getByRole('dialog',{name:'Escolher formato'}));
+ await act(async()=>globalThis.__updatePosProducts([{...standard,stock:0},{...cigarettes,stock:0}]));assert.equal(ui.queryByRole('dialog',{name:'Escolher formato'}),null);assert.equal(catalog.queryByRole('heading',{name:'Cigarro'}),null);assert.equal(ui.queryByRole('button',{name:/Limpar categoria/}),null);assert.ok(ui.getByText('Nenhum produto com estoque para vender.'));
+ await act(async()=>globalThis.__updatePosProducts([standard,cigarettes]));assert.ok(catalog.getByRole('heading',{name:'Suco'}));assert.equal(ui.queryByRole('dialog',{name:'Escolher formato'}),null);fireEvent.click(shortcuts.getByRole('button',{name:'Favoritos'}));assert.ok(shortcuts.getByRole('button',{name:'Escolher Suco'}));
+ fireEvent.change(ui.getByPlaceholderText(/Buscar.*nome/),{target:{value:'Suco'}});await act(async()=>globalThis.__updatePosProducts([{...standard,stock:0},cigarettes]));assert.equal(catalog.queryByRole('heading',{name:'Suco'}),null);
 });

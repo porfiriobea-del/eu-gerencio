@@ -133,19 +133,23 @@ export default function POS() {
     return () => { active = false; controller.abort(); };
   }, [products, todaySales]);
 
+  const availableProducts=useMemo(()=>products.filter(product=>Number.isFinite(product.stock)&&product.stock>0),[products]);
+  const availableQuickProduct=availableProducts.find(product=>product.id===quickProduct?.id);
+  useEffect(()=>{if(quickProduct&&!availableQuickProduct)setQuickProduct(null);},[quickProduct,availableQuickProduct]);
+
   const categories = useMemo(() => {
-    return posCategories(products);
-  }, [products]);
+    return posCategories(availableProducts);
+  }, [availableProducts]);
 
   useEffect(()=>{if(selectedCategory!=='Todas'&&!categories.some(category=>category.name===selectedCategory))setSelectedCategory('Todas');},[categories,selectedCategory]);
 
   const filteredProducts = useMemo(() => {
-    return rankProductsBySales(products.filter(p => {
+    return rankProductsBySales(availableProducts.filter(p => {
       const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
       const matchCat = selectedCategory === 'Todas' || p.category === selectedCategory;
       return matchSearch && matchCat;
     }), salesTotals);
-  }, [products, search, selectedCategory, salesTotals]);
+  }, [availableProducts, search, selectedCategory, salesTotals]);
 
   useEffect(()=>{
     const params=new URLSearchParams(location.search),customerId=params.get('fiado_cliente');
@@ -546,17 +550,17 @@ export default function POS() {
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-surface text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary shadow-xs"
             />
           </div>
-          <CategoryFilter categories={categories} total={products.length} value={selectedCategory} onChange={setSelectedCategory}/>
+          <CategoryFilter categories={categories} total={availableProducts.length} value={selectedCategory} onChange={setSelectedCategory}/>
 
         </div>
 
         <SelectedCategory value={selectedCategory} onClear={()=>setSelectedCategory('Todas')}/>
         </div>
-        <QuickProducts products={products} totals={salesTotals} favorites={shortcuts.favorites} recent={shortcuts.recent} onFavorite={shortcuts.toggleFavorite} onChoose={product=>{
+        <QuickProducts products={availableProducts} totals={salesTotals} favorites={shortcuts.favorites} recent={shortcuts.recent} onFavorite={shortcuts.toggleFavorite} onChoose={product=>{
           if(product.type==='cigarro')setQuickProduct(product);
           else addToCart(product, 'Unidade', product.hasPromoSuggestion && product.promoPrice ? product.promoPrice : product.basePrice, 1);
         }}/>
-        <div className="grid grid-cols-1 min-[560px]:grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4 overflow-y-auto pb-24">
+        <div role="region" aria-label={v('pos.products','Produtos para venda')} className="grid grid-cols-1 min-[560px]:grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4 overflow-y-auto pb-24">
           {Object.keys(salesTotals).length > 0 && <p className="col-span-full text-xs text-muted-foreground">{v('pos.salesOrder', 'Mais vendidos primeiro')}</p>}
           {filteredProducts.map(p => (
             <div key={p.id} className={`relative bg-surface border border-border rounded-2xl p-3.5 shadow-xs hover:shadow-md transition-all grid ${p.imageUrl ? 'grid-cols-[88px_minmax(0,1fr)]' : 'grid-cols-[40px_minmax(0,1fr)]'} gap-x-3 md:flex md:flex-col md:gap-x-0 justify-between group`}>
@@ -741,7 +745,7 @@ export default function POS() {
             </div>
           ))}
           {filteredProducts.length === 0 && (
-            <div className="col-span-full py-12 text-center text-gray-500">Nenhum produto encontrado.</div>
+            <div className="col-span-full py-12 text-center text-gray-500">{availableProducts.length?v('pos.noMatches','Nenhum produto encontrado.'):v('pos.noStock','Nenhum produto com estoque para vender.')}</div>
           )}
         </div>
       </div>
@@ -1142,7 +1146,7 @@ export default function POS() {
         </div>
       )}
 
-      {quickProduct && <QuickProductDialog product={products.find(p=>p.id===quickProduct.id)||quickProduct} onClose={()=>setQuickProduct(null)} onAdd={addToCart}/>}
+      {availableQuickProduct && <QuickProductDialog product={availableQuickProduct} onClose={()=>setQuickProduct(null)} onAdd={addToCart}/>}
       {/* Cash Closure (Fechar Caixa) Modal */}
       {!access.isEmployee && isCashClosureOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs overflow-y-auto">
