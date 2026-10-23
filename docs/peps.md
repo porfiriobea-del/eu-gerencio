@@ -1,0 +1,11 @@
+# Custo das vendas por PEPS
+
+Aplicar `supabase/migrations/20261023_fifo_costs.sql` no projeto Supabase, depois das migrações de permissões de equipe e de mesclagem. A migração não cria tabelas nem regrava compras ou vendas históricas. Ela atualiza o cálculo de vendas da equipe, esconde custos na projeção de funcionários e valida os lotes junto do saldo. Sem essa migração, a nova rota de venda de funcionário é bloqueada, em vez de executar o cálculo antigo.
+
+Na primeira leitura, o app deriva os lotes das compras mais recentes, até completar o saldo. Na primeira movimentação, congela os lotes restantes no JSON do produto (`fifoLots`) e o custo inicial em `initialUnitCost`. A cache de lotes é atualizada atomicamente com cada movimento. Essa identidade persistente permite devolver um estorno ao lote original, mesmo após outras compras. Não há tabela adicional. Aumentos manuais têm um lote de ajuste; reduções manuais consomem os mais antigos.
+
+Cada item de venda novo registra `costMethod: 'fifo'`, `costAllocations`, `costKnown` e o custo por quantidade de formato vendido em `unitCost`. Se falta custo, `unitCost` é `null`; relatórios mostram que falta informar custo e não inventam lucro. Bônus possuem lote próprio e dividem o valor pago com todas as unidades recebidas. Estoque de cigarro usa inteiros de 1/20 de carteira durante os cálculos.
+
+Cancelamentos ficam em “Conferir vendas de hoje / cancelar”, na conferência do Caixa, para dono e gerente. O histórico da venda e dos itens permanece; `cancelledAt` marca o cancelamento. Vendas antigas sem alocações não podem receber um estorno automático que adivinhe a origem. Fiado já recebido exige conferir a devolução antes de cancelar. Compras com unidades consumidas não podem ser estornadas integralmente usando outro lote.
+
+`unitCost` do produto apresenta o primeiro lote restante; `lastCost`, o recebimento mais recente. Sugestões de preço usam esse último custo e preservam o acréscimo em relação ao último custo anterior; aceitação explícita continua obrigatória e gera histórico. Campos históricos `averageCostAfter` de compras anteriores são mantidos apenas para consulta/exportação; não participam do custo de nenhuma venda nova.

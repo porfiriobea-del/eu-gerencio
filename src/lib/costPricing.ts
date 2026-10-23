@@ -1,13 +1,6 @@
 import type {Product,PriceField,PriceChange,PriceReview} from '../types';
 import {calculateMargin} from './pricing';
 export const PRICE_FIELDS:PriceField[]=['basePrice','pricePackage','pricePack','priceCart','priceHalfCart','priceUnit','promoPrice'];
-export function weightedAverageCost(stock:number,cost:number,received:number,receiptCost:number):number {
-  if (![stock,cost,received,receiptCost].every(n=>Number.isFinite(n)&&n>=0)) throw new Error('Confira saldos e custos antes de registrar a compra.');
-  if (received===0) return cost;
-  const next=(stock*cost+received*receiptCost)/(stock+received);
-  if (!Number.isFinite(next)) throw new Error('Custo inválido.');
-  return next;
-}
 export function salePriceFormats(product:Product):{field:PriceField;units:number}[] {
   const formats:{field:PriceField;units:number}[]=product.type==='cigarro'
     ? [{field:'pricePack' as const,units:10},{field:'priceCart' as const,units:1},{field:'priceHalfCart' as const,units:0.5},{field:'priceUnit' as const,units:0.05}]
@@ -16,8 +9,8 @@ export function salePriceFormats(product:Product):{field:PriceField;units:number
   return formats.filter(f=>Number.isFinite(product[f.field]) && Number(product[f.field])>0);
 }
 export function costPriceReview(product:Product,newCost:number,id:string,createdAt=Date.now()):PriceReview|null {
-  const oldCost=product.pendingPriceReview?.oldCost ?? product.unitCost;
-  if (!(oldCost>0) || !Number.isFinite(newCost) || newCost<0) return null;
+  const oldCost=product.lastCost ?? product.unitCost;
+  if (!(oldCost>0) || !Number.isFinite(newCost) || newCost<=0) return null;
   const changePercent=(newCost-oldCost)/oldCost*100;
   if (Math.abs(changePercent)<=3+1e-9) return null;
   const prices=salePriceFormats(product).map(({field})=>({field,oldPrice:Number(product[field]),newPrice:Math.max(0.5,Math.round(Number(product[field])*newCost/oldCost*2)/2)}));

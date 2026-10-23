@@ -1,7 +1,7 @@
 import {createPortal} from 'react-dom';
 import {useModalViewport} from '../lib/useModalViewport';
 import {CostPriceReview,ProductCosts} from '../components/CostPriceReview';
-import {lowMarginFormats} from '../lib/averageCost';
+import {lowMarginFormats} from '../lib/costPricing';
 import {BonusRules} from '../components/BonusRules';
 import {bonusCost, calculateBonus, nearBonus, monthlyBonusSavings, supplierKey, bonusUnits, bonusUnitKey} from '../lib/purchaseBonus';
 import { useStockFormatting } from '../lib/useStockFormatting';
@@ -264,14 +264,14 @@ export default function Purchases() {
       const pkgs = Math.ceil(qtyToUse / unitsPerPkg) || 1;
       setPackageQty(pkgs);
       setLooseUnitsQty(pkgs * unitsPerPkg);
-      const cost = product.unitCost || 0;
+      const cost = product.lastCost ?? product.unitCost ?? 0;
       setUnitCost(cost);
       setTotalCost(Number((pkgs * unitsPerPkg * cost).toFixed(2)));
     } else {
       setPurchaseType('unit');
       setPackageQty(1);
       setLooseUnitsQty(qtyToUse);
-      const cost = product.unitCost || 0;
+      const cost = product.lastCost ?? product.unitCost ?? 0;
       setUnitCost(cost);
       setTotalCost(Number((qtyToUse * cost).toFixed(2)));
     }

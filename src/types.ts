@@ -1,3 +1,4 @@
+export interface FifoLot {id:string;purchaseId?:string;kind:"initial"|"purchase"|"bonus"|"adjustment";quantity:number;unitCost:number;createdAt:number;}
 export type PriceField = 'basePrice' | 'pricePackage' | 'pricePack' | 'priceCart' | 'priceHalfCart' | 'priceUnit' | 'promoPrice';
 export interface PriceChange {field:PriceField;oldPrice:number;newPrice:number;}
 export interface PriceReview {id:string;oldCost:number;newCost:number;changePercent:number;prices:PriceChange[];createdAt:number;}
@@ -16,10 +17,12 @@ export interface Product {
   purchaseForm: 'pacote' | 'fardo' | 'unidade';
   unitsPerPackage: number;
   supplierPackageUnits?: 5 | 10; // Cigarette purchase packaging; sale pack remains 10 carteiras.
+  fifoLots?: FifoLot[];
+  initialUnitCost?: number;
   lastCost?: number; // Effective unit cost of the most recent receipt; never the weighted average.
   pendingPriceReview?: PriceReview | null;
   desiredMargin?: number;
-  unitCost: number; // Weighted average per stock unit: carteira for cigarettes, individual unit otherwise.
+  unitCost: number; // Current FIFO lot cost per carteira or ordinary unit.
   stock: number;
   safetyStock: number;
   maxStock?: number;
@@ -145,6 +148,8 @@ export interface Movement {
 }
 
 export interface Sale {
+  cancelledAt?: number;
+  cancelledBy?: string;
   id?: string;
   total: number;
   type: 'cash' | 'card' | 'fiado';
@@ -184,6 +189,9 @@ export interface CashClosure {
 }
 
 export interface SaleItem {
+  costMethod?: "fifo";
+  costKnown?: boolean;
+  costAllocations?: FifoLot[];
   stockDeduction?: number; // Stock units consumed by one item in the selected sale format.
   id?: string;
   productId: string;
@@ -191,7 +199,7 @@ export interface SaleItem {
   format: string;
   quantity: number;
   price: number;
-  unitCost: number;
+  unitCost: number | null;
   ownerId: string;
   createdAt: number;
 }
@@ -228,6 +236,7 @@ export interface Purchase {
   effectiveUnitCost?: number;
   bonusSavings?: number; // Estimated value at the pre-bonus acquisition cost.
   stockUpdated?: boolean;
+  // Legacy audit snapshots only; never used by FIFO costing.
   previousAverageCost?: number;
   averageCostAfter?: number;
   bonusAverageCostAfter?: number;
@@ -301,15 +310,16 @@ export interface Feedback {
 }
 
 export interface MonthlyFinancials {
+  profitIncomplete?: boolean;
   monthName: string;
   totalGrossSales: number;
-  totalCostOfGoods: number; // CMV
-  grossProfit: number;
-  grossMargin: number;
+  totalCostOfGoods: number | null; // CMV
+  grossProfit: number | null;
+  grossMargin: number | null;
   cardFeesEstimated: number;
   totalWithdrawals: number;
-  totalNetProfit: number;
-  netMargin: number;
+  totalNetProfit: number | null;
+  netMargin: number | null;
   salesCount: number;
   averageTicket: number;
   cashSales: number;

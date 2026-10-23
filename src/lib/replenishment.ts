@@ -45,7 +45,7 @@ export function buildReplenishment(products: Product[], sales: SaleItem[], purch
     const suggestedBuyUnits = Number((suggestedPackages * packageUnits).toFixed(2));
     return { product, average, coverage, days, desiredDays, maxStock, isCritical, isBelowSafety,
       needsReplenish: isCritical || isBelowSafety || (coverage !== null && coverage < desiredDays),
-      suggestedPackages, suggestedBuyUnits, estimatedCost: Number((suggestedBuyUnits * positive(product.unitCost)).toFixed(2)),
+      suggestedPackages, suggestedBuyUnits, estimatedCost: Number((suggestedBuyUnits * positive(product.lastCost ?? product.unitCost)).toFixed(2)),
       supplier: suppliers.get(product.id || '') || '', invalidLimits: stockLimitError(product), aboveMaximum: maxStock > 0 && stock > maxStock };
   }).filter(item => item.needsReplenish)
     .sort((a,b) => Number(b.isCritical)-Number(a.isCritical) || Number(b.isBelowSafety)-Number(a.isBelowSafety)

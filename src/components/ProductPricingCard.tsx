@@ -1,3 +1,4 @@
+import {usePreferences} from '../lib/preferencesContext';
 import {CostPriceReview,ProductCosts} from './CostPriceReview';
 import { useCurrency } from '../lib/useCurrency';
 import type { Product } from '../types';
@@ -7,10 +8,11 @@ import { calculateMargin, getPricingFormats, isFractionalCigarette, priceForMarg
 function PriceDetails({ cost, price }: { cost: number; price: number }) {
   const { formatMoney } = useCurrency();
   const currency = (value:number) => Number.isFinite(value) ? formatMoney(value) : 'Não informado';
+  const {v}=usePreferences();
   const margin = calculateMargin(cost, price);
   return (
     <dl className="space-y-2 text-sm">
-      <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Custo</dt><dd className="text-right font-medium tabular-nums">{currency(cost)}</dd></div>
+      <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Custo</dt><dd className="text-right font-medium tabular-nums">{cost>0?currency(cost):v('cost.enter')}</dd></div>
       <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Preço atual</dt><dd className="text-right font-bold tabular-nums">{currency(price)}</dd></div>
       <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Margem atual</dt><dd className={`text-right font-bold tabular-nums ${margin !== null && margin < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{margin === null ? '—' : `${margin.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`}</dd></div>
     </dl>
@@ -60,7 +62,7 @@ export function ProductPricingCard({ product, isSaving, onUpdatePrice }: Product
               <section key={format.key} className="min-w-0 rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900/40">
                 <h4 className="font-bold">{format.label}</h4><p className="mb-3 text-xs text-muted-foreground notranslate normal-case" translate="no">{format.description}</p>
                 <PriceDetails cost={format.cost} price={format.price} />
-                {suggestions(format.cost, format.key)}
+                {suggestions((product.lastCost ?? product.unitCost)*format.units, format.key)}
               </section>
             ))}
           </div>
@@ -73,7 +75,7 @@ export function ProductPricingCard({ product, isSaving, onUpdatePrice }: Product
             {Number(product.pricePackage) > 0 && <p className="mt-3 flex justify-between gap-3 text-xs"><span className="text-muted-foreground">Embalagem ({product.unitsPerPackage} unidades)</span><span className="text-right font-semibold">{currency(Number(product.pricePackage))}</span></p>}
             {product.hasPromoSuggestion && Number(product.promoPrice) > 0 && <p className="mt-3 flex justify-between gap-3 text-xs text-amber-700 dark:text-amber-400"><span>Preço promocional</span><span className="text-right font-semibold">{currency(Number(product.promoPrice))}</span></p>}
           </div>
-          <div>{suggestions(Number(product.unitCost), 'basePrice')}</div>
+          <div>{suggestions(Number(product.lastCost ?? product.unitCost), 'basePrice')}</div>
         </div>
       )}
     </article>

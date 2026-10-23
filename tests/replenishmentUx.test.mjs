@@ -8,9 +8,9 @@ for(const name of ['window','document','navigator','HTMLElement','Node','CustomE
 window.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});globalThis.IS_REACT_ACT_ENVIRONMENT=true;
 const React=await import('react');const {render,fireEvent,act,cleanup}=await import('@testing-library/react');
 const folder=await mkdtemp(new URL('../.replenish-ui-',import.meta.url).pathname);
-const names=['subscribeProducts','subscribePurchases','recordPurchase','deletePurchase','getReplenishmentSales','mergeProducts','subscribeSettings','saveBonusRule','resolvePriceReview'];
-await build({stdin:{contents:"export {default as Purchases} from './src/pages/Purchases';export {PreferencesProvider} from './src/lib/preferencesContext';",resolveDir:new URL('..',import.meta.url).pathname,loader:'tsx'},bundle:true,packages:'external',platform:'node',format:'esm',jsx:'automatic',outfile:folder+'/ui.mjs',plugins:[{name:'bank',setup(b){b.onResolve({filter:/\/lib\/api$/},a=>({path:a.path,namespace:'mock'}));b.onLoad({filter:/.*/,namespace:'mock'},()=>({loader:'js',contents:names.map(n=>`export const ${n}=(...args)=>globalThis.__replenish.${n}(...args);`).join('\n')}));}}]});
-const {Purchases,PreferencesProvider}=await import(folder+'/ui.mjs');
+const names=['subscribeProducts','subscribePurchases','recordPurchase','deletePurchase','getReplenishmentSales','mergeProducts','subscribeSettings','saveBonusRule','resolvePriceReview','cancelSale'];
+await build({stdin:{contents:"export {SaleCancellation} from './src/components/SaleCancellation';export {default as Purchases} from './src/pages/Purchases';export {PreferencesProvider} from './src/lib/preferencesContext';",resolveDir:new URL('..',import.meta.url).pathname,loader:'tsx'},bundle:true,packages:'external',platform:'node',format:'esm',jsx:'automatic',outfile:folder+'/ui.mjs',plugins:[{name:'bank',setup(b){b.onResolve({filter:/\/lib\/api$/},a=>({path:a.path,namespace:'mock'}));b.onLoad({filter:/.*/,namespace:'mock'},()=>({loader:'js',contents:names.map(n=>`export const ${n}=(...args)=>globalThis.__replenish.${n}(...args);`).join('\n')}));}}]});
+const {Purchases,PreferencesProvider,SaleCancellation}=await import(folder+'/ui.mjs');
 const product={id:'p',name:'Água Mineral ORIGINAL',type:'comum',purchaseForm:'fardo',unitsPerPackage:6,stock:3,safetyStock:4,maxStock:10,unitCost:2,dailyAverageSales:9999,category:'Bebidas'};
 function bank({fail=false,duplicates=false}={}){globalThis.__replenish={subscribeProducts(cb){cb(duplicates?[product,{...product,id:'b',name:'aguaMineral ORIGINAL'}]:[product]);return()=>{};},subscribePurchases(cb){cb([{productId:'p',supplier:'Fornecedor ORIGINAL',date:'2026-10-20',createdAt:1,totalCost:12,quantity:6}]);return()=>{};},subscribeSettings(cb){cb({bonusRules:[]});return()=>{};},async saveBonusRule(){},async getReplenishmentSales(){if(fail)throw Error('unavailable');return [];},async recordPurchase(){},async deletePurchase(){},async mergeProducts(...args){globalThis.__merged=args;}};}
 async function view(){let ui;await act(async()=>{ui=render(React.createElement(PreferencesProvider,null,React.createElement(Purchases)));});return ui;}
@@ -93,4 +93,25 @@ test('purchase dialog scrolls independently, keeps confirmation outside fields a
  assert.ok(ui.getAllByText('Informe o custo').length>0);
  await act(async()=>{Object.defineProperty(window,'innerHeight',{value:340,configurable:true});window.dispatchEvent(new Event('resize'));});
  assert.equal(dialog.parentElement.style.height,'340px');
+});
+
+test('current lot, latest cost and remaining old lot are clear in all three language modes',async()=>{
+ for(const mode of ['basic','neutral','technical']){
+  localStorage.setItem('app_lang_mode',mode);bank();
+  globalThis.__replenish.subscribeProducts=cb=>{cb([{...product,unitCost:1,lastCost:2,fifoLots:[{id:'old',kind:'initial',createdAt:0,quantity:1,unitCost:1},{id:'new',kind:'purchase',createdAt:1,quantity:2,unitCost:2}]}]);return()=>{};};
+  const ui=await view();fireEvent.click(ui.getByRole('button',{name:mode==='basic'?'Anotar compra':'Registrar compra'}));
+  assert.ok(ui.getAllByText(/Custo do lote atual/).length);assert.ok(ui.getByText(/Ainda restam 1.*do lote antigo.*1,00/));assert.doesNotMatch(ui.getByRole('dialog').textContent,/custo médio/i);cleanup();
+ }
+});
+
+test('sale cancellation asks for confirmation and closes its busy state on success and error in all modes',async()=>{
+ for(const mode of ['basic','neutral','technical']){
+  localStorage.setItem('app_lang_mode',mode);bank();let called=0;
+  globalThis.__replenish.cancelSale=async id=>{assert.equal(id,'sale-fifo');called++;};
+  let ui;await act(async()=>{ui=render(React.createElement(PreferencesProvider,null,React.createElement(SaleCancellation,{sale:{id:'sale-fifo',total:25,itemsSummary:'Nome ORIGINAL'}})));});
+  fireEvent.click(ui.getByRole('button',{name:'Cancelar venda'}));assert.equal(called,0);fireEvent.click(ui.getByRole('button',{name:'Manter venda'}));assert.equal(called,0);
+  fireEvent.click(ui.getByRole('button',{name:'Cancelar venda'}));await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Cancelar venda'})));assert.equal(called,1);assert.equal(ui.queryByRole('group'),null);
+  globalThis.__replenish.cancelSale=async()=>{throw Error('Estorno indisponível');};
+  fireEvent.click(ui.getByRole('button',{name:'Cancelar venda'}));await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Cancelar venda'})));assert.equal(ui.queryByRole('group'),null);assert.equal(ui.getByRole('button',{name:'Cancelar venda'}).disabled,false);cleanup();
+ }
 });

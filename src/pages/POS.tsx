@@ -1,3 +1,4 @@
+import {SaleCancellation} from '../components/SaleCancellation';
 import {usePermissions} from '../lib/permissionsContext';
 import {useCheckoutQuote} from '../lib/useCheckoutQuote';
 import { useLocation,useNavigate } from 'react-router-dom';
@@ -1249,6 +1250,7 @@ export default function POS() {
                     </div>
                   </div>
 
+                  {!access.isEmployee&&<details className="rounded-xl border border-border p-3"><summary className="cursor-pointer text-sm">{v('sale.reviewToday')}</summary><div className="mt-3 space-y-2">{todaySales.map(sale=><SaleCancellation key={sale.id} sale={sale}/>)}</div></details>}
                   {/* Cash Drawer Reconciliation */}
                   <div className="p-4 bg-muted/20 border border-border rounded-xl space-y-4">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">

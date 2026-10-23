@@ -81,7 +81,7 @@ export default function Pricing() {
                 {languageMode === 'basic' ? 'Quanto Você Ganhou no Mês' : 'Valores Ganhos no Mês'}
               </h2>
               <p className="text-xs text-muted-foreground">
-                {languageMode === 'basic' 
+                {languageMode === 'basic'
                   ? 'Confira o total vendido, o custo dos itens vendidos e o resultado estimado.'
                   : 'Apuração financeira do faturamento, custos de mercadoria (CMV), lucro bruto e líquido.'}
               </p>
@@ -166,13 +166,13 @@ export default function Pricing() {
             </div>
             <div>
               <div className="text-2xl font-bold text-foreground">
-                {formatMoney((financials?.totalCostOfGoods || 0))}
+                {financials?.profitIncomplete?v('cost.incomplete'):formatMoney((financials?.totalCostOfGoods || 0))}
               </div>
               <div className="text-[11px] text-muted-foreground mt-1">
-                {financials?.totalGrossSales 
-                  ? (languageMode === 'basic' 
-                      ? `${((financials.totalCostOfGoods / financials.totalGrossSales) * 100).toFixed(1)}% do dinheiro que entrou`
-                      : `${((financials.totalCostOfGoods / financials.totalGrossSales) * 100).toFixed(1)}% da receita bruta`) 
+                {financials?.profitIncomplete?v('cost.incomplete'):financials?.totalGrossSales
+                  ? (languageMode === 'basic'
+                      ? `${(((financials.totalCostOfGoods ?? 0) / financials.totalGrossSales) * 100).toFixed(1)}% do dinheiro que entrou`
+                      : `${(((financials.totalCostOfGoods ?? 0) / financials.totalGrossSales) * 100).toFixed(1)}% da receita bruta`)
                   : 'Sem vendas registradas'}
               </div>
               {languageMode === 'basic' && (
@@ -188,15 +188,15 @@ export default function Pricing() {
             <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-300 text-xs font-bold mb-2">
               <span>{v('pricing.grossProfit', 'Lucro Bruto')}</span>
               <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-[10px]">
-                {(financials?.grossMargin || 0).toFixed(1)}% {languageMode === 'basic' ? 'de sobra' : 'Margem'}
+                {financials?.profitIncomplete?'—':(financials?.grossMargin || 0).toFixed(1)}% {languageMode === 'basic' ? 'de sobra' : 'Margem'}
               </span>
             </div>
             <div>
               <div className="text-2xl font-black text-emerald-700 dark:text-emerald-400">
-                {formatMoney((financials?.grossProfit || 0))}
+                {financials?.profitIncomplete?v('cost.incomplete'):formatMoney((financials?.grossProfit || 0))}
               </div>
               <div className="text-[11px] text-emerald-600/80 dark:text-emerald-400/80 mt-1">
-                {languageMode === 'basic' 
+                {languageMode === 'basic'
                   ? 'Dinheiro das vendas tirando o custo dos produtos'
                   : 'Receita bruta subtraída do custo dos produtos'}
               </div>
@@ -208,15 +208,15 @@ export default function Pricing() {
             <div className="flex items-center justify-between text-primary text-xs font-bold mb-2">
               <span>{v('pricing.netProfit', 'Lucro Líquido Real')}</span>
               <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[10px]">
-                {(financials?.netMargin || 0).toFixed(1)}% {languageMode === 'basic' ? 'estimado' : 'Estimado'}
+                {financials?.profitIncomplete?'—':(financials?.netMargin || 0).toFixed(1)}% {languageMode === 'basic' ? 'estimado' : 'Estimado'}
               </span>
             </div>
             <div>
               <div className="text-2xl font-black text-primary">
-                {formatMoney((financials?.totalNetProfit || 0))}
+                {financials?.profitIncomplete?v('cost.incomplete'):formatMoney((financials?.totalNetProfit || 0))}
               </div>
               <div className="text-[11px] text-muted-foreground mt-1">
-                {languageMode === 'basic' 
+                {languageMode === 'basic'
                   ? 'Estimativa após custos, taxas e retiradas registradas'
                   : 'Lucro final após taxas de cartão e retiradas'}
               </div>
@@ -258,22 +258,22 @@ export default function Pricing() {
           <div className="p-4 rounded-xl border border-border bg-surface">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Info className="w-3.5 h-3.5 text-primary" /> 
+                <Info className="w-3.5 h-3.5 text-primary" />
                 {languageMode === 'basic' ? 'Como calculamos o resultado estimado' : 'Como é apurado o Lucro Líquido'}
               </h3>
               <span className="text-xs font-semibold text-foreground">{financials?.monthName}</span>
             </div>
-            
+
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between py-1.5 border-b border-border/50">
                 <span className="text-muted-foreground">
                   {languageMode === 'basic' ? 'Sobra das vendas (Vendas menos Custo dos itens)' : 'Lucro Bruto Apurado (Receita - CMV)'}
                 </span>
-                <span className="font-bold text-foreground">{formatMoney((financials?.grossProfit || 0))}</span>
+                <span className="font-bold text-foreground">{financials?.profitIncomplete?v('cost.incomplete'):formatMoney((financials?.grossProfit || 0))}</span>
               </div>
               <div className="flex items-center justify-between py-1.5 border-b border-border/50">
                 <span className="text-muted-foreground flex items-center gap-1">
-                  <span>{languageMode === 'basic' ? 'Taxinha da maquininha de cartão (2%)' : 'Taxas est. de Cartão (2%)'}</span>
+                  <span>{v('cost.saleFees')}</span>
                   <span className="text-[10px] text-muted-foreground">sobre {formatMoney((financials?.cardSales || 0))}</span>
                 </span>
                 <span className="font-medium text-red-600 dark:text-red-400">- {formatMoney((financials?.cardFeesEstimated || 0))}</span>
@@ -288,7 +288,7 @@ export default function Pricing() {
                 <span className="font-bold text-foreground">
                   {v('pricing.netProfit', 'Lucro Líquido Real')}
                 </span>
-                <span className="text-base font-extrabold text-primary">{formatMoney((financials?.totalNetProfit || 0))}</span>
+                <span className="text-base font-extrabold text-primary">{financials?.profitIncomplete?v('cost.incomplete'):formatMoney((financials?.totalNetProfit || 0))}</span>
               </div>
               <div className="flex items-center justify-between pt-1 text-xs">
                 <div className="flex items-center gap-1 text-muted-foreground">
@@ -307,7 +307,7 @@ export default function Pricing() {
           <div className="p-4 rounded-xl border border-border bg-surface">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <PieChart className="w-3.5 h-3.5 text-primary" /> 
+                <PieChart className="w-3.5 h-3.5 text-primary" />
                 {languageMode === 'basic' ? 'De onde veio o dinheiro das vendas' : 'Faturamento por Forma de Pagamento'}
               </h3>
               <span className="text-xs text-muted-foreground">Total: {formatMoney((financials?.totalGrossSales || 0))}</span>
@@ -322,9 +322,9 @@ export default function Pricing() {
                   <span className="text-foreground font-bold">{formatMoney((financials?.cashSales || 0))}</span>
                 </div>
                 <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
-                  <div 
-                    className="bg-emerald-500 h-full rounded-full transition-all" 
-                    style={{ width: `${financials?.totalGrossSales ? ((financials.cashSales / financials.totalGrossSales) * 100) : 0}%` }} 
+                  <div
+                    className="bg-emerald-500 h-full rounded-full transition-all"
+                    style={{ width: `${financials?.totalGrossSales ? ((financials.cashSales / financials.totalGrossSales) * 100) : 0}%` }}
                   />
                 </div>
               </div>
@@ -337,9 +337,9 @@ export default function Pricing() {
                   <span className="text-foreground font-bold">{formatMoney((financials?.cardSales || 0))}</span>
                 </div>
                 <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
-                  <div 
-                    className="bg-blue-500 h-full rounded-full transition-all" 
-                    style={{ width: `${financials?.totalGrossSales ? ((financials.cardSales / financials.totalGrossSales) * 100) : 0}%` }} 
+                  <div
+                    className="bg-blue-500 h-full rounded-full transition-all"
+                    style={{ width: `${financials?.totalGrossSales ? ((financials.cardSales / financials.totalGrossSales) * 100) : 0}%` }}
                   />
                 </div>
               </div>
@@ -352,9 +352,9 @@ export default function Pricing() {
                   <span className="text-foreground font-bold">{formatMoney((financials?.fiadoSales || 0))}</span>
                 </div>
                 <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
-                  <div 
-                    className="bg-amber-500 h-full rounded-full transition-all" 
-                    style={{ width: `${financials?.totalGrossSales ? ((financials.fiadoSales / financials.totalGrossSales) * 100) : 0}%` }} 
+                  <div
+                    className="bg-amber-500 h-full rounded-full transition-all"
+                    style={{ width: `${financials?.totalGrossSales ? ((financials.fiadoSales / financials.totalGrossSales) * 100) : 0}%` }}
                   />
                 </div>
               </div>

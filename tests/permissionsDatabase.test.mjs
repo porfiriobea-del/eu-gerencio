@@ -12,6 +12,7 @@ before(async()=>{
  db=new PGlite();await db.exec(`create role authenticated;create role anon;create schema auth;create function auth.jwt() returns jsonb language sql stable as $$select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb$$;grant usage on schema public,auth to authenticated,anon;grant execute on function auth.jwt() to authenticated,anon;`);
  await db.exec(await readFile(new URL('../supabase/migrations/20261014_cloud_source_of_truth.sql',import.meta.url),'utf8'));
  await db.exec(migration);await db.exec(migration);
+ await db.exec(await readFile(new URL('../supabase/migrations/20261023_fifo_costs.sql',import.meta.url),'utf8')); await db.exec(await readFile(new URL('../supabase/migrations/20261023_fifo_costs.sql',import.meta.url),'utf8'));
  const merges=await readFile(new URL('../supabase/migrations/20261021_owner_product_merges.sql',import.meta.url),'utf8');await db.exec(merges);await db.exec(merges);
  await user('owner');await apply([op('store_settings','owner',{ownerId:'owner',storeName:'Loja',dailyGoal:100,enableCardFees:true,pixRate:.49,creditCardRate:3.5,passCardFeeToCustomer:true,cardFeeCalculationMode:'surcharge'}),op('products','p',{ownerId:'owner',name:'Produto',type:'comum',stock:10,unitCost:3,basePrice:5,unitsPerPackage:6}),op('products','c',{ownerId:'owner',name:'Cigarro',type:'cigarro',stockUnit:'carteira',stock:2,unitCost:10,priceCart:20,priceHalfCart:11,priceUnit:2,pricePack:180,unitsPerPackage:10}),op('customers','customer',{ownerId:'owner',name:'Cliente',totalDebt:20})]);
  for(const [id,role]of [['staff','Operador de Caixa'],['manager','Gerente de Loja']]){
@@ -112,4 +113,23 @@ test('clear-all also needs a correctly scoped approval and cannot call the priva
  await rpc('eu_clear_account_data',[approval.token]);
  assert.equal((await db.query('select * from eu_products')).rows.length,0);assert.equal((await db.query('select * from eu_customers')).rows.length,0);
  await assert.rejects(rpc('eu_clear_account_data',[approval.token]),/Owner PIN required/);
+});
+
+test('staff SQL uses identical PEPS across receipts and never leaks allocations or missing-cost profits',async()=>{
+ await user('owner');await apply([
+ op('products','fifo-staff',{ownerId:'owner',name:'PEPS',type:'comum',stock:56,unitCost:5,basePrice:10,unitsPerPackage:1}),
+ op('purchases','fifo-receipt',{ownerId:'owner',productId:'fifo-staff',quantity:36,totalCost:198,unitCost:5.5,createdAt:2000}),
+ op('products','fifo-no-cost',{ownerId:'owner',name:'Sem custo',type:'comum',stock:1,unitCost:0,basePrice:10,unitsPerPackage:1})]);
+ await apply([op('employees','fifo-staff-record',{ownerId:'owner',name:'Equipe PEPS',email:'fifo-staff-user@test.invalid',role:'Operador de Caixa',pin:'6248',isActive:true,mustChangePin:false}),op('team_invitations','fifo-invite',{ownerId:'owner',name:'Equipe PEPS',email:'fifo-staff-user@test.invalid',role:'Operador de Caixa',status:'pending'})]);
+ await user('fifo-staff-user');await rpc('eu_accept_invitation',['fifo-invite']);await rpc('eu_shift_action',['owner','start','fifo-staff-record']);
+ const items=[{productId:'fifo-staff',format:'Padrão',quantity:25,price:10,stockDeduction:1}];
+ await rpc('eu_staff_sale_fifo',['owner','fifo-staff-sale',JSON.stringify({type:'cash',paymentMethod:'cash',total:250}),JSON.stringify(items)]);
+ const safe=await rpc('eu_staff_read',['owner','eu_sale_items','sales/fifo-staff-sale/saleItems',null,'[]',0]);assert.equal(safe[0].data.unitCost,undefined);assert.equal(safe[0].data.costAllocations,undefined);
+ await rpc('eu_staff_sale',['owner','fifo-no-cost-sale',JSON.stringify({type:'cash',paymentMethod:'cash',total:10}),JSON.stringify([{productId:'fifo-no-cost',format:'Padrão',quantity:1,price:10,stockDeduction:1}])]);
+ await user('owner');const p=(await db.query("select data from eu_products where id='fifo-staff'")).rows[0].data;
+ assert.equal(p.stock,31);assert.equal(p.unitCost,5.5);assert.equal(p.initialUnitCost,5);await assert.rejects(db.query("update eu_products set data=data||'{\"stock\":30}' where id='fifo-staff'"),/FIFO stock mismatch/);
+ const item=(await db.query("select data from eu_sale_items where collection_path='sales/fifo-staff-sale/saleItems'")).rows[0].data;assert.equal(item.unitCost,5.1);assert.equal(item.costKnown,true);assert.deepEqual(item.costAllocations.map(l=>l.quantity),[20,5]);
+ const unknown=(await db.query("select data from eu_sale_items where collection_path='sales/fifo-no-cost-sale/saleItems'")).rows[0].data;assert.equal(unknown.unitCost,null);assert.equal(unknown.costKnown,false);
+ await apply([op('sales','fifo-staff-sale',{cancelledAt:Date.now()},'update')]);assert.equal((await rpc('eu_product_popularity',['owner']))['fifo-staff'] || 0,0);
+ await user('fifo-staff-user');const cancelled=await rpc('eu_staff_read',['owner','eu_sales','sales','fifo-staff-sale','[]',0]);assert.ok(cancelled[0].data.cancelledAt);
 });

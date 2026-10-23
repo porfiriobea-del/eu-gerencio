@@ -31,7 +31,7 @@ before(async()=>{
       for(const op of body.operations){
         const id=key(op.table,op.path,op.id),old=records.get(id);
         if(op.action==='delete')records.delete(id);
-        else {const data=op.action==='update'||op.merge?{...old?.data,...op.data}:op.data;records.set(id,{id:op.id,collection_path:op.path,owner_id:data.ownerId,revision:(old?.revision||0)+1,data});}
+        else {const data=op.action==='update'||op.merge?{...old?.data,...op.data}:op.data;for(const k of Object.keys(data)){if(data[k]?.__eu_delete_field===true)delete data[k];}records.set(id,{id:op.id,collection_path:op.path,owner_id:data.ownerId,revision:(old?.revision||0)+1,data});}
       }
       res.end('null');for(const notify of listeners)notify();return;
     }
@@ -97,7 +97,7 @@ test('transaction retry reads the new cloud balance instead of overwriting a com
   const ref=store.doc(store.db,'products','p1');let attempts=0;
   await store.runTransaction(store.db,async transaction=>{
     attempts++;const snapshot=await transaction.get(ref);
-    if(attempts===1)await store.updateDoc(ref,{stock:8});
+    if(attempts===1)await store.updateDoc(ref,{fifoLots:store.deleteField(),stock:8});
     transaction.update(ref,{stock:snapshot.data().stock-1});
   });
   assert.equal(attempts,2);assert.equal((await store.getDoc(ref)).data().stock,7);
@@ -121,7 +121,7 @@ test('POS commits against current cloud stock, not a stale balance supplied by a
 });
 
 test('POS rejects an insufficient current balance without recording a sale',async()=>{
-  const ref=store.doc(store.db,'products','p1');await store.updateDoc(ref,{stock:0});
+  const ref=store.doc(store.db,'products','p1');await store.updateDoc(ref,{fifoLots:store.deleteField(),stock:0});
   await assert.rejects(api.recordSale({total:5,type:'cash',customerId:''},[{productId:'p1',name:'Produto',format:'Padrão',quantity:1,price:5,unitCost:2,stockDeduction:1}],[{id:'p1',newStock:9}]),/insuficiente/);
   const sales=await store.getDocs(store.query(store.collection(store.db,'sales'),store.where('ownerId','==','owner')));
   assert.equal(sales.docs.length,1);
@@ -135,7 +135,7 @@ test('missing production schema gives actionable instructions without an empty s
 
 test('POS rejects stale package measures and invalid prices before committing stock',async()=>{
   const ref=store.doc(store.db,'products','p1');
-  await store.updateDoc(ref,{stock:10,unitsPerPackage:6});
+  await store.updateDoc(ref,{fifoLots:store.deleteField(),stock:10,unitsPerPackage:6});
   const item={productId:'p1',name:'Produto',format:'Fardo (12 unidades)',quantity:1,price:5,unitCost:2,stockDeduction:12};
   await assert.rejects(api.recordSale({total:5,type:'cash',customerId:''},[item],[]),/medida/);
   await assert.rejects(api.recordSale({total:5,type:'cash',customerId:''},[{...item,price:NaN}],[]),/Preço/);
@@ -160,7 +160,7 @@ test('a fiado payment above the current debt is rejected without recording money
 
 test('two HTTP 400 conflicts trigger fresh reads and succeed on the third attempt', async()=>{
   const ref=store.doc(store.db,'products','p1');
-  await store.updateDoc(ref,{stock:10});
+  await store.updateDoc(ref,{fifoLots:store.deleteField(),stock:10});
   forcedConflicts=2; let reads=0;
   const before=transactionalWrites.length;
   await store.runTransaction(store.db,async tx=>{reads++;const snapshot=await tx.get(ref);tx.update(ref,{stock:snapshot.data().stock+1});});
@@ -178,7 +178,7 @@ test('three conflicts fail once and do not change the stock', async()=>{
 });
 
 test('rapid stock clicks preserve order and use the previous confirmed balance', async()=>{
-  const ref=store.doc(store.db,'products','p1');await store.updateDoc(ref,{stock:20});
+  const ref=store.doc(store.db,'products','p1');await store.updateDoc(ref,{fifoLots:store.deleteField(),stock:20});
   const deltas=[1,1,-1,1,-1,1,1,-1,1,1];
   const before=transactionalWrites.length;
   const results=await Promise.all(deltas.map(delta=>api.adjustProductStock('p1',delta)));
@@ -191,14 +191,14 @@ test('rapid stock clicks preserve order and use the previous confirmed balance',
 });
 
 test('a rejected stock click does not block later writes for the same product', async()=>{
-  const ref=store.doc(store.db,'products','p1');await store.updateDoc(ref,{stock:0});
+  const ref=store.doc(store.db,'products','p1');await store.updateDoc(ref,{fifoLots:store.deleteField(),stock:0});
   const result=await Promise.allSettled([api.adjustProductStock('p1',-1),api.adjustProductStock('p1',1),api.updateProduct('p1',{name:'Renomeado'})]);
   assert.deepEqual(result.map(item=>item.status),['rejected','fulfilled','fulfilled']);
   const product=(await store.getDoc(ref)).data();assert.equal(product.stock,1);assert.equal(product.name,'Renomeado');
 });
 
 test('purchase retries rebuild the stock adjustment without duplicating the purchase', async()=>{
-  const ref=store.doc(store.db,'products','p1');await store.updateDoc(ref,{stock:1});
+  const ref=store.doc(store.db,'products','p1');await store.updateDoc(ref,{fifoLots:store.deleteField(),stock:1});
   forcedConflicts=2;
   const before=await store.getDocs(store.collection(store.db,'purchases'));
   await api.recordPurchase({productId:'p1',productName:'Renomeado',quantity:2,unitCost:1,totalCost:2,date:Date.now()});
@@ -222,7 +222,7 @@ test('all five feedback types survive resubscription and are read by an independ
 });
 
 test('Sheets export failure cannot roll back a confirmed Supabase sale or stock deduction',async()=>{
- const ref=store.doc(store.db,'products','p1');await store.updateDoc(ref,{stock:2});
+ const ref=store.doc(store.db,'products','p1');await store.updateDoc(ref,{fifoLots:store.deleteField(),stock:2});
  globalThis.__sheetsFail=true;
  try{
   await api.recordSale({total:5,type:'cash',customerId:''},[{productId:'p1',name:'Produto',format:'Padrão',quantity:1,price:5,unitCost:2,stockDeduction:1}],[]);
@@ -243,7 +243,7 @@ test('merge retries atomically, preserves history and redirects old purchase sto
  await api.mergeProducts('duplicate-a','duplicate-b');
  const target=await store.getDoc(store.doc(store.db,'products','duplicate-a'));
  const source=await store.getDoc(store.doc(store.db,'products','duplicate-b'));
- assert.equal(target.data().stock,10);assert.equal(target.data().unitCost,3.8);assert.equal(target.data().basePrice,2);
+ assert.equal(target.data().stock,10);assert.equal(target.data().unitCost,1);assert.equal(target.data().basePrice,2);
  assert.ok(source.exists());assert.equal(source.data().stock,0);assert.equal(source.data().mergedIntoId,'duplicate-a');
  assert.equal((await api.getProductDuplicates({name:'cafe teste'},'duplicate-a')).length,0);
  await assert.rejects(api.adjustProductStock('duplicate-b',1),/mesclado/);
@@ -294,13 +294,13 @@ test('cigarette sales save exact fractional balances and the committed balance i
  assert.equal((await store.getDoc(ref)).data().stock,1.5);
  const sales=await store.getDocs(store.collection(store.db,'sales'));
  assert.ok(sales.docs.some(doc=>doc.data().itemsSummary.includes('Venda: meia carteira; estoque agora 1 carteira e meia')));
- await store.updateDoc(ref,{stock:1});
+ await store.updateDoc(ref,{fifoLots:store.deleteField(),stock:1});
  for(let index=0;index<20;index++)await api.recordSale({total:1,type:'cash',customerId:''},[item('Unidade Avulsa (1 cigarro)',1,0.05)],[]);
  assert.equal((await store.getDoc(ref)).data().stock,0);
  const before=(await store.getDocs(store.collection(store.db,'sales'))).size;
  await assert.rejects(api.recordSale({total:1,type:'cash',customerId:''},[item('Unidade Avulsa (1 cigarro)',1,0.05)],[]),/insuficiente/);
  assert.equal((await store.getDocs(store.collection(store.db,'sales'))).size,before);
- await store.updateDoc(ref,{stock:2});
+ await store.updateDoc(ref,{fifoLots:store.deleteField(),stock:2});
  await api.recordSale({total:15,type:'cash',customerId:''},[item('Carteira (1 carteira fechada)',12,1),item('Unidade Avulsa (1 cigarro)',1,0.05,3)],[]);
  assert.equal((await store.getDoc(ref)).data().stock,0.85);
 });
@@ -445,7 +445,7 @@ test('bonus rules persist per store without overwriting settings and validate bo
  await api.saveBonusRule(null,rule.id);assert.deepEqual((await store.getDoc(settingsRef)).data().bonusRules,[]);
 });
 test('same-product bonus updates stock and effective cost atomically, retries do not duplicate bonus entries or create sales',async()=>{
- const id='bonus-camel',ref=store.doc(store.db,'products',id);await store.updateDoc(ref,{stock:0,unitCost:10});
+ const id='bonus-camel',ref=store.doc(store.db,'products',id);await store.updateDoc(ref,{fifoLots:store.deleteField(),stock:0,unitCost:10});
  const salesBefore=(await store.getDocs(store.collection(store.db,'sales'))).size;
  forcedConflicts=2;
  const purchaseId=await api.recordPurchase({productId:id,productName:'Camel',quantity:100,bonusQuantity:10,bonusProductId:id,unitCost:10,totalCost:1000,date:'2026-10-21'},{updateUnitCost:true});
@@ -458,14 +458,14 @@ test('same-product bonus updates stock and effective cost atomically, retries do
 });
 test('cross-product bonus splits acquisition cost, uses actual stock and rolls back both products on deletion',async()=>{
  const ref=store.doc(store.db,'products','bonus-camel'),other=store.doc(store.db,'products','bonus-winston');
- await store.updateDoc(ref,{stock:5});await store.updateDoc(other,{stock:2});
+ await store.updateDoc(ref,{fifoLots:store.deleteField(),stock:5});await store.updateDoc(other,{fifoLots:store.deleteField(),stock:2});
  const id=await api.recordPurchase({productId:ref.id,productName:'Camel',quantity:100,bonusProductId:other.id,bonusQuantity:10,unitCost:10,totalCost:1000,date:'2026-10-21'},{updateUnitCost:false});
  assert.equal((await store.getDoc(ref)).data().stock,105);assert.equal((await store.getDoc(other)).data().stock,12);
- assert.equal((await store.getDoc(ref)).data().unitCost,1000/110);assert.equal((await store.getDoc(other)).data().unitCost,(2*10+10*(1000/110))/12);
- await store.updateDoc(other,{stock:1});
+ assert.equal((await store.getDoc(ref)).data().unitCost,10);assert.equal((await store.getDoc(other)).data().unitCost,10);
+ await store.updateDoc(other,{fifoLots:store.deleteField(),stock:1});
  await assert.rejects(api.deletePurchase(id,{productId:ref.id,quantityToSubtract:100}),/já saiu/);
  assert.ok((await store.getDoc(store.doc(store.db,'purchases',id))).exists());assert.equal((await store.getDoc(ref)).data().stock,105);
- await store.updateDoc(other,{stock:12});await api.deletePurchase(id,{productId:ref.id,quantityToSubtract:100});
+ await store.updateDoc(other,{fifoLots:store.deleteField(),stock:12});await api.deletePurchase(id,{productId:ref.id,quantityToSubtract:100});
  assert.equal((await store.getDoc(ref)).data().stock,5);assert.equal((await store.getDoc(other)).data().stock,2);
 });
 test('a later sale uses the effective purchase cost for profit, while bonus itself creates no revenue',async()=>{
@@ -480,19 +480,19 @@ test('a later sale uses the effective purchase cost for profit, while bonus itse
  assert.equal((await store.getDoc(ref)).data().stock,109);
 });
 
-test('weighted purchases keep last receipt cost separate, never change prices or rewrite previous sales/purchases',async()=>{
+test('FIFO purchases keep oldest lot and last receipt cost separate, never change prices or rewrite previous sales/purchases',async()=>{
  const ref=store.doc(store.db,'products','average-cost');
  await store.setDoc(ref,{ownerId:'owner',name:'Média',type:'comum',stock:100,unitCost:10,basePrice:15,unitsPerPackage:1});
  const pastPurchase=store.doc(store.db,'purchases','historical-average'),pastSale=store.doc(store.db,'sales','historical-average');
  await store.setDoc(pastPurchase,{ownerId:'owner',productId:ref.id,unitCost:7,totalCost:70,quantity:10});await store.setDoc(pastSale,{ownerId:'owner',total:20});
  const id=await api.recordPurchase({productId:ref.id,productName:'Média',quantity:100,unitCost:12,totalCost:1200,date:'2026-10-21'},{updateUnitCost:false});
- const current=(await store.getDoc(ref)).data();assert.equal(current.stock,200);assert.equal(current.unitCost,11);assert.equal(current.lastCost,12);assert.equal(current.basePrice,15);
- assert.equal(current.pendingPriceReview.prices[0].newPrice,16.5);
- const purchase=(await store.getDoc(store.doc(store.db,'purchases',id))).data();assert.equal(purchase.unitCost,12);assert.equal(purchase.effectiveUnitCost,12);assert.equal(purchase.averageCostAfter,11);
+ const current=(await store.getDoc(ref)).data();assert.equal(current.stock,200);assert.equal(current.unitCost,10);assert.equal(current.lastCost,12);assert.equal(current.basePrice,15);
+ assert.equal(current.pendingPriceReview.prices[0].newPrice,18);
+ const purchase=(await store.getDoc(store.doc(store.db,'purchases',id))).data();assert.equal(purchase.unitCost,12);assert.equal(purchase.effectiveUnitCost,12);assert.equal(purchase.averageCostAfter,undefined);
  assert.equal((await store.getDoc(pastPurchase)).data().unitCost,7);assert.equal((await store.getDoc(pastSale)).data().total,20);
  await api.recordSale({total:15,type:'cash',customerId:''},[{productId:ref.id,name:'Média',format:'Padrão',quantity:1,price:15,unitCost:999,stockDeduction:1}],[]);
  const sale=(await store.getDocs(store.collection(store.db,'sales'))).docs.find(d=>d.data().itemsSummary?.includes('Média'));
- assert.equal((await api.getSaleItems(sale.id))[0].unitCost,11);
+ assert.equal((await api.getSaleItems(sale.id))[0].unitCost,10);
 });
 test('Accept is atomic and audited, Keep never changes prices, and outdated cost reviews cannot overwrite newer decisions',async()=>{
  const ref=store.doc(store.db,'products','average-cost');let p=(await store.getDoc(ref)).data();
@@ -511,14 +511,36 @@ test('all direct product price edits are audited with exact previous prices, and
  const audits=(await store.getDocs(store.collection(store.db,'movements'))).docs.map(d=>d.data()).filter(m=>m.entityId===ref.id && m.priceChanges?.length);
  assert.equal(audits.length,2);const edit=audits.find(m=>m.priceChanges[0].oldPrice===p.basePrice);assert.equal(edit.priceChanges[0].newPrice,p.basePrice+0.5);
 });
-test('cigarette receipt averages carteiras and accepts all enabled fractional prices together',async()=>{
+test('cigarette receipt preserves oldest carteira cost and accepts all enabled fractional prices together',async()=>{
  const ref=store.doc(store.db,'products','average-cigarette');
  await store.setDoc(ref,{ownerId:'owner',name:'Média Cigarro',type:'cigarro',stockUnit:'carteira',stock:10,unitCost:10,priceCart:15,priceHalfCart:8,priceUnit:1,pricePack:0,basePrice:1,unitsPerPackage:10});
  await api.recordPurchase({productId:ref.id,productName:'Média Cigarro',quantity:10,unitCost:12,totalCost:120,date:'2026-10-21'});
- const p=(await store.getDoc(ref)).data();assert.equal(p.stock,20);assert.equal(p.unitCost,11);assert.equal(p.lastCost,12);
+ const p=(await store.getDoc(ref)).data();assert.equal(p.stock,20);assert.equal(p.unitCost,10);assert.equal(p.lastCost,12);
  assert.deepEqual(p.pendingPriceReview.prices.map(x=>x.field),['priceCart','priceHalfCart','priceUnit']);
  await api.resolvePriceReview(ref.id,p.pendingPriceReview.id,true);
- const next=(await store.getDoc(ref)).data();assert.equal(next.priceCart,16.5);assert.equal(next.priceHalfCart,9);assert.equal(next.priceUnit,1);assert.equal(next.pricePack,0);
+ const next=(await store.getDoc(ref)).data();assert.equal(next.priceCart,18);assert.equal(next.priceHalfCart,9.5);assert.equal(next.priceUnit,1);assert.equal(next.pricePack,0);
  const audits=(await store.getDocs(store.collection(store.db,'movements'))).docs.map(d=>d.data()).filter(m=>m.entityId===ref.id && m.priceChanges?.length);
  assert.equal(audits.length,1);assert.deepEqual(audits[0].priceChanges.map(c=>c.field),['priceCart','priceHalfCart']);
+});
+
+test('PEPS sale crossing lots persists immutable allocations, cancellation restores origin exactly and is idempotent',async()=>{
+ const ref=store.doc(store.db,'products','fifo-cross');
+ await store.setDoc(ref,{ownerId:'owner',name:'PEPS teste',type:'comum',stock:20,unitCost:5,basePrice:10,unitsPerPackage:1});
+ const receipt=await api.recordPurchase({productId:ref.id,productName:'PEPS teste',quantity:36,totalCost:198,unitCost:5.5,date:'2026-10-23'});
+ const purchaseBefore=(await store.getDoc(store.doc(store.db,'purchases',receipt))).data();
+ assert.equal((await store.getDoc(ref)).data().initialUnitCost,5);
+ const id=await api.recordSale({total:250,type:'cash',customerId:''},[{productId:ref.id,name:'PEPS teste',format:'Padrão',quantity:25,price:10,unitCost:999,stockDeduction:1}],[]);
+ const items=await api.getSaleItems(id),p=(await store.getDoc(ref)).data();assert.equal(items[0].unitCost,5.1);assert.equal(items[0].costMethod,'fifo');assert.deepEqual(items[0].costAllocations.map(l=>l.quantity),[20,5]);assert.equal(p.stock,31);assert.equal(p.unitCost,5.5);
+ await Promise.all([api.cancelSale(id),api.cancelSale(id)]);const restored=(await store.getDoc(ref)).data();assert.equal(restored.stock,56);assert.equal(restored.unitCost,5);assert.deepEqual(restored.fifoLots.map(l=>l.quantity),[20,36]);
+ assert.deepEqual(await api.getSaleItems(id),items);assert.deepEqual((await store.getDoc(store.doc(store.db,'purchases',receipt))).data(),purchaseBefore);
+ assert.equal((await api.getSalesByDateRange(0,Date.now()+1000)).some(s=>s.id===id),false);
+ assert.equal((await api.getProductSalesTotals([{...restored,id:ref.id}]))[ref.id] || 0,0);assert.equal((await api.getReplenishmentSales()).some(item=>item.productId===ref.id),false);
+ await api.adjustProductStock(ref.id,-22);const loss=(await store.getDoc(ref)).data();assert.equal(loss.stock,34);assert.equal(loss.unitCost,5.5);
+ await assert.rejects(api.deletePurchase(receipt,{productId:ref.id,quantityToSubtract:36}),/já saiu/);
+});
+test('a missing product cost is persisted as unknown rather than a zero-cost profitable sale',async()=>{
+ const ref=store.doc(store.db,'products','fifo-unknown');await store.setDoc(ref,{ownerId:'owner',name:'Sem custo',type:'comum',stock:1,unitCost:0,basePrice:10,unitsPerPackage:1});
+ const id=await api.recordSale({total:10,type:'cash',customerId:''},[{productId:ref.id,name:'Sem custo',format:'Padrão',quantity:1,price:10,unitCost:999,stockDeduction:1}],[]);
+ const items=await api.getSaleItems(id);assert.equal(items[0].unitCost,null);assert.equal(items[0].costKnown,false);
+ const financials=await api.getMonthlyFinancials();assert.equal(financials.profitIncomplete,true);assert.equal(financials.grossProfit,null);assert.equal(financials.totalNetProfit,null);
 });

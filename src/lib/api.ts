@@ -1,4 +1,5 @@
-import {weightedAverageCost,costPriceReview,changedPrices} from './averageCost';
+import {inventoryLots,receiptLots,lotFields,consumeLots,restoreLots,stockTicks} from './fifoCost';
+import {costPriceReview,changedPrices} from './costPricing';
 import { bonusCost, validBonusRule } from './purchaseBonus';
 import { stockLimitError } from './replenishment';
 import {configureAccess,normalizeAccessRole,getAccessState,requireManagement,requireOwner,requestDeletionApproval} from './accessControl';
@@ -6,7 +7,7 @@ import {workforceRpc} from './workforceApi';
 import { assertEmployeePin, assertTemporaryEmployeePin, invitationStoreName } from './teamInvitation';
 import { validateNotebook, moneyCents, notebookSum, type NotebookEntry } from './debtNotebook';
 import { storeProductImage, isEmbeddedProductImage } from './productImages';
-import { calculatePayment, paymentLabel } from './paymentFees';
+import { calculatePayment, paymentLabel, saleFee } from './paymentFees';
 import { soldBaseQuantity } from './productSalesRanking';
 import { findDuplicateProducts, isDuplicateProduct, similarProductNames } from './duplicateDetector';
 import { supabase } from './supabase';
@@ -187,12 +188,20 @@ export const updateSettings = withActionDeadline(async (data: Partial<Settings>)
 // PRODUCTS
 // ---------------------------------------------------------------------------
 export const subscribeProducts = (callback: (p: Product[]) => void) => {
-  const uid = getEffectiveOwnerId();
-  if (!uid) return () => {};
-  const q = query(collection(db, 'products'), where('ownerId', '==', uid));
-  return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map(doc => normalizeCigaretteStock({ id: doc.id, ...doc.data() } as Product)).filter(product => !product.mergedIntoId));
-  }, (error) => handleCloudError(error, OperationType.LIST, 'products'));
+  const uid=getEffectiveOwnerId();if(!uid)return()=>{};
+  let products:Product[]|undefined,purchases:Purchase[]|undefined;
+  const employee=getAccessState().role==='employee';
+  const deliver=()=>{
+    if(!products || (!employee && !purchases))return;
+    callback(products.map(p=>employee?p:{...p,...lotFields(p,inventoryLots(p,purchases))}));
+  };
+  const stopProducts=onSnapshot(query(collection(db,'products'),where('ownerId','==',uid)),snapshot=>{
+    products=snapshot.docs.map(d=>normalizeCigaretteStock({...d.data(),id:d.id} as Product)).filter(p=>!p.mergedIntoId);deliver();
+  },error=>handleCloudError(error,OperationType.LIST,'products'));
+  const stopPurchases=employee?()=>{}:onSnapshot(query(collection(db,'purchases'),where('ownerId','==',uid)),snapshot=>{
+    purchases=snapshot.docs.map(d=>({...d.data(),id:d.id} as Purchase));deliver();
+  },error=>handleCloudError(error,OperationType.LIST,'purchases'));
+  return()=>{stopProducts();stopPurchases();};
 };
 
 export const addProduct = withActionDeadline(async (product: Omit<Product, 'id'|'ownerId'|'createdAt'|'updatedAt'>) => {
@@ -312,7 +321,9 @@ export const adjustProductStock = withProductWriteQueue(async (id: string, indiv
     if (product.ownerId !== uid) throw new Error('Sem acesso a este produto.');
     const newStock = (Math.round(Number(product.stock) * 20) + Math.round(individualUnits * 20)) / 20;
     if (newStock < 0) throw new Error('Estoque insuficiente.');
-    transaction.update(ref, { ...cigaretteStockFields(product), stock: newStock, updatedAt: Date.now() });
+    const lots=await loadInventoryLots(product,id);
+    const next=individualUnits<0?consumeLots(lots,-individualUnits).lots:[...lots,{id:`adjustment:${crypto.randomUUID()}`,kind:'adjustment' as const,quantity:individualUnits,unitCost:product.unitCost || 0,createdAt:Date.now()}];
+    transaction.update(ref, { ...cigaretteStockFields(product),...lotFields(product,next),stock:newStock,updatedAt:Date.now() });
     return { name: product.name, type: product.type, stock: newStock, newStock };
   });
   recordMovement({
@@ -335,7 +346,7 @@ function priceAudit(productId:string,product:Product,changes:ReturnType<typeof c
 
 export const updateProduct = withProductWriteQueue(async (id: string, data: Partial<Product>) => {
   requireManagement();
-  const {lastCost:_lastCost,pendingPriceReview:_pending,...editable}=data;data=editable;
+  const {lastCost:_lastCost,pendingPriceReview:_pending,fifoLots:_lots,initialUnitCost:_initial,...editable}=data;data=editable;
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
   if (data.imageUrl !== undefined) data = { ...data, imageUrl: await storeProductImage(data.imageUrl, uid) };
@@ -353,9 +364,16 @@ export const updateProduct = withProductWriteQueue(async (id: string, data: Part
       if ((data.maxStock !== undefined || data.safetyStock !== undefined) && stockLimitError(merged)) throw new Error('O estoque máximo precisa ser igual ou maior que o estoque de segurança.');
       if (merged.type === 'cigarro' && (!isValidStockQuantity(merged.stock) || (merged.initialStock !== undefined && !isValidStockQuantity(merged.initialStock)))) throw new Error('Estoque inválido: use carteiras em passos de 0,05.');
       const before=normalizeCigaretteStock(current.data() as Product);
+      let lots=await loadInventoryLots(before,id);
+      const difference=stockTicks(merged.stock)-stockTicks(before.stock);
+      if(difference<0)lots=consumeLots(lots,-difference/20).lots;
+      if(difference>0)lots.push({id:`adjustment:${costReviewId}`,kind:'adjustment',quantity:difference/20,unitCost:merged.unitCost || 0,createdAt:now});
+      // Supplying a missing cost is explicit; known historical lot costs remain immutable.
+      if(data.unitCost!==undefined && data.unitCost>0)lots=lots.map(l=>l.unitCost>0?l:{...l,id:`${l.id}:priced:${costReviewId}`,unitCost:data.unitCost!});
+      Object.assign(merged,lotFields(merged,lots));
       const changes=changedPrices(before,merged);
       const pending=changes.length?null:data.unitCost!==undefined && merged.unitCost!==before.unitCost?costPriceReview(before,merged.unitCost,costReviewId,now):before.pendingPriceReview;
-      transaction.update(ref, { ...removeUndefinedFields({ ...stockFields, ...data, ...cigaretteStockFields(merged),pendingPriceReview:pending }), updatedAt: now });
+      transaction.update(ref, { ...removeUndefinedFields({ ...stockFields, ...data, ...cigaretteStockFields(merged),...lotFields(merged,lots),pendingPriceReview:pending }), updatedAt: now });
       if(changes.length) transaction.set(priceMovementRef,priceAudit(id,merged,changes,uid,now));
       return {...merged,__pricesAudited:changes.length>0};
     });
@@ -574,7 +592,7 @@ export const recordSale = withActionDeadline(async (
   if (!uid) throw new Error('Unauthenticated');
   
   if(getAccessState().role==='employee'){
-    await workforceRpc('eu_staff_sale',{request_id:crypto.randomUUID(),acting_employee_id:getAccessState().employeeId || null,sale_input:sale,items_input:items.map(({productId,name,format,quantity,price,stockDeduction})=>({productId,name,format,quantity,price,stockDeduction}))});
+    await workforceRpc('eu_staff_sale_fifo',{request_id:crypto.randomUUID(),acting_employee_id:getAccessState().employeeId || null,sale_input:sale,items_input:items.map(({productId,name,format,quantity,price,stockDeduction})=>({productId,name,format,quantity,price,stockDeduction}))});
     reportUsage('venda',uid,sale.total);return;
   }
   const now = Date.now();
@@ -615,13 +633,19 @@ export const recordSale = withActionDeadline(async (
         deductions.set(item.productId, (deductions.get(item.productId) || 0) + Math.round(units * 20) * item.quantity);
       }
       const balances = new Map<string, number>();
+      const lotsByProduct=new Map<string,ReturnType<typeof inventoryLots>>();
+      const itemCosts:Record<string,any>[]=[];
+      const receipts=[...stockProducts.values()].some(p=>p.fifoLots===undefined)
+        ?(await getDocs(query(collection(db,'purchases'),where('ownerId','==',uid)))).docs.map(d=>({...d.data(),id:d.id} as Purchase)):[];
+      for(const [id,p] of stockProducts)lotsByProduct.set(id,inventoryLots({...p,id},receipts));
+      for(const item of items){const consumed=consumeLots(lotsByProduct.get(item.productId)!,productFormatUnits(stockProducts.get(item.productId)!,item.format)*item.quantity);lotsByProduct.set(item.productId,consumed.lots);itemCosts.push({costMethod:"fifo",costKnown:consumed.costKnown,costAllocations:consumed.allocations,unitCost:consumed.totalCost===null?null:consumed.totalCost/item.quantity});}
       for (const [id, deduction] of deductions) {
         const product = stockProducts.get(id)!;
         if (!isValidStockQuantity(product.stock)) throw new Error(`Estoque inválido para ${product.name}. Confira a contagem.`);
         const balance = Math.round(product.stock * 20) - deduction;
         balances.set(id, balance / 20);
         if (balance < 0) throw new Error(`Estoque insuficiente para ${product.name}.`);
-        transaction.update(doc(db, 'products', id), { ...cigaretteStockFields(product), stock: balance / 20, updatedAt: now });
+        transaction.update(doc(db, 'products', id), { ...cigaretteStockFields(product), ...lotFields(product,lotsByProduct.get(id)!), stock: balance / 20, updatedAt: now });
       }
       if (sale.type === 'fiado') {
         if (!customer?.exists()) throw new Error('Cliente de fiado não encontrado.');
@@ -635,7 +659,7 @@ export const recordSale = withActionDeadline(async (
       }).join('; ');
       transaction.set(saleRef, { ...sale, ...payment, itemsSummary: confirmedSummary || summary, employeeId: empId, employeeName: empName, ownerId: uid, createdAt: now });
       items.forEach((item, index) => transaction.set(itemRefs[index], {
-        ...item, stockAfter: balances.get(item.productId), unitCost: stockProducts.get(item.productId)!.unitCost * (item.stockDeduction ?? (productFormatUnits(stockProducts.get(item.productId)!, item.format))), ownerId: uid, createdAt: now
+        ...item, stockAfter: balances.get(item.productId), ...itemCosts[index], ownerId: uid, createdAt: now
       }));
     });
 
@@ -656,9 +680,40 @@ export const recordSale = withActionDeadline(async (
       quantity: totalQuantity,
       skipSupabaseSync: true
     }).catch(() => {});
+    return saleRef.id;
   } catch (err) {
     handleCloudError(err, OperationType.WRITE, 'sales (batch)');
   }
+});
+
+/** Restore exact allocation identities, retaining the sale/items for audit and rejecting legacy guesses. */
+export const cancelSale=withActionDeadline(async(saleId:string)=>{
+  requireManagement();const uid=getEffectiveOwnerId();if(!uid)throw new Error('Entre na sua conta.');
+  const now=Date.now(),movementRef=doc(collection(db,'movements'));
+  await runTransaction(db,async transaction=>{
+    const saleRef=doc(db,'sales',saleId),snapshot=await transaction.get(saleRef);
+    if(!snapshot.exists()||snapshot.data().ownerId!==uid)throw new Error('Venda não encontrada.');
+    const sale=snapshot.data() as Sale;if(sale.cancelledAt)return;
+    const rows=await getDocs(query(collection(db,`sales/${saleId}/saleItems`),where('ownerId','==',uid)));
+    if(!rows.docs.length)throw new Error('Esta venda antiga não tem lotes identificados para estorno.');
+    const products=new Map<string,{ref:ReturnType<typeof doc>;product:Product;lots:ReturnType<typeof inventoryLots>}>();
+    for(const row of rows.docs){
+      const item=(await transaction.get(row.ref)).data() as SaleItem;
+      if(item.costMethod!=='fifo'||!item.costAllocations?.length)throw new Error('Esta venda antiga não tem lotes identificados para estorno.');
+      const p=await resolveActiveProduct(transaction,item.productId);
+      if(!p.exists()||p.data().ownerId!==uid)throw new Error('Produto não encontrado para estorno.');
+      if(!products.has(p.id)){const product=normalizeCigaretteStock(p.data() as Product);products.set(p.id,{ref:p.ref,product,lots:await loadInventoryLots(product,p.id)});}
+      const state=products.get(p.id)!;state.lots=restoreLots(state.lots,item.costAllocations);
+    }
+    if(sale.type==='fiado'&&sale.customerId){
+      const c=await transaction.get(doc(db,'customers',sale.customerId));
+      if(!c.exists()||Number(c.data().totalDebt)<sale.total)throw new Error('O fiado desta venda já foi recebido. Confira a devolução antes de cancelar.');
+      transaction.update(c.ref,{totalDebt:Math.round((Number(c.data().totalDebt)-sale.total)*100)/100,lastMovementAt:now,updatedAt:now});
+    }
+    for(const {ref,product,lots} of products.values())transaction.update(ref,{...lotFields(product,lots),updatedAt:now});
+    transaction.update(saleRef,{cancelledAt:now,cancelledBy:auth.currentUser?.uid});
+    transaction.set(movementRef,{ownerId:uid,createdAt:now,timestamp:now,type:'product_update',entityId:saleId,amount:-sale.total,description:'Venda cancelada: quantidades devolvidas aos lotes de origem.',employeeId:getActiveEmployeeStorage().id});
+  });
 });
 
 export const recordPayment = withActionDeadline(async (
@@ -724,7 +779,7 @@ export const subscribeTodaySales = (callback: (s: Sale[]) => void) => {
 
     const allSales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));
     const todaySales = allSales
-      .filter(s => s.createdAt >= startTs)
+      .filter(s => !s.cancelledAt && s.createdAt >= startTs)
       .sort((a, b) => b.createdAt - a.createdAt);
     callback(todaySales);
   }, (error) => handleCloudError(error, OperationType.LIST, 'sales'));
@@ -741,7 +796,7 @@ export const getSalesByDateRange = async (start: number, end: number): Promise<S
     const snapshot = await getDocs(q);
     const allSales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));
     // Memory filtering to avoid requiring composite indexes for inequality checks
-    return allSales.filter(s => s.createdAt >= start && s.createdAt <= end);
+    return allSales.filter(s => !s.cancelledAt && s.createdAt >= start && s.createdAt <= end);
   } catch (error) {
     handleCloudError(error, OperationType.LIST, 'sales');
     return [];
@@ -825,6 +880,7 @@ export const getMonthlyFinancials = async (targetDate: Date = new Date()): Promi
     });
 
     let totalCostOfGoods = 0;
+    let profitIncomplete=false;
     const itemsPromises = sales.map(async s => {
       if (!s.id) return [];
       return await getSaleItems(s.id);
@@ -834,11 +890,12 @@ export const getMonthlyFinancials = async (targetDate: Date = new Date()): Promi
     allItemsArrays.forEach((items, idx) => {
       if (items.length > 0) {
         items.forEach(item => {
-          totalCostOfGoods += (item.unitCost || 0) * (item.quantity || 1);
+          if(item.costKnown===false || item.unitCost===null || !(item.unitCost>0))profitIncomplete=true;
+          else totalCostOfGoods += item.unitCost * (item.quantity || 1);
         });
       } else {
         const saleTotal = sales[idx]?.total || 0;
-        totalCostOfGoods += saleTotal * 0.7; // default 30% margin fallback
+        profitIncomplete=true; // Never invent missing acquisition costs.
       }
     });
 
@@ -853,22 +910,23 @@ export const getMonthlyFinancials = async (targetDate: Date = new Date()): Promi
       console.warn('Could not fetch closures for withdrawals:', e);
     }
 
-    const grossProfit = Math.max(0, totalGrossSales - totalCostOfGoods);
+    const grossProfit = totalGrossSales - totalCostOfGoods;
     const grossMargin = totalGrossSales > 0 ? (grossProfit / totalGrossSales) * 100 : 0;
-    const cardFeesEstimated = cardSales * 0.02; // taxa de aprox 2% em cartao
+    const cardFeesEstimated = sales.reduce((sum,sale)=>sum+saleFee(sale),0);
     const totalNetProfit = grossProfit - cardFeesEstimated - totalWithdrawals;
     const netMargin = totalGrossSales > 0 ? (totalNetProfit / totalGrossSales) * 100 : 0;
 
     return {
+      profitIncomplete,
       monthName,
       totalGrossSales,
-      totalCostOfGoods,
-      grossProfit,
-      grossMargin,
+      totalCostOfGoods:profitIncomplete?null:totalCostOfGoods,
+      grossProfit:profitIncomplete?null:grossProfit,
+      grossMargin:profitIncomplete?null:grossMargin,
       cardFeesEstimated,
       totalWithdrawals,
-      totalNetProfit,
-      netMargin,
+      totalNetProfit:profitIncomplete?null:totalNetProfit,
+      netMargin:profitIncomplete?null:netMargin,
       salesCount: sales.length,
       averageTicket: sales.length > 0 ? totalGrossSales / sales.length : 0,
       cashSales,
@@ -958,6 +1016,12 @@ export const subscribePurchases = (callback: (purchases: Purchase[]) => void) =>
   }, (error) => handleCloudError(error, OperationType.LIST, 'purchases'));
 };
 
+async function loadInventoryLots(product:Product,productId:string) {
+  if(product.fifoLots!==undefined)return inventoryLots({...product,id:productId});
+  const rows=await getDocs(query(collection(db,'purchases'),where('ownerId','==',product.ownerId)));
+  return inventoryLots({...product,id:productId},rows.docs.map(d=>({...d.data(),id:d.id} as Purchase)));
+}
+
 async function resolveActiveProduct(transaction: { get: typeof getDoc }, productId: string) {
   const visited = new Set<string>();
   let snapshot = await transaction.get(doc(db, 'products', productId));
@@ -1007,9 +1071,11 @@ export const recordPurchase = withActionDeadline(async (
       const stockUpdated=options?.updateProductStock!==false;
       const updatePayload: Partial<Product>={...cigaretteStockFields(p),updatedAt:now};
       if (stockUpdated) updatePayload.stock=(Math.round(p.stock*20)+Math.round(purchase.quantity*20)+(same?Math.round(bonusQuantity*20):0))/20;
-      const averageCost=stockUpdated?weightedAverageCost(p.stock,p.unitCost || 0,purchase.quantity+(same?bonusQuantity:0),costs.effectiveUnitCost):p.unitCost;
+      const receipt={...purchase,...costs,id:purchaseRef.id,productId:prodDoc.id,bonusProductId:bonusDoc.id,stockUpdated,createdAt:now} as Purchase;
+      const existingLots=await loadInventoryLots(p,prodDoc.id);
+      if(stockUpdated)Object.assign(updatePayload,lotFields(p,[...existingLots,...receiptLots(receipt,prodDoc.id)]));
       updatePayload.lastCost=costs.effectiveUnitCost;
-      if(stockUpdated) {updatePayload.unitCost=averageCost;updatePayload.pendingPriceReview=costPriceReview(p,averageCost,`${purchaseRef.id}:${prodDoc.id}`,now);}
+      updatePayload.pendingPriceReview=costPriceReview(p,costs.effectiveUnitCost,`${purchaseRef.id}:${prodDoc.id}`,now);
       if (options?.updateExpirationDate && purchase.expirationDate) updatePayload.expirationDate=purchase.expirationDate;
       if (options?.updatePromoPrice && purchase.suggestedPromoPrice!==undefined && purchase.suggestedPromoPrice>0) {
         updatePayload.hasPromoSuggestion=purchase.suggestPromo!==false;
@@ -1019,17 +1085,16 @@ export const recordPurchase = withActionDeadline(async (
       const changes=changedPrices(p,{...p,...updatePayload});
       if(changes.length) {updatePayload.pendingPriceReview=null;batch.set(purchasePriceMovementRef,priceAudit(prodDoc.id,{...p,...updatePayload},changes,uid,now));}
       batch.update(prodDoc.ref,removeUndefinedFields(updatePayload));
-      if (bonusQuantity>0 && !same) batch.update(bonusDoc.ref,removeUndefinedFields({
-        ...cigaretteStockFields(bonusProduct),updatedAt:now,
-        ...(stockUpdated?{stock:(Math.round(bonusProduct.stock*20)+Math.round(bonusQuantity*20))/20}:{}),
-        lastCost:costs.effectiveUnitCost,
-        ...(stockUpdated?{unitCost:weightedAverageCost(bonusProduct.stock,bonusProduct.unitCost || 0,bonusQuantity,costs.effectiveUnitCost),
-          pendingPriceReview:costPriceReview(bonusProduct,weightedAverageCost(bonusProduct.stock,bonusProduct.unitCost || 0,bonusQuantity,costs.effectiveUnitCost),`${purchaseRef.id}:${bonusDoc.id}`,now)}:{})
-      }));
+      if (bonusQuantity>0 && !same) {
+        const lots=await loadInventoryLots(bonusProduct,bonusDoc.id);
+        batch.update(bonusDoc.ref,removeUndefinedFields({...cigaretteStockFields(bonusProduct),updatedAt:now,
+          ...(stockUpdated?lotFields(bonusProduct,[...lots,...receiptLots(receipt,bonusDoc.id)]):{}),lastCost:costs.effectiveUnitCost,
+          pendingPriceReview:costPriceReview(bonusProduct,costs.effectiveUnitCost,`${purchaseRef.id}:${bonusDoc.id}`,now)}));
+      }
       batch.set(purchaseRef,removeUndefinedFields({...purchase, productId:prodDoc.id,
         bonusQuantity,bonusProductId:bonusQuantity>0?bonusDoc.id:undefined,
         bonusProductName:bonusQuantity>0?bonusProduct.name:undefined,bonusStockUnit:bonusQuantity>0?(bonusProduct.type==='cigarro'?'carteira':'unidade'):undefined,
-        ...costs,previousAverageCost:p.unitCost,averageCostAfter:averageCost,bonusAverageCostAfter:bonusQuantity>0&&!same?(stockUpdated?weightedAverageCost(bonusProduct.stock,bonusProduct.unitCost || 0,bonusQuantity,costs.effectiveUnitCost):bonusProduct.unitCost):undefined,stockUpdated,ownerId:uid,createdAt:now}));
+        ...costs,stockUpdated,ownerId:uid,createdAt:now}));
       if (bonusQuantity>0 && stockUpdated) batch.set(bonusMovementRef,{
         ownerId:uid,createdAt:now,timestamp:now,
         employeeId:purchase.employeeId || activeEmployee.id,employeeName:purchase.employeeName || activeEmployee.name,
@@ -1085,7 +1150,10 @@ export const deletePurchase = withActionDeadline(async (purchaseId: string, reve
           const current=normalizeCigaretteStock(product.data() as Product);
           const stock=(Math.round(current.stock*20)-Math.round(quantity*20))/20;
           if (stock<0) throw new Error('Parte da compra já saiu do estoque. Confira antes de estornar.');
-          batch.update(product.ref,{...cigaretteStockFields(current),stock,updatedAt:Date.now()});
+          const lots=await loadInventoryLots(current,product.id);
+          const received=lots.filter(l=>l.purchaseId===purchaseId);
+          if(received.reduce((n,l)=>n+stockTicks(l.quantity),0)!==stockTicks(quantity))throw new Error('Parte deste lote já saiu do estoque. Não é possível estornar a compra.');
+          batch.update(product.ref,{...cigaretteStockFields(current),...lotFields(current,lots.filter(l=>l.purchaseId!==purchaseId)),stock,updatedAt:Date.now()});
         }
       }
       batch.delete(ref);
@@ -1666,7 +1734,6 @@ export async function getProductDuplicates(candidate: Pick<Product, 'name' | 'ba
 // Preserve the original record for historical sales and purchases; hide it from active lists.
 export const mergeProducts = withProductWriteQueue(async (targetId: string, sourceId: string, allowSimilar = false) => {
   requireOwner();
-  const reviewId=crypto.randomUUID();
   if (targetId === sourceId) throw new Error('Escolha dois produtos diferentes.');
   const uid = getEffectiveOwnerId();
   await runTransaction(db, async transaction => {
@@ -1680,17 +1747,23 @@ export const mergeProducts = withProductWriteQueue(async (targetId: string, sour
     const stock = (Math.round(target.stock * 20) + Math.round(source.stock * 20)) / 20;
     if (!isValidStockQuantity(stock)) throw new Error('Estoque inválido.');
     const now = Date.now();
-    const average=weightedAverageCost(target.stock,target.unitCost || 0,source.stock,source.unitCost || 0);
-    transaction.update(targetRef, { ...cigaretteStockFields(target),unitCost:average,pendingPriceReview:costPriceReview(target,average,reviewId,now), mergedProductIds: [...new Set([...(target.mergedProductIds || []), sourceId, ...(source.mergedProductIds || [])])], stock, initialStock: (Math.round((target.initialStock ?? target.stock) * 20) + Math.round((source.initialStock ?? source.stock) * 20)) / 20, updatedAt: now });
-    transaction.update(sourceRef, { ...cigaretteStockFields(source), stock: 0, initialStock: 0, mergedIntoId: targetId, mergedAt: now, updatedAt: now });
+    const lots=restoreLots(await loadInventoryLots(target,targetId),await loadInventoryLots(source,sourceId));
+    transaction.update(targetRef, { ...cigaretteStockFields(target),...lotFields(target,lots), mergedProductIds: [...new Set([...(target.mergedProductIds || []), sourceId, ...(source.mergedProductIds || [])])], stock, initialStock: (Math.round((target.initialStock ?? target.stock) * 20) + Math.round((source.initialStock ?? source.stock) * 20)) / 20, updatedAt: now });
+    transaction.update(sourceRef, { ...cigaretteStockFields(source), stock: 0, fifoLots:[], initialStock: 0, mergedIntoId: targetId, mergedAt: now, updatedAt: now });
   });
 });
+
+async function cancelledSaleIds(ownerId:string) {
+  const rows=await getDocs(query(collection(db,'sales'),where('ownerId','==',ownerId),where('cancelledAt','>',0)));
+  return new Set(rows.docs.filter(d=>d.data().cancelledAt).map(d=>d.id));
+}
 
 /** Owner-scoped history, paginated to avoid Supabase's default row limit. */
 export async function getProductSalesTotals(products: Product[], signal?: AbortSignal): Promise<Record<string, number>> {
   const ownerId = getEffectiveOwnerId();
   if (!ownerId) return {};
   if(getAccessState().scoped)return workforceRpc<Record<string,number>>('eu_product_popularity');
+  const cancelled=await cancelledSaleIds(ownerId);
   const byId = new Map(products.map(product => [product.id, product]));
   const totals: Record<string, number> = Object.create(null);
   for (let offset = 0; ; offset += 1000) {
@@ -1701,6 +1774,7 @@ export async function getProductSalesTotals(products: Product[], signal?: AbortS
     if (getEffectiveOwnerId() !== ownerId) throw new Error('A sessão da loja mudou.');
     const rows = result.data || [];
     for (const row of rows) {
+      if(cancelled.has(row.collection_path?.split('/')[1]))continue;
       const item = row.data as SaleItem;
       if (!byId.has(item.productId)) continue;
       totals[item.productId] = Math.round(((totals[item.productId] || 0) + soldBaseQuantity(item, byId.get(item.productId))) * 10000) / 10000;
@@ -1807,6 +1881,7 @@ export async function getReplenishmentSales(signal?: AbortSignal): Promise<SaleI
   requireManagement();
   const ownerId = getEffectiveOwnerId();
   if (!ownerId) throw new Error('Entre na sua conta.');
+  const cancelled=await cancelledSaleIds(ownerId);
   const since = Date.now() - 14 * 86400000;
   const items: SaleItem[] = [];
   for (let offset = 0; ; offset += 1000) {
@@ -1817,7 +1892,7 @@ export async function getReplenishmentSales(signal?: AbortSignal): Promise<SaleI
     if (result.error) throw new Error('Não foi possível consultar as vendas para reposição.');
     if (getEffectiveOwnerId() !== ownerId) throw new Error('A sessão da loja mudou.');
     const rows = result.data || [];
-    items.push(...rows.map(row => ({...row.data, id: row.id} as SaleItem)));
+    items.push(...rows.filter(row=>!cancelled.has(row.collection_path?.split('/')[1])).map(row => ({...row.data, id: row.id} as SaleItem)));
     if (rows.length < 1000) return items;
   }
 }
@@ -1851,7 +1926,7 @@ export const resolvePriceReview=withProductWriteQueue(async(id:string,reviewId:s
     const ref=doc(db,'products',id),snapshot=await transaction.get(ref);
     if(!snapshot.exists() || snapshot.data().ownerId!==uid || snapshot.data().mergedIntoId)throw new Error('Produto não disponível.');
     const product=normalizeCigaretteStock(snapshot.data() as Product),review=product.pendingPriceReview;
-    if(!review || review.id!==reviewId || review.newCost!==product.unitCost)throw new Error('O custo ou preço mudou em outro aparelho. Confira a sugestão atualizada.');
+    if(!review || review.id!==reviewId || review.newCost!==(product.lastCost ?? product.unitCost))throw new Error('O custo ou preço mudou em outro aparelho. Confira a sugestão atualizada.');
     const update:Partial<Product>={pendingPriceReview:null,updatedAt:now};
     if(accept){
       for(const price of review.prices){

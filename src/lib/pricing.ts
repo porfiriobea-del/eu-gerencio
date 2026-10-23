@@ -2,7 +2,7 @@ import type { Product } from '../types';
 import { getCigaretteFormats } from './productUnits';
 
 export function calculateMargin(cost: number, price: number): number | null {
-  if (!Number.isFinite(cost) || cost < 0 || !Number.isFinite(price) || price <= 0) return null;
+  if (!Number.isFinite(cost) || cost <= 0 || !Number.isFinite(price) || price <= 0) return null;
   return (price - cost) / price * 100;
 }
 
@@ -27,6 +27,6 @@ export function getPricingFormats(product: Product) {
   return getCigaretteFormats(product).map(format => {
     const detail = details[format.units];
     const cost = Number(product.unitCost) * format.units;
-    return { ...detail, cost, price: format.price, margin: calculateMargin(cost, format.price) };
+    return { ...detail, units:format.units, cost, price: format.price, margin: calculateMargin(cost, format.price) };
   });
 }

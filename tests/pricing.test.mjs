@@ -17,7 +17,7 @@ test('profit margin uses sale revenue and suggestions reach 20/30/40 percent aft
     assert.ok(calculateMargin(1.25, price - 0.01) < margin);
   }
   assert.equal(calculateMargin(2, 1), -100);
-  assert.equal(calculateMargin(0, 1), 100);
+  assert.equal(calculateMargin(0, 1), null);
   for (const price of [0, -1, NaN, Infinity]) assert.equal(calculateMargin(1, price), null);
   for (const cost of [0, -1, NaN, Infinity]) assert.equal(priceForMargin(cost, 20), null);
   assert.equal(priceForMargin(1, 100), null);
