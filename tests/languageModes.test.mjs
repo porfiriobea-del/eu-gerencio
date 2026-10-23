@@ -17,7 +17,7 @@ const mocks = {
  export const subscribeCustomers=cb=>{cb([]);return()=>{};};export const subscribeProducts=subscribeCustomers;
  export const importSupplierCatalog=async()=>0;export const adjustProductStock=async()=>{};
  export const updateSettings=async patch=>{globalThis.__settingsPatches.push(patch);};
- export const getSalesByDateRange=async()=>[];export const getPurchasesByDateRange=async()=>[];export const deleteEntireAccountData=async()=>{};`,
+ export const getSalesByDateRange=async()=>[];export const getSaleItems=async()=>[];export const getPurchasesByDateRange=async()=>[];export const deleteEntireAccountData=async()=>{};`,
  auth: 'export const deleteUserAccountAuth=async()=>{};',
  sheets:'export const exportToSheets=async()=>{};',
  exportUtils:'export const exportFullReportToCSV=()=>{};export const exportDailySalesAndSafetyStockToCSV=()=>{};',
@@ -163,4 +163,12 @@ test('currency selector requires the exact no-conversion warning and saves the s
  await act(async()=>{fireEvent.change(select,{target:{value:'EUR'}});});
  assert.equal(globalThis.__settingsPatches.filter(p=>p.currency).at(-1).currency,'EUR');
  delete globalThis.__initialSettings;delete globalThis.__settingsPatches;
+});
+
+test('owner settings removes the legacy webhook address, test button, script and sending history in every mode',async()=>{
+ for(const mode of ['basic','neutral','technical']){
+  localStorage.setItem('app_lang_mode',mode);let ui;await act(async()=>{ui=render(React.createElement(MemoryRouter,null,React.createElement(PreferencesProvider,null,React.createElement(SettingsView))));});
+  assert.doesNotMatch(ui.container.textContent,/Webhook Google Apps Script|Testar Envio para a Planilha|Histórico de Envios|function doPost/);
+  assert.equal(ui.container.querySelector('input[placeholder*="script.google"]'),null);assert.doesNotMatch(ui.container.textContent,/Ocultar Filtros Detalhados|Filtros de Data & Pagamento/);cleanup();
+ }
 });

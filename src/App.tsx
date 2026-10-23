@@ -30,7 +30,6 @@ import Movements from './pages/Movements';
 import { EmployeeProvider } from './lib/employeeContext';
 import { TermsModal, PrivacyModal } from './components/LegalModals';
 import { hydrateCloudCategories } from './lib/categories';
-import { hydrateCloudSheets } from './lib/googleSheets';
 import { updateSettings } from './lib/api';
 import { showActionError } from './lib/actionFeedback';
 
@@ -103,7 +102,6 @@ export default function App() {
       setUser(currentUser); setNeedsAuth(false); setLoading(true); setCloudError('');
       setOnboardingComplete(null); unsubscribeSettings?.(); setActiveStoreSession(null);
       hydrateCloudCategories(undefined, [], 'mercearia');
-      hydrateCloudSheets(undefined);
       try {
         await verifyCloudIdentity(currentUser.uid);
         const inviteId = new URLSearchParams(window.location.search).get('invite') || sessionStorage.getItem('pending_invite_id');
@@ -132,7 +130,6 @@ export default function App() {
           storeResolvedRef.current = true;
           if (data) {
             hydrateCloudCategories(ownerId, data.customCategories || [], data.businessSector || 'mercearia');
-            hydrateCloudSheets(ownerId, data.googleSheetsWebhookUrl || '', data.googleSheetsWebhookEnabled === true);
             window.dispatchEvent(new CustomEvent('cloud-preferences', { detail: { ...data, currency: ['USD','EUR'].includes(data.currency) ? data.currency : 'BRL' } }));
           }
           setOnboardingComplete(!!data?.storeName);
@@ -143,7 +140,6 @@ export default function App() {
     }, () => {
       generation++; storeResolvedRef.current = false; unsubscribeSettings?.(); setActiveStoreSession(null);
       hydrateCloudCategories(undefined, [], 'mercearia');
-      hydrateCloudSheets(undefined);
       setUser(null); setNeedsAuth(true); setLoading(false); setOnboardingComplete(null); setCloudError('');
     });
     return () => { active = false; generation++; unsubscribeAuth(); unsubscribeSettings?.(); };

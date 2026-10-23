@@ -1,3 +1,5 @@
+import {AllPurchaseItems} from '../components/AllPurchaseItems';
+import {PurchaseInvoiceModal} from '../components/PurchaseInvoiceModal';
 import {createPortal} from 'react-dom';
 import {useModalViewport} from '../lib/useModalViewport';
 import {CostPriceReview,ProductCosts} from '../components/CostPriceReview';
@@ -60,7 +62,7 @@ export default function Purchases() {
     window.addEventListener('cloud-refresh', refresh);
     return () => {controller.abort();clearInterval(timer);window.removeEventListener('focus',refresh);window.removeEventListener('cloud-refresh',refresh);};
   }, [products]);
-  const [activeTab, setActiveTab] = useState<'replenish' | 'history' | 'checklist' | 'bonus'>('replenish');
+  const [activeTab, setActiveTab] = useState<'replenish' | 'history' | 'checklist' | 'bonus' | 'all'>('replenish');
   const [isOptionalPurchaseFieldsOpen, setIsOptionalPurchaseFieldsOpen] = useState(() => !(simpleViewMode || isBasicMode));
 
   // Search and filters
@@ -69,6 +71,7 @@ export default function Purchases() {
   const [urgencyFilter, setUrgencyFilter] = useState<'all' | 'critical' | 'below_safety'>('all');
 
   // Modal / Form state for registering purchase
+  const [invoiceOpen,setInvoiceOpen]=useState(false);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const purchaseViewport = useModalViewport(isPurchaseModalOpen);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -436,7 +439,8 @@ export default function Purchases() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <button type="button" onClick={()=>setInvoiceOpen(true)} className="min-h-11 rounded-xl bg-primary px-4 text-sm font-semibold text-white">{v('invoice.title')}</button>
           <button
             onClick={() => setIsProductPickerOpen(true)}
             className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl border border-border bg-surface hover:bg-muted text-foreground font-medium text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
@@ -533,6 +537,7 @@ export default function Purchases() {
 
       {/* Tabs Navigation */}
       <div className="flex border-b border-border gap-6 overflow-x-auto [&>button]:shrink-0">
+        <button type="button" aria-pressed={activeTab==='all'} onClick={()=>setActiveTab('all')} className={`pb-3 text-sm font-semibold border-b-2 ${activeTab==='all'?'border-primary text-primary':'border-transparent'}`}>{v('purchases.allItems')}</button>
         <button onClick={()=>setActiveTab('bonus')} className={`pb-3 text-sm font-semibold border-b-2 ${activeTab==='bonus'?'border-primary text-primary':'border-transparent'}`}>{v('bonus.tab')}</button>
         <button
           onClick={() => setActiveTab('replenish')}
@@ -577,6 +582,8 @@ export default function Purchases() {
         </button>
       </div>
 
+      {invoiceOpen&&<PurchaseInvoiceModal products={products} rules={bonusRules} suppliers={quickSuppliers} onClose={()=>setInvoiceOpen(false)}/>}
+      {activeTab==='all'&&<AllPurchaseItems products={products} onBuy={handleOpenPurchaseModal}/>}
       {activeTab==='bonus' && <BonusRules rules={bonusRules} products={products} suppliers={quickSuppliers} ready={bonusReady}/>}
       <div className="rounded-2xl border border-border bg-surface p-4"><span>{v('bonus.monthly')}: </span><strong className="text-emerald-600">{formatMoney(monthlyBonusSavings(purchases))}</strong><p className="text-xs text-muted-foreground">{v('bonus.savingsExplanation')}</p></div>
       {/* TAB 1: REPLENISH LIST */}

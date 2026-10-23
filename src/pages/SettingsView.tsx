@@ -1,3 +1,5 @@
+import {ReportFilters} from '../components/ReportFilters';
+import {filterReport,emptyReportFilters,reportExportEntities} from '../lib/reportFilters';
 import { sortCategories } from '../lib/alphabetical';
 import { formatDate, normalizeLanguage, languageLocales } from '../lib/language';
 import { useCurrency } from '../lib/useCurrency';
@@ -5,7 +7,7 @@ import { saleFee, pixTotals } from '../lib/paymentFees';
 import { PaymentSummary } from '../components/PaymentSummary';
 import { showToast, showActionError, withActionDeadline } from '../lib/actionFeedback';
 import { useState, useEffect, useRef } from 'react';
-import { subscribeSettings, updateSettings, subscribeCustomers, subscribeProducts, getSalesByDateRange, deleteEntireAccountData, getPurchasesByDateRange } from '../lib/api';
+import { subscribeSettings, updateSettings, subscribeCustomers, subscribeProducts, getSalesByDateRange, getSaleItems, deleteEntireAccountData, getPurchasesByDateRange } from '../lib/api';
 import { deleteUserAccountAuth } from '../lib/auth';
 import { exportToSheets } from '../lib/sheets';
 import { exportFullReportToCSV, exportDailySalesAndSafetyStockToCSV } from '../lib/exportUtils';
@@ -21,17 +23,7 @@ import { usePreferences, THEME_STYLES, Language, FontSize, ThemePreset, normaliz
 import { useEmployee } from '../lib/employeeContext';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO, subDays, subMonths } from 'date-fns';
 import { BUSINESS_SECTORS, getSavedBusinessSector, saveBusinessSector, getCustomCategories, setCustomCategories, saveCustomCategory, removeCustomCategory, getAllCategories } from '../lib/categories';
-import { 
-  GOOGLE_SHEETS_WEBHOOK_URL,
-  getGoogleSheetsWebhookUrl,
-  setGoogleSheetsWebhookUrl,
-  testGoogleSheetsWebhook,
-  getGoogleSheetsLogs,
-  clearGoogleSheetsLogs,
-  isGoogleSheetsWebhookEnabled,
-  setGoogleSheetsWebhookEnabled,
-  GoogleSheetsWebhookLog
-} from '../lib/supabase';
+
 
 export default function SettingsView() {
   const { formatMoney, currencySymbol, currency, isBrazil } = useCurrency();
@@ -71,7 +63,8 @@ export default function SettingsView() {
   const [period, setPeriod] = useState<'hoje' | 'semana' | 'mes' | 'personalizado'>('hoje');
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [saleType, setSaleType] = useState<'todas' | 'cash' | 'card' | 'fiado'>('todas');
+  const [reportFilters,setReportFilters]=useState(emptyReportFilters);
+  const [reportError,setReportError]=useState('');
   
   const [isExporting, setIsExporting] = useState(false);
   const [exportMessage, setExportMessage] = useState('');
@@ -91,89 +84,6 @@ export default function SettingsView() {
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [backupSuccessMessage, setBackupSuccessMessage] = useState('');
 
-  // Google Sheets Webhook State & Handlers
-  const [sheetsWebhookUrl, setSheetsWebhookUrl] = useState(() => getGoogleSheetsWebhookUrl());
-  const [sheetsEnabled, setSheetsEnabled] = useState(() => isGoogleSheetsWebhookEnabled());
-  const [sheetsTesting, setSheetsTesting] = useState(false);
-  const [sheetsTestResult, setSheetsTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [sheetsLogs, setSheetsLogs] = useState<GoogleSheetsWebhookLog[]>(() => getGoogleSheetsLogs());
-  const [isSheetsLogsOpen, setIsSheetsLogsOpen] = useState(false);
-  const [isAppsScriptCodeOpen, setIsAppsScriptCodeOpen] = useState(false);
-  const [copiedAppsScript, setCopiedAppsScript] = useState(false);
-
-  useEffect(() => {
-    const handleLogAdded = () => {
-      setSheetsLogs(getGoogleSheetsLogs());
-    };
-    window.addEventListener('google-sheets-log-added', handleLogAdded);
-    return () => window.removeEventListener('google-sheets-log-added', handleLogAdded);
-  }, []);
-
-  const handleSaveSheetsWebhookUrl = (newUrl: string) => {
-    setSheetsWebhookUrl(newUrl);
-
-  };
-
-  const handleToggleSheetsEnabled = (enabled: boolean) => {
-    setSheetsEnabled(enabled);
-    setGoogleSheetsWebhookEnabled(enabled);
-  };
-
-  const handleTestSheetsWebhook = async () => {
-    setSheetsTesting(true);
-    setSheetsTestResult(null);
-    try {
-      const res = await testGoogleSheetsWebhook(sheetsWebhookUrl);
-      setSheetsTestResult(res);
-      setSheetsLogs(getGoogleSheetsLogs());
-    } catch (e: any) {
-      setSheetsTestResult({
-        success: false,
-        message: e?.message || 'Falha ao conectar ao Webhook do Google Sheets'
-      });
-    } finally {
-      setSheetsTesting(false);
-    }
-  };
-
-  const handleCopyAppsScriptCode = async () => {
-    const code = `// Cole este código no Google Apps Script da sua Planilha (Extensões > Apps Script)
-function doPost(e) {
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getActiveSheet();
-    var data = JSON.parse(e.postData.contents);
-    
-    // Insere automaticamente na última linha da planilha
-    sheet.appendRow([
-      data.data || new Date().toLocaleString("pt-BR"),
-      (data.tipo || "VENDA").toUpperCase(),
-      data.produto || "-",
-      data.quantidade || 1,
-      data.valor || 0,
-      data.forma_pagamento || "-",
-      data.cliente || "-",
-      data.descricao || "-"
-    ]);
-    
-    return ContentService
-      .createTextOutput(JSON.stringify({ status: "success", received: true }))
-      .setMimeType(ContentService.MimeType.JSON);
-  } catch (err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ status: "error", error: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}`;
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopiedAppsScript(true);
-      setTimeout(() => setCopiedAppsScript(false), 3000);
-    } catch {
-      // Fallback
-    }
-  };
-
   // Auto-save State (Todas as ações salvas automaticamente + Sincronização a cada 4 minutos)
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const [lastAutoSaveTime, setLastAutoSaveTime] = useState<Date>(new Date());
@@ -188,8 +98,6 @@ function doPost(e) {
     const unsubSet = subscribeSettings(s => {
       if(s) {
         lastCloudSettingsRef.current = s;
-        setSheetsWebhookUrl(s.googleSheetsWebhookUrl || '');
-        setSheetsEnabled(s.googleSheetsWebhookEnabled === true);
         setSettings(s);
         if (s.businessSector) setBusinessSector(s.businessSector);
         if (s.customCategories) setCategoriesList(s.customCategories);
@@ -225,7 +133,7 @@ function doPost(e) {
         businessSector: overrides?.businessSector ?? businessSector,
         customCategories: overrides?.customCategories ?? categoriesList,
         fontSize: overrides?.fontSize ?? fontSize, simpleViewMode: overrides?.simpleViewMode ?? simpleViewMode,
-        googleSheetsWebhookUrl: sheetsWebhookUrl, googleSheetsWebhookEnabled: sheetsEnabled,
+        googleSheetsWebhookUrl: '', googleSheetsWebhookEnabled: false,
         storeName: overrides?.storeName !== undefined ? overrides.storeName : (storeName.trim() || settings?.storeName || 'Meu Comércio'),
         cnpj: overrides?.cnpj !== undefined ? overrides.cnpj : (cnpj.trim() || settings?.cnpj || ''),
         phone: overrides?.phone !== undefined ? overrides.phone : (phone.trim() || settings?.phone || ''),
@@ -467,7 +375,7 @@ function doPost(e) {
 
   const resetFilters = () => {
     setPeriod('hoje');
-    setSaleType('todas');
+    setReportFilters(emptyReportFilters);setReportError('');
     setStartDate(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
     setEndDate(format(new Date(), 'yyyy-MM-dd'));
   };
@@ -501,7 +409,12 @@ function doPost(e) {
     return { startTimestamp, endTimestamp, periodLabel };
   };
 
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const loadFilteredReport=async()=>{
+    const {startTimestamp,endTimestamp}=getPeriodTimestamps();
+    if((period==='personalizado'&&(!startDate||!endDate))||startTimestamp>endTimestamp)throw new Error(v('report.invalidDates'));
+    const [sales,purchases]=await Promise.all([getSalesByDateRange(startTimestamp,endTimestamp),getPurchasesByDateRange(startTimestamp,endTimestamp)]);
+    return filterReport(sales,purchases,products,reportFilters,getSaleItems);
+  };
   const [reportMetrics, setReportMetrics] = useState<{
     pix: ReturnType<typeof pixTotals>;
     inflow: number;
@@ -532,17 +445,9 @@ function doPost(e) {
       try {
         setReportMetrics(prev => ({ ...prev, loading: true }));
         const { startTimestamp, endTimestamp } = getPeriodTimestamps();
-        const [fetchedSales, fetchedPurchases] = await Promise.all([
-          getSalesByDateRange(startTimestamp, endTimestamp),
-          getPurchasesByDateRange(startTimestamp, endTimestamp)
-        ]);
-
-        if (isCancelled) return;
-
-        let filteredSales = fetchedSales;
-        if (saleType !== 'todas') {
-          filteredSales = fetchedSales.filter(s => s.type === saleType);
-        }
+        setReportError('');
+        const {sales:filteredSales,purchases:fetchedPurchases}=await loadFilteredReport();
+        if(isCancelled)return;
 
         let inflow = 0;
         let cashInflow = 0;
@@ -576,6 +481,7 @@ function doPost(e) {
         });
       } catch (e) {
         if (!isCancelled) {
+          setReportError(v('report.loadError'));
           console.warn('Erro ao carregar métricas para o relatório:', e);
           setReportMetrics(prev => ({ ...prev, loading: false }));
         }
@@ -586,7 +492,7 @@ function doPost(e) {
     return () => {
       isCancelled = true;
     };
-  }, [period, startDate, endDate, saleType]);
+  }, [period, startDate, endDate, reportFilters, products]);
 
   const handleExport = async () => {
     const confirmed = window.confirm("Deseja executar e exportar o Relatório completo (Vendas, Compras e Fiado) para o Google Sheets?");
@@ -598,19 +504,13 @@ function doPost(e) {
       
       const { startTimestamp, endTimestamp } = getPeriodTimestamps();
 
-      let fetchedSales = await getSalesByDateRange(startTimestamp, endTimestamp);
-      if (saleType !== 'todas') {
-         fetchedSales = fetchedSales.filter(s => s.type === saleType);
-      }
-
-      // Buscar compras do período para incluir na nova aba do relatório
-      const fetchedPurchases = await getPurchasesByDateRange(startTimestamp, endTimestamp);
+      const {sales:fetchedSales,purchases:fetchedPurchases}=await loadFilteredReport();
 
       const url = await exportToSheets({
         currency, language,
         sales: fetchedSales,
         expenses: [],
-        customers: customers,
+        customers: reportExportEntities(fetchedSales,customers,products,reportFilters).customers,
         purchases: fetchedPurchases
       });
       setExportMessage(`Relatório criado com sucesso com as abas de Vendas, Compras e Fiado! Você pode acessá-lo no seu Google Drive.`);
@@ -628,27 +528,22 @@ function doPost(e) {
       setExportMessage('');
       const { startTimestamp, endTimestamp, periodLabel } = getPeriodTimestamps();
 
-      let fetchedSales = await getSalesByDateRange(startTimestamp, endTimestamp);
-      if (saleType !== 'todas') {
-        fetchedSales = fetchedSales.filter(s => s.type === saleType);
-      }
-
-      const fetchedPurchases = await getPurchasesByDateRange(startTimestamp, endTimestamp);
+      const {sales:fetchedSales,purchases:fetchedPurchases}=await loadFilteredReport();
 
       exportFullReportToCSV({
         currency, language,
         purchases: fetchedPurchases,
         sales: fetchedSales,
-        customers: customers,
-        products: products,
+        customers: reportExportEntities(fetchedSales,customers,products,reportFilters).customers,
+        products: reportExportEntities(fetchedSales,customers,products,reportFilters).products,
         periodLabel,
         startDate: period === 'personalizado' ? startDate : undefined,
         endDate: period === 'personalizado' ? endDate : undefined,
         storeName: storeName || settings?.storeName,
-        inflow: reportMetrics.inflow,
-        outflow: reportMetrics.outflow,
-        balance: reportMetrics.balance,
-        fiadoInflow: reportMetrics.fiadoInflow
+        inflow: fetchedSales.reduce((n,s)=>n+s.total,0),
+        outflow: fetchedPurchases.reduce((n,p)=>n+p.totalCost,0),
+        balance: fetchedSales.reduce((n,s)=>n+s.total-saleFee(s),0)-fetchedPurchases.reduce((n,p)=>n+p.totalCost,0),
+        fiadoInflow: fetchedSales.filter(s=>s.type==='fiado').reduce((n,s)=>n+s.total,0)
       });
 
       setExportMessage(`Planilha completa baixada com sucesso (${fetchedPurchases.length} compras, ${fetchedSales.length} vendas e ${products.length} produtos analisados com venda diária e estoque de segurança).`);
@@ -1593,26 +1488,9 @@ function doPost(e) {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button 
-              type="button"
-              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors bg-muted/40 border border-border px-3 py-2 rounded-lg hover:bg-muted"
-            >
-              <Filter className="w-3.5 h-3.5 text-purple-400" />
-              {showAdvancedFilters ? 'Ocultar Filtros Detalhados' : 'Filtros de Data & Pagamento'}
-              {showAdvancedFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
-            <button 
-              type="button"
-              onClick={resetFilters}
-              className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-muted-foreground transition-colors bg-muted/40 border border-border px-3 py-2 rounded-lg hover:bg-muted"
-              title="Restaurar sugestões"
-            >
-              <RefreshCcw className="w-3.5 h-3.5"/>
-            </button>
-          </div>
         </div>
+        <ReportFilters period={period} setPeriod={setPeriod} start={startDate} end={endDate} setStart={setStartDate} setEnd={setEndDate} filters={reportFilters} setFilters={setReportFilters} employees={employees} categories={products.map(p=>p.category)} onClear={resetFilters}/>
+        {reportError&&<p role="alert" className="mb-4 text-amber-600">{reportError}</p>}
 
         {/* CARD PRINCIPAL DE 'RESUMO DO DIA' / PERÍODO */}
         <div className="mb-6 bg-gradient-to-br from-muted/50 to-surface border-2 border-emerald-500/30 rounded-2xl p-5 md:p-6 shadow-2xl relative overflow-hidden">
@@ -1641,114 +1519,7 @@ function doPost(e) {
               </div>
             </div>
 
-            {/* Seletor Rápido de Período */}
-            <div className="flex items-center bg-muted/40 p-1 rounded-xl border border-border shrink-0 self-start sm:self-auto flex-wrap gap-1">
-              <button
-                type="button"
-                onClick={() => setPeriod('hoje')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${period === 'hoje' ? 'bg-emerald-600 text-white shadow-md' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                Hoje
-              </button>
-              <button
-                type="button"
-                onClick={() => setPeriod('semana')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${period === 'semana' ? 'bg-emerald-600 text-white shadow-md' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                Esta Semana
-              </button>
-              <button
-                type="button"
-                onClick={() => setPeriod('mes')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${period === 'mes' ? 'bg-emerald-600 text-white shadow-md' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                Este Mês
-              </button>
-              <button
-                type="button"
-                onClick={() => setPeriod('personalizado')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${period === 'personalizado' ? 'bg-purple-600 text-white shadow-md' : 'text-purple-700 dark:text-purple-300 hover:text-foreground'}`}
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Personalizado</span>
-              </button>
-            </div>
           </div>
-
-          {/* BARRA DE SELEÇÃO DE PERÍODO PERSONALIZADO */}
-          {period === 'personalizado' && (
-            <div className="mb-6 p-4 rounded-xl bg-muted/40 border border-purple-500/40 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 animate-in fade-in duration-200">
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-purple-400" />
-                    De:
-                  </span>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={e => setStartDate(e.target.value)}
-                    className="bg-surface border border-border text-foreground text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:border-purple-500 outline-none [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert cursor-pointer"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-purple-700 dark:text-purple-300">Até:</span>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={e => setEndDate(e.target.value)}
-                    className="bg-surface border border-border text-foreground text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:border-purple-500 outline-none [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              {/* Atalhos Rápidos de Datas */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] text-muted-foreground mr-1">Atalhos:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStartDate(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
-                    setEndDate(format(new Date(), 'yyyy-MM-dd'));
-                  }}
-                  className="text-[11px] font-semibold px-2 py-1 bg-surface hover:bg-purple-900/40 text-purple-700 dark:text-purple-200 rounded-lg border border-border transition-colors cursor-pointer"
-                >
-                  Últimos 7 dias
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStartDate(format(subDays(new Date(), 15), 'yyyy-MM-dd'));
-                    setEndDate(format(new Date(), 'yyyy-MM-dd'));
-                  }}
-                  className="text-[11px] font-semibold px-2 py-1 bg-surface hover:bg-purple-900/40 text-purple-700 dark:text-purple-200 rounded-lg border border-border transition-colors cursor-pointer"
-                >
-                  Últimos 15 dias
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStartDate(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
-                    setEndDate(format(new Date(), 'yyyy-MM-dd'));
-                  }}
-                  className="text-[11px] font-semibold px-2 py-1 bg-surface hover:bg-purple-900/40 text-purple-700 dark:text-purple-200 rounded-lg border border-border transition-colors cursor-pointer"
-                >
-                  Últimos 30 dias
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStartDate(format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'));
-                    setEndDate(format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'));
-                  }}
-                  className="text-[11px] font-semibold px-2 py-1 bg-surface hover:bg-purple-900/40 text-purple-700 dark:text-purple-200 rounded-lg border border-border transition-colors cursor-pointer"
-                >
-                  Mês Passado
-                </button>
-              </div>
-            </div>
-          )}
 
           <PaymentSummary totals={reportMetrics.pix} />
           {/* 4 CARDS DE MÉTRICAS COM TRADUÇÃO DESCOMPLICADA */}
@@ -1953,97 +1724,6 @@ function doPost(e) {
           </div>
         </div>
 
-        {/* FILTROS DETALHADOS (Expandíveis com toggle) */}
-        {showAdvancedFilters && (
-          <div className="mb-6 p-5 rounded-xl bg-muted/40/80 border border-border animate-in fade-in duration-200">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-purple-400" />
-                <h4 className="text-sm font-bold text-foreground">Filtros Detalhados de Consulta e Exportação</h4>
-              </div>
-              <span className="text-xs text-muted-foreground">Ajuste os parâmetros conforme sua necessidade</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Card 1: Período */}
-              <div className="bg-surface border border-border rounded-xl p-3.5 flex flex-col">
-                <div className="flex items-center gap-2 mb-1">
-                  <Calendar className="w-4 h-4 text-purple-400" />
-                  <h3 className="text-xs font-bold text-foreground">Período de Análise</h3>
-                </div>
-                <p className="text-[11px] text-muted-foreground mb-3">Escolha o recorte de tempo</p>
-                <div className="mt-auto">
-                   <select 
-                     value={period} 
-                     onChange={e => setPeriod(e.target.value as any)}
-                     className="w-full bg-muted/40 border border-border text-muted-foreground text-xs rounded-lg p-2 focus:border-purple-500 outline-none"
-                   >
-                     <option value="hoje">Hoje</option>
-                     <option value="semana">Esta Semana</option>
-                     <option value="mes">Este Mês</option>
-                     <option value="personalizado">Data específica...</option>
-                   </select>
-                </div>
-              </div>
-
-              {/* Card 2: Data Inicial */}
-              <div className={`bg-surface border border-border rounded-xl p-3.5 flex flex-col transition-opacity ${period === 'personalizado' ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <Calendar className="w-4 h-4 text-blue-400" />
-                  <h3 className="text-xs font-bold text-foreground">Data Inicial</h3>
-                </div>
-                 <p className="text-[11px] text-muted-foreground mb-3">A partir de</p>
-                 <div className="mt-auto">
-                   <input 
-                     type="date"
-                     value={startDate}
-                     onChange={e => setStartDate(e.target.value)}
-                     className="w-full bg-muted/40 border border-border text-muted-foreground text-xs rounded-lg p-2 focus:border-blue-500 outline-none [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
-                   />
-                 </div>
-              </div>
-
-              {/* Card 3: Data Final */}
-              <div className={`bg-surface border border-border rounded-xl p-3.5 flex flex-col transition-opacity ${period === 'personalizado' ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <Calendar className="w-4 h-4 text-blue-400" />
-                  <h3 className="text-xs font-bold text-foreground">Data Final</h3>
-                </div>
-                 <p className="text-[11px] text-muted-foreground mb-3">Até</p>
-                 <div className="mt-auto">
-                   <input 
-                     type="date"
-                     value={endDate}
-                     onChange={e => setEndDate(e.target.value)}
-                     className="w-full bg-muted/40 border border-border text-muted-foreground text-xs rounded-lg p-2 focus:border-blue-500 outline-none [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
-                   />
-                 </div>
-              </div>
-              
-              {/* Card 4: Tipo de Venda */}
-              <div className="bg-surface border border-border rounded-xl p-3.5 flex flex-col">
-                <div className="flex items-center gap-2 mb-1">
-                  <CreditCard className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-                  <h3 className="text-xs font-bold text-foreground">{v('ui.paymentMethod', "Forma de Pagamento")}</h3>
-                </div>
-                <p className="text-[11px] text-muted-foreground mb-3">Filtrar por meio de recebimento</p>
-                <div className="mt-auto">
-                   <select 
-                     value={saleType} 
-                     onChange={e => setSaleType(e.target.value as any)}
-                     className="w-full bg-muted/40 border border-border text-muted-foreground text-xs rounded-lg p-2 focus:border-emerald-500 outline-none"
-                   >
-                     <option value="todas">Todas as Formas</option>
-                     <option value="cash">Apenas Dinheiro Vivo</option>
-                     <option value="card">{isBrazil ? 'Cartão e Pix' : 'Cartão'}</option>
-                     <option value="fiado">Apenas Fiado / Caderneta</option>
-                   </select>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Banner do Módulo de Compras no Relatório */}
         <div className="mb-6 p-4 rounded-xl bg-purple-950/30 border border-purple-800/40 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
@@ -2133,243 +1813,6 @@ function doPost(e) {
           <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{backupSuccessMessage}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Integração com Google Sheets via Webhook (Google Apps Script) */}
-      <div className="bg-white dark:bg-[#1e1e1e] p-6 rounded-2xl shadow-sm border border-emerald-100 dark:border-emerald-900/40">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-border">
-          <div>
-            <div className="flex items-center gap-2.5 text-foreground font-bold text-lg mb-1">
-              <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600">
-                <FileSpreadsheet className="w-5 h-5" />
-              </div>
-              <span>Google Sheets (Webhook Google Apps Script)</span>
-              <span className={`text-[11px] font-bold uppercase px-2.5 py-0.5 rounded-full border ${
-                sheetsEnabled 
-                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                  : 'bg-muted text-muted-foreground border-border'
-              }`}>
-                {sheetsEnabled ? 'Ativo' : 'Pausado'}
-              </span>
-            </div>
-            <p className="text-sm text-muted-foreground max-w-2xl">
-              Ao registrar uma venda ou movimentação, os dados são enviados automaticamente para a sua planilha Google Sheets.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleTestSheetsWebhook}
-              disabled={sheetsTesting || !sheetsEnabled}
-              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-semibold transition-all text-xs whitespace-nowrap flex items-center gap-2 cursor-pointer shadow-xs"
-            >
-              <RefreshCcw className={`w-3.5 h-3.5 ${sheetsTesting ? 'animate-spin' : ''}`} />
-              {sheetsTesting ? 'Testando Webhook...' : 'Testar Envio para a Planilha'}
-            </button>
-          </div>
-        </div>
-
-        {/* Feedback do Teste */}
-        {sheetsTestResult && (
-          <div className={`mt-4 p-3.5 rounded-xl border text-xs flex items-center gap-2.5 ${
-            sheetsTestResult.success
-              ? 'bg-emerald-50/80 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-200'
-              : 'bg-amber-50/80 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-200'
-          }`}>
-            {sheetsTestResult.success ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-            )}
-            <span>{sheetsTestResult.message}</span>
-          </div>
-        )}
-
-        {/* URL do Webhook configurada */}
-        <div className="mt-4 p-4 rounded-xl bg-muted/40 border border-border space-y-3">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-            <div className="text-xs font-semibold text-muted-foreground flex items-center gap-2">
-              <Globe className="w-3.5 h-3.5 text-emerald-600" />
-              <span>URL DO WEBHOOK APPS SCRIPT (MÉTODO POST)</span>
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer text-xs text-foreground font-medium">
-              <input
-                type="checkbox"
-                checked={sheetsEnabled}
-                onChange={(e) => handleToggleSheetsEnabled(e.target.checked)}
-                className="rounded border-border text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-              />
-              <span>Ativar sincronização automática com a planilha</span>
-            </label>
-          </div>
-
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={sheetsWebhookUrl}
-              onChange={(e) => handleSaveSheetsWebhookUrl(e.target.value)}
-              onBlur={() => setGoogleSheetsWebhookUrl(sheetsWebhookUrl)}
-              placeholder="https://script.google.com/macros/s/.../exec"
-              className="flex-1 px-3 py-2 text-xs font-mono bg-surface border border-border rounded-xl focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-foreground"
-            />
-            {sheetsWebhookUrl !== GOOGLE_SHEETS_WEBHOOK_URL && (
-              <button
-                type="button"
-                onClick={() => { handleSaveSheetsWebhookUrl(''); setGoogleSheetsWebhookUrl(''); }}
-                className="px-3 py-2 text-xs bg-muted hover:bg-muted/80 text-foreground rounded-xl border border-border transition-colors font-medium cursor-pointer"
-                title="Restaurar URL padrão"
-              >
-                Padrão
-              </button>
-            )}
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            Sempre que uma venda ou movimentação for salva, este endpoint recebe um JSON completo com data, tipo, produto, quantidade, valor, operador e array <code className="text-foreground font-mono">linha</code> formatado.
-          </p>
-        </div>
-
-        {/* Botões de Ação Auxiliares: Código do Apps Script e Histórico de Envios */}
-        <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border">
-          <button
-            type="button"
-            onClick={() => setIsAppsScriptCodeOpen(!isAppsScriptCodeOpen)}
-            className="px-3 py-1.5 text-xs bg-muted hover:bg-muted/80 text-foreground rounded-lg border border-border transition-colors font-medium flex items-center gap-1.5 cursor-pointer"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-            <span>{isAppsScriptCodeOpen ? 'Ocultar Código do Apps Script' : 'Ver Código do Google Apps Script'}</span>
-            {isAppsScriptCodeOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsSheetsLogsOpen(!isSheetsLogsOpen)}
-            className="px-3 py-1.5 text-xs bg-muted hover:bg-muted/80 text-foreground rounded-lg border border-border transition-colors font-medium flex items-center gap-1.5 cursor-pointer"
-          >
-            <Clock className="w-3.5 h-3.5 text-blue-600" />
-            <span>{isSheetsLogsOpen ? 'Ocultar Histórico de Envios' : `Ver Histórico de Envios (${sheetsLogs.length})`}</span>
-            {isSheetsLogsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          </button>
-        </div>
-
-        {/* Bloco de Código do Apps Script (Pronto para copiar) */}
-        {isAppsScriptCodeOpen && (
-          <div className="mt-4 p-4 rounded-xl bg-muted/30 border border-border space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-foreground">
-                Script doPost(e) para a sua Planilha (Google Sheets)
-              </span>
-              <button
-                type="button"
-                onClick={handleCopyAppsScriptCode}
-                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              >
-                {copiedAppsScript ? (
-                  <>
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Copiado!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Copiar Código</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              No seu Google Sheets, abra <strong>Extensões &gt; Apps Script</strong>, substitua o conteúdo pelo código abaixo, clique em <strong>Implantar &gt; Nova Implantação &gt; App da Web</strong>, configure <em>Executar como: Eu</em> e <em>Quem pode acessar: Qualquer pessoa</em>, e copie a URL gerada:
-            </p>
-
-            <pre className="font-mono text-[11px] bg-black/85 text-emerald-400 p-3 rounded-lg border border-border overflow-x-auto leading-relaxed select-all">
-{`function doPost(e) {
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getActiveSheet();
-    var data = JSON.parse(e.postData.contents);
-    
-    // Insere linha: [Data/Hora, Tipo, Produto, Quantidade, Valor R$, Pagamento, Cliente, Detalhes]
-    sheet.appendRow([
-      data.data || new Date().toLocaleString("pt-BR"),
-      (data.tipo || "VENDA").toUpperCase(),
-      data.produto || "-",
-      data.quantidade || 1,
-      data.valor || 0,
-      data.forma_pagamento || "-",
-      data.cliente || "-",
-      data.descricao || "-"
-    ]);
-    
-    return ContentService
-      .createTextOutput(JSON.stringify({ status: "success", received: true }))
-      .setMimeType(ContentService.MimeType.JSON);
-  } catch (err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ status: "error", error: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}`}
-            </pre>
-          </div>
-        )}
-
-        {/* Histórico dos Últimos Envios via Webhook */}
-        {isSheetsLogsOpen && (
-          <div className="mt-4 p-4 rounded-xl bg-muted/30 border border-border space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-foreground">
-                Últimos Envios Transmitidos para a Planilha
-              </span>
-              {sheetsLogs.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    clearGoogleSheetsLogs();
-                    setSheetsLogs([]);
-                  }}
-                  className="text-xs text-muted-foreground hover:text-red-500 transition-colors cursor-pointer"
-                >
-                  Limpar Histórico
-                </button>
-              )}
-            </div>
-
-            {sheetsLogs.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-2 text-center">
-                Nenhum registro transmitido ainda. Registre uma venda ou faça um teste de envio acima.
-              </p>
-            ) : (
-              <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
-                {sheetsLogs.map(log => (
-                  <div
-                    key={log.id}
-                    className="p-2 rounded-lg bg-surface border border-border text-xs flex items-center justify-between gap-2"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${
-                        log.status === 'enviado' ? 'bg-emerald-500' : 'bg-red-500'
-                      }`} />
-                      <span className="font-semibold uppercase text-[11px] text-foreground">
-                        {log.tipo}
-                      </span>
-                      <span className="text-muted-foreground truncate max-w-[200px]">
-                        {log.produto}
-                      </span>
-                      {log.valor > 0 && (
-                        <span className="font-mono text-[11px] text-emerald-600 font-bold">
-                          {formatMoney(log.valor)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground shrink-0 font-mono">
-                      {new Date(log.timestamp).toLocaleTimeString(languageLocales[normalizeLanguage(language)])}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
       </div>

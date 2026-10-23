@@ -221,12 +221,12 @@ test('all five feedback types survive resubscription and are read by an independ
  assert.deepEqual(new Set(result.data.map(item=>item.data.category)),new Set(categories));
 });
 
-test('Sheets export failure cannot roll back a confirmed Supabase sale or stock deduction',async()=>{
+test('retired browser Sheets webhook is never invoked by a confirmed Supabase sale',async()=>{
  const ref=store.doc(store.db,'products','p1');await store.updateDoc(ref,{fifoLots:store.deleteField(),stock:2});
  globalThis.__sheetsFail=true;
  try{
   await api.recordSale({total:5,type:'cash',customerId:''},[{productId:'p1',name:'Produto',format:'Padrão',quantity:1,price:5,unitCost:2,stockDeduction:1}],[]);
-  await waitFor(()=>globalThis.__failedSheetType==='sale');
+  assert.equal(globalThis.__failedSheetType,undefined);
   assert.equal((await store.getDoc(ref)).data().stock,1);
  }finally{delete globalThis.__sheetsFail;delete globalThis.__failedSheetType;}
 });
@@ -543,4 +543,29 @@ test('a missing product cost is persisted as unknown rather than a zero-cost pro
  const id=await api.recordSale({total:10,type:'cash',customerId:''},[{productId:ref.id,name:'Sem custo',format:'Padrão',quantity:1,price:10,unitCost:999,stockDeduction:1}],[]);
  const items=await api.getSaleItems(id);assert.equal(items[0].unitCost,null);assert.equal(items[0].costKnown,false);
  const financials=await api.getMonthlyFinancials();assert.equal(financials.profitIncomplete,true);assert.equal(financials.grossProfit,null);assert.equal(financials.totalNetProfit,null);
+});
+
+test('invoice confirms all lines atomically, retains PEPS and handles repeated SKUs and cross-product bonuses under conflicts',async()=>{
+ const p=store.doc(store.db,'products','invoice-p'),q=store.doc(store.db,'products','invoice-q');
+ await store.setDoc(p,{ownerId:'owner',name:'Nota A',type:'comum',stock:20,unitCost:5,basePrice:10,unitsPerPackage:1});await store.setDoc(q,{ownerId:'owner',name:'Nota B',type:'comum',stock:0,unitCost:2,basePrice:10,unitsPerPackage:1});
+ const invoice={id:'invoice-atomic-test',supplier:'Fornecedor ORIGINAL',date:'2026-10-23',items:[
+ {productId:p.id,productName:'Nota A',quantity:36,unitCost:5.5,totalCost:198,bonusProductId:q.id,bonusQuantity:4},
+ {productId:q.id,productName:'Nota B',quantity:6,unitCost:2,totalCost:12},
+ {productId:p.id,productName:'Nota A',quantity:2,unitCost:6,totalCost:12}]};
+ forcedConflicts=2;const before=transactionalWrites.length,ids=await api.recordPurchaseInvoice(invoice);
+ assert.equal(ids.length,3);assert.equal(transactionalWrites.length-before,3); // two conflicts, one commit
+ const a=(await store.getDoc(p)).data(),b=(await store.getDoc(q)).data();assert.equal(a.stock,58);assert.equal(a.unitCost,5);assert.equal(a.lastCost,6);assert.equal(b.stock,10);assert.equal(b.unitCost,198/40);
+ const rows=await Promise.all(ids.map(id=>store.getDoc(store.doc(store.db,'purchases',id))));assert.ok(rows.every(r=>r.data().supplier===invoice.supplier&&r.data().date===invoice.date&&r.data().invoiceTotal===222));
+ const again=await api.recordPurchaseInvoice(invoice);assert.deepEqual(again,ids);assert.equal((await store.getDoc(p)).data().stock,58);assert.equal((await store.getDoc(q)).data().stock,10);
+ await assert.rejects(api.recordPurchaseInvoice({...invoice,items:invoice.items.slice(0,2)}),/outros dados/);
+ const prior=(await store.getDocs(store.collection(store.db,'purchases'))).size;
+ await assert.rejects(api.recordPurchaseInvoice({...invoice,id:'invoice-invalid-line',items:[invoice.items[0],{...invoice.items[1],productId:'nonexistent'}]}),/não encontrado/);
+ assert.equal((await store.getDoc(p)).data().stock,58);assert.equal((await store.getDocs(store.collection(store.db,'purchases'))).size,prior);
+ const noteMovements=(await store.getDocs(store.collection(store.db,'movements'))).docs.filter(d=>d.data().invoiceId===invoice.id);assert.equal(noteMovements.length,3);
+});
+
+test('supplier invoice preserves fractional carteira precision across repeated lines and bonus stock',async()=>{
+ const ref=store.doc(store.db,'products','invoice-cigarette');await store.setDoc(ref,{ownerId:'owner',name:'Cigarro nota',type:'cigarro',stockUnit:'carteira',stock:1.95,unitCost:10,priceCart:20,unitsPerPackage:10});
+ await api.recordPurchaseInvoice({id:'invoice-cigarette-test',supplier:'Fornecedor',date:'2026-10-23',items:[{productId:ref.id,productName:'Cigarro nota',quantity:.5,unitCost:12,totalCost:6},{productId:ref.id,productName:'Cigarro nota',quantity:.05,unitCost:10,totalCost:.5,bonusProductId:ref.id,bonusQuantity:.05}]});
+ const current=(await store.getDoc(ref)).data();assert.equal(current.stock,2.55);assert.equal(current.fifoLots.reduce((n,l)=>n+Math.round(l.quantity*20),0),51);assert.equal(current.lastCost,5);
 });

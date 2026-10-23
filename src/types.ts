@@ -228,6 +228,10 @@ export interface BonusRule {
 }
 
 export interface Purchase {
+  invoiceId?: string;
+  invoiceTotal?: number;
+  invoiceItemCount?: number;
+  invoiceLineFingerprint?: string;
   bonusQuantity?: number; // In the bonus product's base stock unit, not packages.
   bonusProductId?: string;
   bonusProductName?: string;
