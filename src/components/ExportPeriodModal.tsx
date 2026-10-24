@@ -168,6 +168,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
       setStatusMessage(null);
 
       const url = await withActionDeadline(exportToSheets)({
+        products,
         currency, language, languageMode, startDate, endDate, periodLabel: periodLabelFormatted, storeName: settings?.storeName,
         filterDescription: `${v('report.payment')}: ${v('report.pay.' + paymentType)}`,
         sales,

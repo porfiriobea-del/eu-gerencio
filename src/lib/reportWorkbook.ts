@@ -12,11 +12,11 @@ function chartXml(chart:AnalysisChart,currency:string) {
   const values=chart.values.map((v,i)=>`<c:pt idx="${i}"><c:v>${v}</c:v></c:pt>`).join('');
   const cat=`'Análise'!$A$${chart.dataStart}:$A$${chart.dataEnd}`;
   const val=`'Análise'!$${col(chart.column)}$${chart.dataStart}:$${col(chart.column)}$${chart.dataEnd}`;
-  const series=`<c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:v>Valor (${currency})</c:v></c:tx>${chart.type==='pie'?chart.labels.map((_,i)=>`<c:dPt><c:idx val="${i}"/><c:spPr><a:solidFill><a:srgbClr val="${['2563EB','10B981','F59E0B','8B5CF6','EC4899','06B6D4','64748B'][i%7]}"/></a:solidFill></c:spPr></c:dPt>`).join(''):'<c:spPr><a:solidFill><a:srgbClr val="2563EB"/></a:solidFill></c:spPr>'}<c:cat><c:strRef><c:f>${xml(cat)}</c:f><c:strCache><c:ptCount val="${chart.labels.length}"/>${labels}</c:strCache></c:strRef></c:cat><c:val><c:numRef><c:f>${xml(val)}</c:f><c:numCache><c:formatCode>0.00</c:formatCode><c:ptCount val="${chart.values.length}"/>${values}</c:numCache></c:numRef></c:val></c:ser>`;
+  const series=`<c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:v>${chart.unit==='stock'?'Quantidade':`Valor (${currency})`}</c:v></c:tx>${chart.type==='pie'?chart.labels.map((_,i)=>`<c:dPt><c:idx val="${i}"/><c:spPr><a:solidFill><a:srgbClr val="${['2563EB','10B981','F59E0B','8B5CF6','EC4899','06B6D4','64748B'][i%7]}"/></a:solidFill></c:spPr></c:dPt>`).join(''):`<c:spPr><a:solidFill><a:srgbClr val="${chart.unit==='stock'?'DC2626':'2563EB'}"/></a:solidFill></c:spPr>`}<c:cat><c:strRef><c:f>${xml(cat)}</c:f><c:strCache><c:ptCount val="${chart.labels.length}"/>${labels}</c:strCache></c:strRef></c:cat><c:val><c:numRef><c:f>${xml(val)}</c:f><c:numCache><c:formatCode>${chart.unit==='stock'?'0.##':'0.00'}</c:formatCode><c:ptCount val="${chart.values.length}"/>${values}</c:numCache></c:numRef></c:val></c:ser>`;
   const horizontal=chart.type==='bar';
   const plot=chart.type==='pie'
-    ? `<c:pieChart><c:varyColors val="1"/>${series}<c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="1"/><c:showLeaderLines val="1"/></c:dLbls><c:firstSliceAng val="270"/></c:pieChart>`
-    : `<c:barChart><c:barDir val="${horizontal?'bar':'col'}"/><c:grouping val="clustered"/>${series}<c:dLbls><c:showVal val="1"/></c:dLbls><c:axId val="100"/><c:axId val="200"/></c:barChart><c:catAx><c:axId val="100"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="${horizontal?'l':'b'}"/><c:tickLblPos val="nextTo"/><c:crossAx val="200"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/></c:catAx><c:valAx><c:axId val="200"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="${horizontal?'b':'l'}"/><c:majorGridlines/><c:numFmt formatCode="&quot;${currency}&quot; #,##0.00" sourceLinked="0"/><c:tickLblPos val="nextTo"/><c:crossAx val="100"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>`;
+    ? `<c:${chart.hole?'doughnutChart':'pieChart'}><c:varyColors val="1"/>${series}<c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="1"/><c:showLeaderLines val="1"/></c:dLbls><c:firstSliceAng val="270"/>${chart.hole?`<c:holeSize val="${chart.hole}"/>`:""}</c:${chart.hole?'doughnutChart':'pieChart'}>`
+    : `<c:barChart><c:barDir val="${horizontal?'bar':'col'}"/><c:grouping val="clustered"/>${series}<c:dLbls><c:showVal val="1"/></c:dLbls><c:axId val="100"/><c:axId val="200"/></c:barChart><c:catAx><c:axId val="100"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="${horizontal?'l':'b'}"/><c:tickLblPos val="nextTo"/><c:crossAx val="200"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/></c:catAx><c:valAx><c:axId val="200"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="${horizontal?'b':'l'}"/><c:majorGridlines/><c:numFmt formatCode="${chart.unit==='stock'?'0.##':'&quot;'+currency+'&quot; #,##0.00'}" sourceLinked="0"/><c:tickLblPos val="nextTo"/><c:crossAx val="100"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>`;
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>${xml(chart.title)}</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea><c:layout/>${plot}</c:plotArea>${chart.type==='pie'?'<c:legend><c:legendPos val="r"/><c:layout/></c:legend>':''}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>`;
 }
 /** Native editable OOXML charts: no canvas, external URLs, screenshots or formula-looking CSV text. */
@@ -27,7 +27,7 @@ async function addCharts(bytes:ExcelJS.Buffer,charts:AnalysisChart[]) {
   sheet=sheet.replace('</worksheet>','<drawing xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rIdCharts"/></worksheet>');
   zip.file(sheetPath,sheet);
   zip.file('xl/worksheets/_rels/sheet1.xml.rels','<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdCharts" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>');
-  zip.file('xl/drawings/drawing1.xml',`<?xml version="1.0" encoding="UTF-8"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">${charts.map((c,i)=>`<xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${c.row-1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="8572500" cy="3143250"/><xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${i+1}" name="Gráfico ${i+1}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId${i+1}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:oneCellAnchor>`).join('')}</xdr:wsDr>`);
+  zip.file('xl/drawings/drawing1.xml',`<?xml version="1.0" encoding="UTF-8"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">${charts.map((c,i)=>`<xdr:oneCellAnchor><xdr:from><xdr:col>${c.col||0}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${c.row-1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="${(c.width||600)*9525}" cy="3143250"/><xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${i+1}" name="Gráfico ${i+1}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId${i+1}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:oneCellAnchor>`).join('')}</xdr:wsDr>`);
   zip.file('xl/drawings/_rels/drawing1.xml.rels',`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${charts.map((_,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart${i+1}.xml"/>`).join('')}</Relationships>`);
   let types=await zip.file('[Content_Types].xml')!.async('string');
   types=types.replace('</Types>',`<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>${charts.map((_,i)=>`<Override PartName="/xl/charts/chart${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`).join('')}</Types>`);
@@ -38,21 +38,40 @@ export async function buildReportWorkbook(input:AnalysisInput) {
   const result=analysisSheet(input),dashboard=visualReport(input,result),book=new ExcelJS.Workbook(),currency=normalizeCurrency(input.currency);
   book.creator='Eu Gerencio';book.created=new Date();
   const panel=book.addWorksheet('Painel visual');
-  panel.columns=Array.from({length:6},()=>({width:25}));
+  panel.columns=Array.from({length:16},()=>({width:11}));
   panel.addRows(dashboard.rows);
-  panel.views=[{state:'frozen',ySplit:6,showGridLines:false}];
-  panel.eachRow(row=>{
-    row.height=22;row.alignment={vertical:'middle',wrapText:true};
-    if(row.number!==5&&row.number!==6){
-      if(row.cellCount===1){panel.mergeCells(row.number,1,row.number,6);row.font={bold:true,size:14,color:{argb:'FF1E3A5F'}};row.height=32;}
-      else {panel.mergeCells(row.number,2,row.number,6);row.height=48;}
+  panel.views=[{state:'frozen',ySplit:2,showGridLines:false}];
+  panel.eachRow(row=>{row.height=20;row.font={name:'Calibri',size:10,color:{argb:'FF334155'}};row.alignment={vertical:'middle',wrapText:true};});
+  dashboard.merges.forEach(m=>panel.mergeCells(m.row,m.from,m.row,m.to));
+  for(const style of [...dashboard.sections,...dashboard.headers]){
+    for(let c=style.from;c<=style.to;c++){
+      const cell=panel.getCell(style.row,c);cell.font={name:'Calibri',bold:true,size:10,color:{argb:'FFFFFFFF'}};
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1E3A5F'}};
     }
+    panel.getRow(style.row).height=24;
+  }
+  for(let r=6;r<=14;r++)for(let c=1;c<=8;c++){
+    const cell=panel.getCell(r,c);if(r<14&&r%2===0)cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF1F5F9'}};
+    if(c>=3&&c<=7)cell.numFmt=`"${currency}" #,##0.00`;if(c===8)cell.numFmt='0.0%';
+    cell.border={bottom:{style:'hair',color:{argb:'FFCBD5E1'}}};
+  }
+  for(let r=19;r<=23;r++){
+    panel.getRow(r).height=30;
+    if(typeof panel.getCell(r,4).value==='number'){
+      const urgent=typeof panel.getCell(r,4).value==='number'&&Number(panel.getCell(r,4).value)<=0;
+      for(let c=1;c<=8;c++)panel.getCell(r,c).fill={type:'pattern',pattern:'solid',fgColor:{argb:urgent?'FFFEE2E2':'FFFEF3C7'}};
+    }
+  }
+  dashboard.cards.forEach(card=>{
+    const cell=panel.getCell(card.row,card.from);cell.font={bold:true,size:16,color:{argb:card.from===7?'FFDC2626':'FF0369A1'}};
+    cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFEFF6FF'}};
+    if(card.row===28)cell.numFmt=`"${currency}" #,##0.00`;
+    panel.getRow(card.row).height=32;
   });
-  panel.getRow(1).height=40;
-  [5,6].forEach(r=>{const row=panel.getRow(r);row.height=r===6?42:30;row.font={bold:true,size:r===6?18:11,color:{argb:'FFFFFFFF'}};row.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1E3A5F'}};});
-  [1,2,3,4,6].forEach(c=>panel.getCell(6,c).numFmt=`"${currency}" #,##0.00`);
-  panel.getCell('E6').numFmt='0';
+  for(let r=5;r<=35;r++)if(dashboard.rows[r-1][8])panel.getRow(r).height=Math.max(panel.getRow(r).height||20,38);
+  [2,15,24,29,35,56,79].forEach(r=>panel.getRow(r).height=38);
   panel.pageSetup={orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0};
+  panel.pageSetup.printArea='A1:P79';
   book.views=[{x:0,y:0,width:1200,height:800,visibility:'visible',activeTab:0,firstSheet:0}];
   const analysis=book.addWorksheet('Análise');
   analysis.columns=[{width:43},{width:28},{width:78},{width:20},{width:20},{width:24}];

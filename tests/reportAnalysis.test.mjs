@@ -44,8 +44,8 @@ for(const languageMode of ['basic','neutral','technical'])test(`workbook ${langu
  assert.equal(Object.keys(zip.files).filter(p=>/^xl\/charts\/chart\d+\.xml$/.test(p)).length,3);
  for(let i=1;i<=3;i++){
   const chart=await zip.file(`xl/charts/chart${i}.xml`).async('string');
-  assert.ok(chart.includes(i===2?'<c:pieChart>':'<c:barChart>'));
-  if(i===2){assert.ok(chart.includes('<c:showPercent val="1"/>'));assert.ok(chart.includes('<c:legend>'));}
+  assert.ok(chart.includes(i===1?'<c:doughnutChart>':'<c:barChart>'));
+  if(i===1){assert.ok(chart.includes('<c:showPercent val="1"/>'));assert.ok(chart.includes('<c:legend>'));}
   if(i===3)assert.ok(chart.includes('<c:barDir val="bar"/>'));assert.ok(chart.includes('Análise'));assert.ok(chart.includes('<c:numCache>'));
  }
  const book=new ExcelJS.Workbook();await book.xlsx.load(bytes);
@@ -54,10 +54,12 @@ for(const languageMode of ['basic','neutral','technical'])test(`workbook ${langu
  assert.equal(book.getWorksheet('Estoque atual').getCell('C2').value,1.95);
  assert.equal(book.getWorksheet('Vendas').getCell('D2').value,100);
  const panel=book.getWorksheet('Painel visual');
- assert.equal(panel.getCell('A6').value,200);assert.equal(panel.getCell('D6').value,169.8);assert.equal(panel.getCell('E6').value,4);
- assert.ok(panel.getRow(6).font.bold);
+ assert.equal(panel.getCell('A28').value,200);assert.equal(panel.getCell('E28').value,169.8);assert.equal(panel.getCell('A34').value,1);
+ assert.ok(panel.getCell('I4').value.includes(languageMode==='basic'?'Entenda':'Parecer'));
+ assert.equal(panel.getCell('H14').value,1);
+ assert.ok(panel.getCell('A28').font.bold);
  const drawing=await zip.file('xl/drawings/drawing1.xml').async('string');
- assert.ok(drawing.includes('<xdr:row>10</xdr:row>'));
+ assert.ok(drawing.includes('<xdr:row>37</xdr:row>'));
  assert.ok(!(await zip.file('xl/worksheets/sheet2.xml').async('string')).includes('rIdCharts'));
  book.eachSheet(ws=>ws.eachRow(row=>row.eachCell(cell=>assert.notEqual(cell.type,ExcelJS.ValueType.Formula))));
  assert.ok((await zip.file('xl/worksheets/sheet1.xml').async('string')).includes('rIdCharts'));
@@ -65,13 +67,31 @@ for(const languageMode of ['basic','neutral','technical'])test(`workbook ${langu
 
 test('visual panel presents the three types before detailed tables, with explicit empty and negative-balance states',()=>{
  const data=input(),sheet=analysisSheet(data),panel=visualReport(data,sheet);
- assert.deepEqual(panel.charts.map(c=>c.type),['column','pie','bar']);
- assert.equal(panel.charts[0].row,11);
- assert.deepEqual(panel.rows[5],[200,30,0.2,169.8,4,50]);
- assert.ok(panel.rows.some(r=>String(r[1]).includes('Não é lucro')));
+ assert.deepEqual(panel.charts.map(c=>c.type),['pie','column','bar']);
+ assert.equal(panel.charts[0].row,38);
+ assert.equal(panel.rows[27][0],200);assert.equal(panel.rows[27][4],169.8);assert.equal(panel.rows[33][0],1);
+ assert.ok(panel.rows.some(r=>r.some(c=>String(c).includes('Não é lucro'))));
  for(const c of panel.charts){assert.ok(c.row<80);assert.equal(sheet.rows[c.dataStart-1][c.column],c.values[0]);}
  const zero=visualReport({...data,sales:[{...data.sales[0],total:0}]});
- assert.ok(!zero.charts.some(c=>c.type==='pie'));assert.ok(zero.rows.some(r=>String(r[1]).includes('não existe participação')));
+ assert.ok(!zero.charts.some(c=>c.type==='pie'));assert.ok(zero.rows.some(r=>r.some(c=>String(c).includes('não há participação'))));
  const loss=visualReport({...data,purchases:[{...data.purchases[0],totalCost:500}]});
- assert.equal(loss.rows[5][3],-300.2);assert.ok(loss.charts.find(c=>c.type==='bar').values.includes(-300.2));
+ assert.equal(loss.rows[27][4],-300.2);assert.ok(loss.charts.find(c=>c.type==='bar').values.includes(-300.2));
+});
+
+test('executive stock diagnosis respects supplier packages, separates units, and exposes unknown targets',()=>{
+ const data=input();data.products=[
+  {name:'Zerado cigarro',type:'cigarro',category:'Cigarros',stock:0,safetyStock:6,maxStock:11,purchaseForm:'pacote',supplierPackageUnits:5},
+  {name:'Água',type:'comum',category:'Bebidas',stock:0,safetyStock:5,maxStock:10,purchaseForm:'fardo',unitsPerPackage:6},
+  {name:'Sem limite',type:'comum',category:'Outros',stock:0,safetyStock:0,purchaseForm:'unidade'},
+  {name:'Positivo baixo',type:'comum',category:'Outros',stock:2,safetyStock:3,maxStock:7,purchaseForm:'unidade'}
+ ];
+ const sheet=analysisSheet(data),panel=visualReport(data,sheet);
+ const chart=panel.charts.find(c=>c.unit==='stock');
+ assert.equal(chart.col,8);assert.equal(chart.row,38);
+ assert.deepEqual(chart.values,[12,15]);
+ assert.deepEqual(chart.labels,['Água (unidades)','Zerado cigarro (carteiras)']);
+ assert.ok(panel.critical.find(s=>s.product.name==='Sem limite').quantity===null);
+ for(const c of panel.charts)assert.deepEqual(sheet.rows.slice(c.dataStart-1,c.dataEnd).map(r=>r[c.column]),c.values);
+ // No overlapping merged regions anywhere in either column of the dashboard.
+ const occupied=new Set();for(const m of panel.merges)for(let c=m.from;c<=m.to;c++){const key=`${m.row}:${c}`;assert.ok(!occupied.has(key),key);occupied.add(key);}
 });

@@ -19,9 +19,9 @@ test('Google Sheets export creates an analysis tab and editable charts using RAW
  const rows=calls[1].body.data.find(d=>d.range==="'Análise'!A1").values;
  const charts=calls[2].body.requests.filter(r=>r.addChart);
  assert.equal(charts.length,3);
- assert.ok(charts[1].addChart.chart.spec.pieChart);assert.equal(charts[2].addChart.chart.spec.basicChart.chartType,'BAR');
+ assert.equal(charts[0].addChart.chart.spec.pieChart.pieHole,0.55);assert.equal(charts[2].addChart.chart.spec.basicChart.chartType,'BAR');
  assert.equal(calls[0].body.sheets[0].properties.title,'Painel visual');
- const panel=calls[1].body.data.find(d=>d.range==="'Painel visual'!A1").values;assert.equal(panel[5][0],25);
+ const panel=calls[1].body.data.find(d=>d.range==="'Painel visual'!A1").values;assert.equal(panel[27][0],25);
  for(const {addChart:{chart}} of charts){
   const series=(chart.spec.pieChart?.series || chart.spec.basicChart.series[0].series).sourceRange.sources[0];
   const values=rows.slice(series.startRowIndex,series.endRowIndex).map(r=>r[series.startColumnIndex]);

@@ -509,6 +509,7 @@ export default function SettingsView() {
       const {sales:fetchedSales,purchases:fetchedPurchases}=await loadFilteredReport();
 
       const url = await exportToSheets({
+        products: reportExportEntities(fetchedSales,customers,products,reportFilters).products,
         languageMode, storeName: storeName || settings?.storeName,
         startDate: format(new Date(startTimestamp),'yyyy-MM-dd'), endDate: format(new Date(endTimestamp),'yyyy-MM-dd'),
         filterDescription: reportSelectionDescription(),

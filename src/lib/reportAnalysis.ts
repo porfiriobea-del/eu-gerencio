@@ -9,7 +9,7 @@ export interface AnalysisInput extends MoneyOptions {
   filterDescription?: string; languageMode?: 'basic'|'neutral'|'technical';
 }
 export type AnalysisRow = (string|number)[];
-export interface AnalysisChart {type:'column'|'pie'|'bar'; title:string; row:number; labels:string[]; values:number[]; dataStart:number; dataEnd:number; column:number;}
+export interface AnalysisChart {type:'column'|'pie'|'bar'; title:string; col?:number; width?:number; hole?:number; unit?:'money'|'stock'; row:number; labels:string[]; values:number[]; dataStart:number; dataEnd:number; column:number;}
 const cents=(n:number)=>Math.round((n+Number.EPSILON)*100);
 const amount=(n:number)=>n/100;
 const finite=(n:unknown):n is number=>typeof n==='number'&&Number.isFinite(n);
@@ -115,32 +115,74 @@ export function analysisSheet(input:AnalysisInput) {
   return {analysis:a,rows,charts,dailyStart,dailyEnd,paymentStart,paymentEnd};
 }
 
-/** A compact first sheet: summary cards, visible charts, and short interpretation. */
+/** Presentation dashboard: compact tables on the left, evidence-based commentary on the right. */
 export function visualReport(input:AnalysisInput,result=analysisSheet(input)) {
-  const a=result.analysis,basic=input.languageMode==='basic';
-  const rows:AnalysisRow[]=[
-    [basic?'Seus números em gráficos':'Painel visual — análise comercial'],
-    ['Comércio',input.storeName||'Não informado'],
-    ['Período',`${a.start||'Não informado'} até ${a.end||'Não informado'}`],
-    ['Filtros',input.filterDescription||input.periodLabel||'Dados selecionados para exportação'],
-    [basic?'Você vendeu':'Valor das vendas',basic?'Gastou em compras':'Compras','Taxas',basic?'O que sobrou nas contas':'Saldo operacional','Número de vendas','Média por venda'],
-    [a.revenue,a.bought,a.fees,a.balance,a.count,a.ticket??'Sem vendas'],
-    ['Como ler','O valor das vendas inclui fiado. Saldo = vendas − compras − taxas. Não é lucro nem dinheiro já recebido.'],
-    ['Confira os detalhes','A aba Análise contém tabelas, cálculos, critérios de exclusão e explicações completas. As demais abas contêm os dados exportados.'],
-  ];
-  if(!a.revenue)rows.push(['Sem valor vendido','Não há valor vendido neste período. Sem valor vendido, não existe participação para desenhar a pizza.']);
-  const interpretations:Record<AnalysisChart['type'],string>={
-    column:'A altura de cada coluna mostra o valor vendido por dia ou mês. Compare com a tabela da aba Análise para conferir quantidades e valores. Picos não explicam sozinhos a causa da variação.',
-    pie:'Cada fatia mostra a participação de uma forma de pagamento no valor das vendas. As porcentagens somam aproximadamente 100% por arredondamento. Pix direto e Pix na maquininha são separados.',
-    bar:'As barras comparam vendas, compras, taxas e saldo. A barra de saldo pode ser negativa. Compras de estoque e vendas podem ocorrer em dias diferentes; este saldo não representa o lucro.',
-  };
-  const charts=result.charts.map(chart=>{
-    rows.push([''],[chart.title]);
-    const row=rows.length+1;
-    for(let i=0;i<18;i++)rows.push(['']);
-    rows.push(['Leitura do gráfico',interpretations[chart.type]]);
-    return {...chart,row};
-  });
-  rows.push(['Fonte','Somente os registros válidos do período e filtros escolhidos. Os gráficos são editáveis e usam as tabelas da aba Análise. A planilha não atualiza sozinha.']);
-  return {rows,charts};
+  const a=result.analysis,basic=input.languageMode==='basic',money=(n:number)=>formatMoney(n,input);
+  const rows:AnalysisRow[]=Array.from({length:100},()=>Array(16).fill(''));
+  const merges:{row:number;from:number;to:number}[]=[],sections:{row:number;from:number;to:number}[]=[],headers:{row:number;from:number;to:number}[]=[],cards:{row:number;from:number;to:number}[]=[];
+  const put=(r:number,c:number,value:string|number)=>{rows[r-1][c-1]=value;};
+  const merged=(r:number,from:number,to:number,value:string|number)=>{put(r,from,value);if(to>from)merges.push({row:r,from,to});};
+  const section=(r:number,from:number,to:number,title:string)=>{merged(r,from,to,title);sections.push({row:r,from,to});};
+  const text=(r:number,value:string)=>merged(r,9,16,'• '+value);
+  section(1,1,16,basic?'Sua loja: números, gráficos e explicações':'Painel executivo — desempenho comercial e estoque');
+  merged(2,1,16,`${input.storeName||'Comércio'} | ${a.start||'Sem início'} a ${a.end||'sem fim'} | ${input.filterDescription||input.periodLabel||'Dados selecionados'}`);
+  section(4,1,8,basic?'1. Como os clientes pagaram':'1. Desempenho comercial por forma de pagamento');
+  const payCols=[['Forma de pagamento',1,2],['Valor vendido',3,4],['Taxas',5,5],['Líquido de taxas',6,7],['Parte (%)',8,8]] as const;
+  payCols.forEach(([label,from,to])=>merged(5,from,to,label));headers.push({row:5,from:1,to:8});
+  a.paymentRows.forEach((p,i)=>{const r=6+i;merged(r,1,2,p.label);merged(r,3,4,p.revenue);put(r,5,p.fees);merged(r,6,7,Math.round((p.revenue-p.fees)*100)/100);put(r,8,p.share);});
+  merged(14,1,2,'Total');merged(14,3,4,a.revenue);put(14,5,a.fees);merged(14,6,7,Math.round((a.revenue-a.fees)*100)/100);put(14,8,a.revenue?1:0);headers.push({row:14,from:1,to:8});
+  merged(15,1,8,'Líquido de taxas inclui fiado. Não significa valor já recebido.');
+  section(4,9,16,basic?'Entenda as vendas':'Parecer técnico — dinâmica financeira');
+  text(5,`${a.count} vendas válidas somaram ${money(a.revenue)}; taxas registradas: ${money(a.fees)}.`);
+  text(7,a.ticket===null?'Não há vendas para calcular a média por venda.':`Média por venda: ${money(a.ticket)}. Fórmula: valor vendido ÷ número de vendas.`);
+  text(9,`Compras: ${money(a.bought)}. Saldo operacional: ${money(a.balance)} (vendas − compras − taxas). Não é lucro.`);
+  const top=a.paymentRows[0];
+  text(11,top&&a.revenue?`Maior participação: ${top.label}, com ${(top.share*100).toFixed(1)}% do valor vendido. Não é uma comparação com outro período.`:'Sem valor vendido, não há participação para desenhar a rosca.');
+  text(13,`Vendas fiadas no período: ${money(a.credit)}. Recebimentos e despesas operacionais não foram apurados neste painel.`);
+  const products=(input.products||[]).filter(p=>!p.mergedIntoId&&finite(p.stock));
+  const zero=products.filter(p=>p.stock<=0),positive=products.filter(p=>p.stock>0);
+  const critical=products.filter(p=>p.stock<=0||p.stock<Math.max(0,p.safetyStock||0)).sort((x,y)=>Number(y.stock<=0)-Number(x.stock<=0)||x.stock-y.stock||x.name.localeCompare(y.name,'pt-BR',{sensitivity:'base'}));
+  const suggestions=critical.map(p=>{const target=Math.max(p.safetyStock||0,p.maxStock||0),pack=p.purchaseForm==='unidade'?1:p.type==='cigarro'?(p.supplierPackageUnits||10):Math.max(1,p.unitsPerPackage||1);return {product:p,quantity:target>0?Math.ceil(Math.max(0,target-p.stock)/pack)*pack:null,unit:p.type==='cigarro'?'carteiras':'unidades'};});
+  section(17,1,8,basic?'2. O que precisa de reposição':'2. Diagnóstico de estoque e reposição');
+  [['Produto',1,2],['Categoria',3,3],['Saldo',4,4],['Mínimo',5,5],['Situação / compra sugerida',6,8]].forEach(([label,from,to])=>merged(18,Number(from),Number(to),String(label)));headers.push({row:18,from:1,to:8});
+  suggestions.slice(0,5).forEach(({product:p,quantity,unit},i)=>{const r=19+i;merged(r,1,2,p.name);put(r,3,p.category);put(r,4,Math.round(p.stock*100)/100);put(r,5,p.safetyStock||0);merged(r,6,8,`${p.stock<=0?'SEM ESTOQUE':'ABAIXO DO MÍNIMO'}; ${quantity===null?'definir limites':`comprar ${quantity} ${unit}`}`);});
+  if(!critical.length)merged(19,1,8,products.length?'Nenhum produto zerado ou abaixo do mínimo cadastrado.':'Estoque não incluído nesta exportação.');
+  merged(24,1,8,`${critical.length} itens em atenção; exibidos até 5. Quantidades respeitam a embalagem cadastrada. Detalhes na aba Análise.`);
+  section(17,9,16,basic?'Entenda o estoque':'Parecer técnico — exposição de estoque');
+  text(18,products.length?`${products.length} produtos no recorte; ${positive.length} com saldo positivo e ${zero.length} zerados ou negativos.`:'Não foram fornecidos produtos para avaliar estoque. Isso não comprova estoque zero na loja.');
+  text(20,products.length?`Disponibilidade: ${(positive.length/products.length*100).toFixed(1)}% dos produtos. Esgotados: ${(zero.length/products.length*100).toFixed(1)}%. Esses percentuais contam produtos, não unidades.`:'Sem base de produtos, os indicadores operacionais ficam indisponíveis.');
+  text(22,`${critical.length} produtos precisam de atenção pelos limites cadastrados. Não se estima venda perdida ou receita futura sem dados suficientes.`);
+  text(24,'Sugestão = limite maior entre máximo e mínimo, menos saldo; arredondada para a embalagem de compra. Sem limite, é preciso configurar antes de estimar.');
+  text(26,'Estoque é uma posição atual, não o saldo histórico do período. Carteiras e unidades comuns não são somadas entre si.');
+  text(28,'Não foi usada a média de vendas salva no cadastro. Este recorte não contém todas as linhas históricas necessárias para recalcular a procura por produto.');
+  section(26,1,8,basic?'3. Resumo do dinheiro':'3. Indicadores financeiros');
+  const debt=input.customers.reduce((n,c)=>n+(finite(c.totalDebt)&&c.totalDebt>0?Math.round(c.totalDebt*100):0),0)/100;
+  const financial=[['Valor vendido',a.revenue],['Taxas',a.fees],['Saldo operacional',a.balance],['Fiado atual',debt]] as const;
+  financial.forEach(([label,value],i)=>{const from=i*2+1;merged(27,from,from+1,label);merged(28,from,from+1,value);cards.push({row:28,from,to:from+1});});
+  merged(29,1,8,'Saldo não é lucro. Fiado atual é o saldo dos clientes incluídos na extração, não apenas das vendas deste período.');
+  section(32,1,8,basic?'4. Resumo dos produtos':'4. Indicadores operacionais');
+  const operational=[['Produtos',products.length||'Sem base'],['Com estoque',products.length?positive.length:'Sem base'],['Esgotados',products.length?zero.length:'Sem base'],['Disponibilidade',products.length?`${(positive.length/products.length*100).toFixed(1)}%`:'Sem base']] as const;
+  operational.forEach(([label,value],i)=>{const from=i*2+1;merged(33,from,from+1,label);merged(34,from,from+1,value);cards.push({row:34,from,to:from+1});});
+  merged(35,1,8,'Produto = um cadastro ativo no recorte. Não é quantidade física nem prova de variedade disponível para venda.');
+  text(30,`Qualidade: ${a.cancelled} vendas canceladas, ${a.invalidSales} vendas inválidas e ${a.invalidPurchases} compras inválidas excluídas.`);
+  text(32,`Taxas ausentes ou inválidas em ${a.missingFees} vendas. Nenhuma taxa atual foi aplicada retroativamente.`);
+  text(34,'A aba Análise preserva cálculos, fontes e limitações. Este arquivo é um retrato da extração, sem atualização automática.');
+  // Stock chart sources are appended to the auditable analysis table, never inferred from sales text.
+  const stockedOut=suggestions.filter(s=>s.product.stock<=0&&s.quantity!==null).slice(0,5);
+  result.rows.push(['Reposição de produtos zerados','Quantidade','Unidade de estoque']);
+  const first=result.rows.length+1;
+  stockedOut.forEach(s=>result.rows.push([`${s.product.name} (${s.unit})`,s.quantity!,s.unit]));
+  const stockChart:AnalysisChart|null=stockedOut.length?{type:'column',title:'Reposição imediata — produtos zerados',row:38,col:8,width:600,unit:'stock',labels:stockedOut.map(s=>`${s.product.name} (${s.unit})`),values:stockedOut.map(s=>s.quantity!),dataStart:first,dataEnd:result.rows.length,column:1}:null;
+  const pie=result.charts.find(c=>c.type==='pie'),daily=result.charts.find(c=>c.type==='column'),finance=result.charts.find(c=>c.type==='bar');
+  const charts:AnalysisChart[]=[];
+  if(pie)charts.push({...pie,row:38,col:0,width:600,hole:55});else merged(40,1,8,'Sem valor vendido para desenhar a rosca por forma de pagamento.');
+  if(stockChart)charts.push(stockChart);
+  if(daily)charts.push({...daily,row:60,col:0,width:600});
+  if(finance)charts.push({...finance,row:stockChart?60:38,col:8,width:600});
+  merged(56,1,8,'Rosca: participação no valor vendido, não no número de vendas. Inclui fiado; não significa recebimento.');
+  merged(56,9,16,stockChart?'Barras: até 5 produtos zerados com limites definidos. Leia a unidade em cada rótulo; carteiras não equivalem a unidades comuns.':'Barras: comparação de vendas, compras, taxas e saldo. Sem reposição quantificável pelos limites cadastrados, mostramos o financeiro; nenhum limite de estoque foi inventado.');
+  merged(79,1,16,'Apresentação: confira filtros e período; leia os indicadores; compare gráficos com as tabelas de origem; consulte as ressalvas antes de concluir sobre lucro ou demanda.');
+  result.rows.push(['Todos os produtos em atenção','Categoria','Saldo atual','Mínimo','Compra sugerida','Unidade de estoque']);
+  suggestions.forEach(s=>result.rows.push([s.product.name,s.product.category,Math.round(s.product.stock*100)/100,s.product.safetyStock||0,s.quantity??'Definir limites',s.unit]));
+  return {rows,charts,merges,sections,headers,cards,critical:suggestions};
 }
