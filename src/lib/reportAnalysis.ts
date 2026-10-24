@@ -9,7 +9,7 @@ export interface AnalysisInput extends MoneyOptions {
   filterDescription?: string; languageMode?: 'basic'|'neutral'|'technical';
 }
 export type AnalysisRow = (string|number)[];
-export interface AnalysisChart {title:string; row:number; labels:string[]; values:number[]; dataStart:number; dataEnd:number; column:number;}
+export interface AnalysisChart {type:'column'|'pie'|'bar'; title:string; row:number; labels:string[]; values:number[]; dataStart:number; dataEnd:number; column:number;}
 const cents=(n:number)=>Math.round((n+Number.EPSILON)*100);
 const amount=(n:number)=>n/100;
 const finite=(n:unknown):n is number=>typeof n==='number'&&Number.isFinite(n);
@@ -87,8 +87,8 @@ export function analysisSheet(input:AnalysisInput) {
     add(a.calendarDays>62?'Gráfico: total por mês':'Gráfico: total por dia','Valor das vendas');
     const first=rows.length+1;const labels=[...buckets.keys()],values=[...buckets.values()].map(amount);
     labels.forEach((label,i)=>add(label,values[i]));
-    const last=rows.length;const anchor=rows.length+1;for(let i=0;i<18;i++)add('');
-    charts.push({title:a.calendarDays>62?'Vendas por mês':'Vendas por dia',row:anchor,labels,values,dataStart:first,dataEnd:last,column:1});
+    const last=rows.length;const anchor=rows.length+1;
+    charts.push({type:'column',title:a.calendarDays>62?'Vendas por mês':'Vendas por dia',row:anchor,labels,values,dataStart:first,dataEnd:last,column:1});
   }else add('Sem gráfico','Não há registros válidos para a série temporal.');
   add('3. '+(basic?'Como os clientes pagaram':'Composição das formas de pagamento'));
   add('Forma','Quantidade','Valor das vendas','Taxas','Participação (%)');
@@ -96,12 +96,12 @@ export function analysisSheet(input:AnalysisInput) {
   a.paymentRows.forEach(p=>add(p.label,p.count,p.revenue,p.fees,Math.round(p.share*10000)/100));
   const paymentEnd=rows.length;
   add('Interpretação','Participação = valor dessa forma ÷ total das vendas × 100. Separar o Pix direto do Pix na maquininha evidencia as taxas; registros antigos sem subtipo permanecem como Cartão.');
-  if(a.paymentRows.length){const anchor=rows.length+1;for(let i=0;i<18;i++)add('');charts.push({title:'Valor por forma de pagamento',row:anchor,labels:a.paymentRows.map(p=>p.label),values:a.paymentRows.map(p=>p.revenue),dataStart:paymentStart,dataEnd:paymentEnd,column:2});}
+  if(a.revenue>0){const anchor=rows.length+1;charts.push({type:'pie',title:'Participação por forma de pagamento',row:anchor,labels:a.paymentRows.map(p=>p.label),values:a.paymentRows.map(p=>p.revenue),dataStart:paymentStart,dataEnd:paymentEnd,column:2});}
   add('4. '+(basic?'Vendas, compras e taxas':'Comparativo financeiro'));
   add('Componente','Valor');const financialStart=rows.length+1;
   add('Vendas',a.revenue);add('Compras',a.bought);add('Taxas',a.fees);add('Saldo operacional',a.balance);
-  const financialEnd=rows.length,anchor=rows.length+1;for(let i=0;i<18;i++)add('');
-  charts.push({title:'Vendas, compras, taxas e saldo',row:anchor,labels:['Vendas','Compras','Taxas','Saldo operacional'],values:[a.revenue,a.bought,a.fees,a.balance],dataStart:financialStart,dataEnd:financialEnd,column:1});
+  const financialEnd=rows.length,anchor=rows.length+1;
+  charts.push({type:'bar',title:'Vendas, compras, taxas e saldo',row:anchor,labels:['Vendas','Compras','Taxas','Saldo operacional'],values:[a.revenue,a.bought,a.fees,a.balance],dataStart:financialStart,dataEnd:financialEnd,column:1});
   add('Interpretação',`O saldo operacional do recorte é ${money(a.balance)}. Comprar estoque em um dia e vender em outro altera esse saldo; isso não demonstra, sozinho, ganho ou perda na venda.`);
   add('5. '+(basic?'Confira antes de apresentar':'Qualidade, rastreabilidade e limitações'));
   add('Vendas canceladas excluídas',a.cancelled);add('Vendas inválidas excluídas',a.invalidSales);add('Compras inválidas excluídas',a.invalidPurchases);add('Registros fora do período excluídos',a.outsidePeriod);add('Vendas sem taxa válida informada',a.missingFees,'Consideradas sem taxa registrada, não como comprovação de isenção.');
@@ -113,4 +113,34 @@ export function analysisSheet(input:AnalysisInput) {
   add('Filtros','Forma de pagamento filtra vendas. Funcionário e categoria também podem filtrar compras. Em categoria, uma venda com itens de várias categorias pode ter seu valor rateado; a contagem representa vendas que contêm a categoria.');
   add('Gráficos','As tabelas são a fonte dos gráficos editáveis. Uma série longa é agrupada por mês apenas no gráfico; o detalhe permanece na tabela. Valores monetários seguem a moeda da loja, sem conversão cambial.');
   return {analysis:a,rows,charts,dailyStart,dailyEnd,paymentStart,paymentEnd};
+}
+
+/** A compact first sheet: summary cards, visible charts, and short interpretation. */
+export function visualReport(input:AnalysisInput,result=analysisSheet(input)) {
+  const a=result.analysis,basic=input.languageMode==='basic';
+  const rows:AnalysisRow[]=[
+    [basic?'Seus números em gráficos':'Painel visual — análise comercial'],
+    ['Comércio',input.storeName||'Não informado'],
+    ['Período',`${a.start||'Não informado'} até ${a.end||'Não informado'}`],
+    ['Filtros',input.filterDescription||input.periodLabel||'Dados selecionados para exportação'],
+    [basic?'Você vendeu':'Valor das vendas',basic?'Gastou em compras':'Compras','Taxas',basic?'O que sobrou nas contas':'Saldo operacional','Número de vendas','Média por venda'],
+    [a.revenue,a.bought,a.fees,a.balance,a.count,a.ticket??'Sem vendas'],
+    ['Como ler','O valor das vendas inclui fiado. Saldo = vendas − compras − taxas. Não é lucro nem dinheiro já recebido.'],
+    ['Confira os detalhes','A aba Análise contém tabelas, cálculos, critérios de exclusão e explicações completas. As demais abas contêm os dados exportados.'],
+  ];
+  if(!a.revenue)rows.push(['Sem valor vendido','Não há valor vendido neste período. Sem valor vendido, não existe participação para desenhar a pizza.']);
+  const interpretations:Record<AnalysisChart['type'],string>={
+    column:'A altura de cada coluna mostra o valor vendido por dia ou mês. Compare com a tabela da aba Análise para conferir quantidades e valores. Picos não explicam sozinhos a causa da variação.',
+    pie:'Cada fatia mostra a participação de uma forma de pagamento no valor das vendas. As porcentagens somam aproximadamente 100% por arredondamento. Pix direto e Pix na maquininha são separados.',
+    bar:'As barras comparam vendas, compras, taxas e saldo. A barra de saldo pode ser negativa. Compras de estoque e vendas podem ocorrer em dias diferentes; este saldo não representa o lucro.',
+  };
+  const charts=result.charts.map(chart=>{
+    rows.push([''],[chart.title]);
+    const row=rows.length+1;
+    for(let i=0;i<18;i++)rows.push(['']);
+    rows.push(['Leitura do gráfico',interpretations[chart.type]]);
+    return {...chart,row};
+  });
+  rows.push(['Fonte','Somente os registros válidos do período e filtros escolhidos. Os gráficos são editáveis e usam as tabelas da aba Análise. A planilha não atualiza sozinha.']);
+  return {rows,charts};
 }

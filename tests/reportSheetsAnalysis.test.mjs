@@ -11,7 +11,7 @@ const data={sales:[{total:25,type:'cash',createdAt:new Date(2026,9,23,12).getTim
 test('Google Sheets export creates an analysis tab and editable charts using RAW numeric and literal text cells',async t=>{
  const calls=[];
  t.mock.method(globalThis,'fetch',async(url,init)=>{calls.push({url:String(url),body:JSON.parse(init.body)});return Response.json(calls.length===1?{spreadsheetId:'sheet-test'}:{});});
- assert.equal(await exportToSheets(data),'https://docs.google.com/spreadsheets/d/sheet-test/edit');
+ assert.equal(await exportToSheets(data),'https://docs.google.com/spreadsheets/d/sheet-test/edit#gid=101');
  assert.equal(calls.length,3);
  assert.ok(calls[0].body.sheets.some(s=>s.properties.title==='Análise'&&s.properties.sheetId===100));
  assert.equal(calls[1].body.valueInputOption,'RAW');
@@ -19,11 +19,14 @@ test('Google Sheets export creates an analysis tab and editable charts using RAW
  const rows=calls[1].body.data.find(d=>d.range==="'Análise'!A1").values;
  const charts=calls[2].body.requests.filter(r=>r.addChart);
  assert.equal(charts.length,3);
+ assert.ok(charts[1].addChart.chart.spec.pieChart);assert.equal(charts[2].addChart.chart.spec.basicChart.chartType,'BAR');
+ assert.equal(calls[0].body.sheets[0].properties.title,'Painel visual');
+ const panel=calls[1].body.data.find(d=>d.range==="'Painel visual'!A1").values;assert.equal(panel[5][0],25);
  for(const {addChart:{chart}} of charts){
-  const series=chart.spec.basicChart.series[0].series.sourceRange.sources[0];
+  const series=(chart.spec.pieChart?.series || chart.spec.basicChart.series[0].series).sourceRange.sources[0];
   const values=rows.slice(series.startRowIndex,series.endRowIndex).map(r=>r[series.startColumnIndex]);
   assert.ok(values.length);assert.ok(values.every(v=>typeof v==='number'&&Number.isFinite(v)));
-  assert.equal(chart.position.overlayPosition.anchorCell.sheetId,100);
+  assert.equal(chart.position.overlayPosition.anchorCell.sheetId,101);
  }
 });
 test('chart failure never reports a fully successful analysis export',async t=>{

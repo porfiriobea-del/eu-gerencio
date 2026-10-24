@@ -88,6 +88,8 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   technical: {
     "report.analysisDownload": "Exportar análise e gráficos (.xlsx)",
     "report.analysisHelp": "Planilha com indicadores, gráficos editáveis, bases de dados e metodologia do período filtrado.",
+    "report.csvOnly": "Somente dados (.CSV, sem gráficos)",
+    "report.visualHint": "Para ver pizza, barras e quadros, baixe o Excel (.xlsx) e abra a primeira aba: Painel visual. CSV não inclui gráficos.",
     "report.analysisLoading": "Preparando planilha...",
     "report.analysisSuccess": "Planilha com dados, análise e gráficos baixada com sucesso.",
     "report.pay.cardsOnly": "Todos os cartões",
@@ -605,6 +607,8 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   neutral: {
     "report.analysisDownload": "Baixar análise com gráficos (.xlsx)",
     "report.analysisHelp": "Baixa uma planilha com dados, gráficos e explicações do período escolhido.",
+    "report.csvOnly": "Somente dados (.CSV, sem gráficos)",
+    "report.visualHint": "Para ver pizza, barras e quadros, baixe o Excel (.xlsx) e abra a primeira aba: Painel visual. CSV não inclui gráficos.",
     "report.analysisLoading": "Preparando planilha...",
     "report.analysisSuccess": "Planilha com dados, análise e gráficos baixada com sucesso.",
     "report.pay.cardsOnly": "Todos os cartões",
@@ -1122,6 +1126,8 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   basic: {
     "report.analysisDownload": "Baixar números e gráficos (.xlsx)",
     "report.analysisHelp": "Veja o que vendeu, o que gastou e como ler cada número.",
+    "report.csvOnly": "Somente dados (.CSV, sem gráficos)",
+    "report.visualHint": "Para ver pizza, barras e quadros, baixe o Excel (.xlsx) e abra a primeira aba: Painel visual. CSV não inclui gráficos.",
     "report.analysisLoading": "Preparando planilha...",
     "report.analysisSuccess": "Planilha com dados, análise e gráficos baixada com sucesso.",
     "report.pay.cardsOnly": "Todos os cartões",

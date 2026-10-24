@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {analyzeReport, analysisSheet} from '../src/lib/reportAnalysis.ts';
+import {analyzeReport, analysisSheet, visualReport} from '../src/lib/reportAnalysis.ts';
 import {buildReportWorkbook} from '../src/lib/reportWorkbook.ts';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
@@ -44,13 +44,34 @@ for(const languageMode of ['basic','neutral','technical'])test(`workbook ${langu
  assert.equal(Object.keys(zip.files).filter(p=>/^xl\/charts\/chart\d+\.xml$/.test(p)).length,3);
  for(let i=1;i<=3;i++){
   const chart=await zip.file(`xl/charts/chart${i}.xml`).async('string');
-  assert.ok(chart.includes('<c:barChart>'));assert.ok(chart.includes('Análise'));assert.ok(chart.includes('<c:numCache>'));
+  assert.ok(chart.includes(i===2?'<c:pieChart>':'<c:barChart>'));
+  if(i===2){assert.ok(chart.includes('<c:showPercent val="1"/>'));assert.ok(chart.includes('<c:legend>'));}
+  if(i===3)assert.ok(chart.includes('<c:barDir val="bar"/>'));assert.ok(chart.includes('Análise'));assert.ok(chart.includes('<c:numCache>'));
  }
  const book=new ExcelJS.Workbook();await book.xlsx.load(bytes);
- assert.deepEqual(book.worksheets.map(w=>w.name),['Análise','Vendas','Compras','Fiado atual','Estoque atual']);
+ assert.deepEqual(book.worksheets.map(w=>w.name),['Painel visual','Análise','Vendas','Compras','Fiado atual','Estoque atual']);
  assert.equal(book.getWorksheet('Fiado atual').getCell('A3').value,'=SUM(1,2)');
  assert.equal(book.getWorksheet('Estoque atual').getCell('C2').value,1.95);
  assert.equal(book.getWorksheet('Vendas').getCell('D2').value,100);
+ const panel=book.getWorksheet('Painel visual');
+ assert.equal(panel.getCell('A6').value,200);assert.equal(panel.getCell('D6').value,169.8);assert.equal(panel.getCell('E6').value,4);
+ assert.ok(panel.getRow(6).font.bold);
+ const drawing=await zip.file('xl/drawings/drawing1.xml').async('string');
+ assert.ok(drawing.includes('<xdr:row>10</xdr:row>'));
+ assert.ok(!(await zip.file('xl/worksheets/sheet2.xml').async('string')).includes('rIdCharts'));
  book.eachSheet(ws=>ws.eachRow(row=>row.eachCell(cell=>assert.notEqual(cell.type,ExcelJS.ValueType.Formula))));
  assert.ok((await zip.file('xl/worksheets/sheet1.xml').async('string')).includes('rIdCharts'));
+});
+
+test('visual panel presents the three types before detailed tables, with explicit empty and negative-balance states',()=>{
+ const data=input(),sheet=analysisSheet(data),panel=visualReport(data,sheet);
+ assert.deepEqual(panel.charts.map(c=>c.type),['column','pie','bar']);
+ assert.equal(panel.charts[0].row,11);
+ assert.deepEqual(panel.rows[5],[200,30,0.2,169.8,4,50]);
+ assert.ok(panel.rows.some(r=>String(r[1]).includes('Não é lucro')));
+ for(const c of panel.charts){assert.ok(c.row<80);assert.equal(sheet.rows[c.dataStart-1][c.column],c.values[0]);}
+ const zero=visualReport({...data,sales:[{...data.sales[0],total:0}]});
+ assert.ok(!zero.charts.some(c=>c.type==='pie'));assert.ok(zero.rows.some(r=>String(r[1]).includes('não existe participação')));
+ const loss=visualReport({...data,purchases:[{...data.purchases[0],totalCost:500}]});
+ assert.equal(loss.rows[5][3],-300.2);assert.ok(loss.charts.find(c=>c.type==='bar').values.includes(-300.2));
 });

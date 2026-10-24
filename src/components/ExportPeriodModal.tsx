@@ -122,7 +122,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
   const periodLabelFormatted = startDate && endDate && isFinite(+parseISO(startDate)) && isFinite(+parseISO(endDate)) ? `${format(parseISO(startDate), 'dd/MM/yyyy')} até ${format(parseISO(endDate), 'dd/MM/yyyy')}` : v('report.invalidDates');
 
   // Ação de exportar CSV
-  const handleExportCSV = async (fileType: 'csv' | 'xlsx' = 'csv') => {
+  const handleExportCSV = async (fileType: 'csv' | 'xlsx' = 'xlsx') => {
     try {
       setIsExporting(true);
       setStatusMessage(null);
@@ -481,6 +481,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
               Fechar
             </button>
 
+            <p className="text-xs text-muted-foreground">{v('report.visualHint')}</p>
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
@@ -509,12 +510,12 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
 
               <button
                 type="button"
-                onClick={() => handleExportCSV()}
+                onClick={() => handleExportCSV('csv')}
                 disabled={isExporting || loadingMetrics || loadFailed}
                 className="px-5 py-2.5 rounded-xl bg-primary hover:opacity-90 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md transition-opacity disabled:opacity-50 cursor-pointer"
               >
                 <FileSpreadsheet className="w-4 h-4" />
-                <span>{isExporting ? 'Exportando...' : 'Baixar dados (.CSV)'}</span>
+                <span>{isExporting ? v('report.analysisLoading') : v('report.csvOnly')}</span>
               </button>
             </div>
           </div>

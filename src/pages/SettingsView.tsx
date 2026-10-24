@@ -527,7 +527,7 @@ export default function SettingsView() {
     }
   };
 
-  const handleExportCSV = async (fileType: 'csv' | 'xlsx' = 'csv') => {
+  const handleExportCSV = async (fileType: 'csv' | 'xlsx' = 'xlsx') => {
     try {
       setIsExporting(true);
       setExportMessage('');
@@ -1686,6 +1686,7 @@ export default function SettingsView() {
               <span>Dados atualizados com Vendas, Compras e Caderneta</span>
             </div>
             
+            <p className="text-xs text-muted-foreground">{v('report.visualHint')}</p>
             <div className="flex items-center gap-2.5 w-full sm:w-auto flex-wrap">
               <button 
                 type="button"
@@ -1713,15 +1714,13 @@ export default function SettingsView() {
 
               <button 
                 type="button"
-                onClick={() => handleExportCSV()}
+                onClick={() => handleExportCSV('csv')}
                 disabled={isExporting}
                 className="w-full sm:w-auto px-4 py-2.5 bg-muted/40 text-muted-foreground border border-border rounded-xl flex items-center justify-center gap-2 hover:bg-muted hover:text-foreground font-bold text-sm disabled:opacity-50 transition-colors shadow cursor-pointer"
                 title="Baixar relatório em CSV, sem abas ou gráficos"
               >
                 <FileSpreadsheet className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-                {period === 'personalizado'
-                  ? `Baixar Planilha (${format(parseISO(startDate), 'dd/MM')} a ${format(parseISO(endDate), 'dd/MM')})`
-                  : 'Baixar dados (.CSV)'}
+                {v('report.csvOnly')}
               </button>
 
               <button 

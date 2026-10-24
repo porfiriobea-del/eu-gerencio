@@ -1,4 +1,4 @@
-import { analysisSheet, type AnalysisInput } from './reportAnalysis';
+import { analysisSheet, visualReport, type AnalysisInput } from './reportAnalysis';
 import { normalizeCurrency, type MoneyOptions } from './currency';
 import { paymentLabel, saleFee, saleNet } from './paymentFees';
 import { getAccessToken } from "./auth";
@@ -13,7 +13,9 @@ export async function exportToSheets(data: Pick<AnalysisInput, 'startDate' | 'en
   purchases?: any[]
 }) {
   const csvCurrency = normalizeCurrency(data.currency);
-  const analysis = analysisSheet({...data, purchases: data.purchases || []});
+  const analysisInput={...data, purchases:data.purchases || []};
+  const analysis = analysisSheet(analysisInput);
+  const dashboard = visualReport(analysisInput,analysis);
   const token = await getAccessToken();
   if (!token) throw new Error("Google Drive access token missing.");
 
@@ -28,6 +30,7 @@ export async function exportToSheets(data: Pick<AnalysisInput, 'startDate' | 'en
     body: JSON.stringify({
       properties: { title },
       sheets: [
+        { properties: { title: "Painel visual", sheetId: 101, gridProperties: {rowCount: Math.max(1000,dashboard.rows.length+30), columnCount: 6, frozenRowCount: 6} } },
         { properties: { title: "Vendas", sheetId: 1 } },
         { properties: { title: "Compras", sheetId: 2 } },
         { properties: { title: "Fiado", sheetId: 3 } },
@@ -80,6 +83,7 @@ export async function exportToSheets(data: Pick<AnalysisInput, 'startDate' | 'en
         { range: "Compras!A1", values: purchasesData },
         { range: "Fiado!A1", values: fiadoData },
         { range: "'Análise'!A1", values: analysis.rows },
+        { range: "'Painel visual'!A1", values: dashboard.rows },
       ]
     })
   });
@@ -98,17 +102,32 @@ export async function exportToSheets(data: Pick<AnalysisInput, 'startDate' | 'en
       if(start!==null)requests.push({mergeCells:{range:{sheetId:100,startRowIndex:index,endRowIndex:index+1,startColumnIndex:start,endColumnIndex:6},mergeType:'MERGE_ALL'}});
       return requests;
     }),
-    ...analysis.charts.map(chart => ({addChart: {chart: {
-      spec: {title: `${chart.title} (${csvCurrency})`, basicChart: {chartType: 'COLUMN', legendPosition: 'NO_LEGEND', headerCount: 0,
-        axis: [{position: 'BOTTOM_AXIS', title: 'Período / componente'}, {position: 'LEFT_AXIS', title: `Valor (${csvCurrency})`}],
-        domains: [{domain: {sourceRange: {sources: [{sheetId: 100, startRowIndex: chart.dataStart-1, endRowIndex: chart.dataEnd, startColumnIndex: 0, endColumnIndex: 1}]}}}],
-        series: [{series: {sourceRange: {sources: [{sheetId: 100, startRowIndex: chart.dataStart-1, endRowIndex: chart.dataEnd, startColumnIndex: chart.column, endColumnIndex: chart.column+1}]}}, targetAxis: 'LEFT_AXIS'}]}},
-      position: {overlayPosition: {anchorCell: {sheetId: 100, rowIndex: chart.row-1, columnIndex: 0}, widthPixels: 1050, heightPixels: 340}}
-    }}}))
+    {updateDimensionProperties: {range: {sheetId: 101, dimension: 'COLUMNS', startIndex: 0, endIndex: 6}, properties: {pixelSize: 180}, fields: 'pixelSize'}},
+    {updateDimensionProperties: {range: {sheetId: 101, dimension: 'ROWS', startIndex: 0, endIndex: dashboard.rows.length}, properties: {pixelSize: 24}, fields: 'pixelSize'}},
+    {repeatCell: {range: {sheetId: 101}, cell: {userEnteredFormat: {wrapStrategy: 'WRAP', verticalAlignment: 'MIDDLE'}}, fields: 'userEnteredFormat'}},
+    {repeatCell: {range: {sheetId: 101,startRowIndex:4,endRowIndex:6}, cell: {userEnteredFormat: {backgroundColor:{red:0.12,green:0.23,blue:0.37},textFormat:{bold:true,foregroundColor:{red:1,green:1,blue:1},fontSize:14}}}, fields: 'userEnteredFormat.backgroundColor,userEnteredFormat.textFormat'}},
+    ...dashboard.rows.flatMap((row,index)=>{
+      if(index===4||index===5||!row.some(value=>value!==''))return [];
+      return [
+        {mergeCells:{range:{sheetId:101,startRowIndex:index,endRowIndex:index+1,startColumnIndex:row.length===1?0:1,endColumnIndex:6},mergeType:'MERGE_ALL'}},
+        {updateDimensionProperties:{range:{sheetId:101,dimension:'ROWS',startIndex:index,endIndex:index+1},properties:{pixelSize:52},fields:'pixelSize'}}
+      ];
+    }),
+    ...dashboard.charts.map(chart => {
+      const source=(column:number)=>({sourceRange:{sources:[{sheetId:100,startRowIndex:chart.dataStart-1,endRowIndex:chart.dataEnd,startColumnIndex:column,endColumnIndex:column+1}]}});
+      return {addChart:{chart:{
+        spec:{title:`${chart.title} (${csvCurrency})`, ...(chart.type==='pie'
+          ? {pieChart:{legendPosition:'RIGHT_LEGEND',domain:source(0),series:source(chart.column),pieHole:0}}
+          : {basicChart:{chartType:chart.type==='bar'?'BAR':'COLUMN',legendPosition:'NO_LEGEND',headerCount:0,
+            axis:[{position:'BOTTOM_AXIS',title:chart.type==='bar'?`Valor (${csvCurrency})`:'Período'},{position:'LEFT_AXIS',title:chart.type==='bar'?'Componente':`Valor (${csvCurrency})`}],
+            domains:[{domain:source(0)}],series:[{series:source(chart.column),targetAxis:chart.type==='bar'?'BOTTOM_AXIS':'LEFT_AXIS'}]}})},
+        position:{overlayPosition:{anchorCell:{sheetId:101,rowIndex:chart.row-1,columnIndex:0},widthPixels:1050,heightPixels:340}}
+      }}};
+    })
   ];
   const chartResponse = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
     method: 'POST', headers: {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'}, body: JSON.stringify({requests})
   });
   if (!chartResponse.ok) throw new Error('Os dados foram exportados, mas não foi possível concluir os gráficos. Tente exportar novamente.');
-  return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
+  return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=101`;
 }

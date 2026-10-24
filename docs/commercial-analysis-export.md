@@ -1,8 +1,8 @@
 # Análise comercial na exportação
 
-Em Relatórios, selecione período e filtros e use **Baixar análise com gráficos (.xlsx)** (o nome acompanha o modo de linguagem). O botão também está na exportação por período. O CSV continua disponível como dados em uma única folha. A opção Google Sheets adiciona a aba **Análise** usando a API oficial e a autorização Google já existente; não reativa o webhook removido de Ajustes.
+Em Relatórios, selecione período e filtros e use **Baixar análise com gráficos (.xlsx)** (o nome acompanha o modo de linguagem). O botão também está na exportação por período. O CSV continua disponível como dados em uma única folha. A opção Google Sheets abre diretamente na aba **Painel visual** e também adiciona a aba **Análise** usando a API oficial e a autorização Google já existente; não reativa o webhook removido de Ajustes.
 
-O Excel possui Análise, Vendas, Compras, Fiado atual e Estoque atual. Os gráficos do Excel são objetos OOXML nativos editáveis, com referências às tabelas e cache de dados para abertura. Os gráficos do Sheets também são editáveis. Não são capturas de tela nem exigem links externos para renderizar.
+O Excel abre na primeira aba **Painel visual**, seguida de Análise, Vendas, Compras, Fiado atual e Estoque atual. O painel traz seis quadros-resumo (vendas, compras, taxas, saldo, quantidade e média por venda), gráficos e uma leitura curta abaixo de cada gráfico. A aba Análise preserva as tabelas detalhadas e a metodologia. Não é necessário rolar por todas as vendas para encontrar os gráficos. Os gráficos do Excel são objetos OOXML nativos editáveis, com referências às tabelas e cache de dados para abertura. Os gráficos do Sheets também são editáveis. Não são capturas de tela nem exigem links externos para renderizar.
 
 ## Escopo e auditoria
 
@@ -17,9 +17,9 @@ O Excel possui Análise, Vendas, Compras, Fiado atual e Estoque atual. Os gráfi
 
 ## Gráficos e explicações
 
-1. Evolução diária do valor vendido, com quantidade e compras na tabela. Acima de 62 dias, o gráfico agrega por mês. Até 366 dias, a tabela inclui dias vazios; em períodos maiores, explicita que só lista dias com registros, sem mudar o denominador da média.
-2. Valor e participação por forma de pagamento, com quantidade e taxas.
-3. Comparativo entre vendas, compras, taxas e saldo operacional, inclusive saldo negativo.
+1. **Colunas** com a evolução diária do valor vendido, com quantidade e compras na tabela. Acima de 62 dias, o gráfico agrega por mês. Até 366 dias, a tabela inclui dias vazios; em períodos maiores, explicita que só lista dias com registros, sem mudar o denominador da média.
+2. **Pizza** da participação por forma de pagamento, com cores, legenda e porcentagens no Excel. As tabelas detalham quantidade, valor, participação e taxas. Sem valor vendido, não é desenhada uma pizza fictícia; o painel explica a ausência.
+3. **Barras horizontais** para comparar vendas, compras, taxas e saldo operacional, inclusive saldo negativo.
 
 Cada seção inclui cálculo, leitura e limites. A conclusão informa o maior dia com vendas; empates mostram a primeira data. Não afirma causalidade, crescimento, previsão ou ranking de produtos a partir de texto livre. Para ranking e lucro auditáveis é preciso exportar linhas estruturadas dos itens e seus custos.
 
@@ -27,4 +27,4 @@ Cada seção inclui cálculo, leitura e limites. A conclusão informa o maior di
 
 Os testes reconciliam totais, centavos, períodos, dias vazios, fiado, tipos de Pix, registros inválidos, cancelamentos, nomes literais e ausência de fórmulas nos dados. Abrem o XLSX gerado e verificam referências dos três gráficos. O transporte do Sheets é simulado e confere criação de aba, números RAW e gráficos; isso não comprova gravação numa conta Google real. A estrutura XLSX também foi aberta com openpyxl, que reconheceu os três gráficos nativos.
 
-Após o deploy, faça uma nova exportação no site e confira o período/filtros na aba Análise. As planilhas antigas não são alteradas. Não há migração SQL, mudança de estoque ou alteração de vendas/compras históricas.
+Após o deploy, faça uma nova exportação no site pelo botão de análise **(.xlsx)** e confira o período/filtros no **Painel visual**. A alternativa CSV está identificada como **Somente dados (.CSV, sem gráficos)**; CSV não comporta gráficos nem abas. A verificação com openpyxl confirma o painel como primeira aba ativa, os tipos coluna/pizza/barras, os rótulos percentuais e as referências às tabelas de origem. As planilhas antigas não são alteradas. Não há migração SQL, mudança de estoque ou alteração de vendas/compras históricas.
