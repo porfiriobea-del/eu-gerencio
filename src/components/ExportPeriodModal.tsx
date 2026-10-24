@@ -10,11 +10,11 @@ import {
   FileSpreadsheet, DownloadCloud, Calendar, Filter, X, 
   ArrowDownLeft, ArrowUpRight, Wallet, Users, Sparkles, Printer, CheckCircle2 
 } from 'lucide-react';
-import { getSalesByDateRange, getPurchasesByDateRange, subscribeCustomers, subscribeSettings } from '../lib/api';
+import { getSalesByDateRange, getPurchasesByDateRange, subscribeCustomers, subscribeSettings, subscribeProducts } from '../lib/api';
 import { exportFullReportToCSV } from '../lib/exportUtils';
 import { exportToSheets } from '../lib/sheets';
 import { usePreferences } from '../lib/preferencesContext';
-import { Sale, Purchase, Customer, Settings } from '../types';
+import { Sale, Purchase, Customer, Settings, Product } from '../types';
 
 interface ExportPeriodModalProps {
   isOpen: boolean;
@@ -24,7 +24,7 @@ interface ExportPeriodModalProps {
 }
 
 export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEndDate }: ExportPeriodModalProps) {
-  const { formatMoney, currencySymbol } = useCurrency();
+  const { formatMoney, currencySymbol, currency, language } = useCurrency();
 
   const { languageMode, v } = usePreferences();
   const [startDate, setStartDate] = useState(() => defaultStartDate || format(subDays(new Date(), 7), 'yyyy-MM-dd'));
@@ -32,9 +32,11 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
   const [paymentType, setPaymentType] = useState<'todas' | 'cash' | 'card' | 'fiado'>('todas');
   
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
 
   const [loadingMetrics, setLoadingMetrics] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [sales, setSales] = useState<Sale[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [isExporting, setIsExporting] = useState(false);
@@ -45,9 +47,11 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
     if (!isOpen) return;
     const unsubCust = subscribeCustomers(setCustomers);
     const unsubSet = subscribeSettings(setSettings);
+    const unsubProducts = subscribeProducts(setProducts);
     return () => {
       unsubCust();
       unsubSet();
+      unsubProducts();
     };
   }, [isOpen]);
 
@@ -59,8 +63,10 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
     const loadData = async () => {
       try {
         setLoadingMetrics(true);
+        setLoadFailed(false);
         setStatusMessage(null);
 
+        if (!startDate || !endDate || !isFinite(+parseISO(startDate)) || !isFinite(+parseISO(endDate)) || startDate > endDate) throw new Error(v('report.invalidDates'));
         const now = new Date();
         const parsedStart = startDate ? parseISO(startDate) : subDays(now, 7);
         const parsedEnd = endDate ? parseISO(endDate) : now;
@@ -87,6 +93,9 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
         setPurchases(fetchedPurchases);
       } catch (err) {
         if (!isCancelled) {
+          setLoadFailed(true);
+          setSales([]); setPurchases([]);
+          setStatusMessage({type:'error',text:v('report.loadError')});
           console.error('Erro ao carregar dados do período:', err);
         }
       } finally {
@@ -110,18 +119,21 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
   const totalOutflow = purchases.reduce((sum, p) => sum + (p.totalCost || 0), 0);
   const balance = totalInflow - totalOutflow;
 
-  const periodLabelFormatted = `${format(parseISO(startDate), 'dd/MM/yyyy')} até ${format(parseISO(endDate), 'dd/MM/yyyy')}`;
+  const periodLabelFormatted = startDate && endDate && isFinite(+parseISO(startDate)) && isFinite(+parseISO(endDate)) ? `${format(parseISO(startDate), 'dd/MM/yyyy')} até ${format(parseISO(endDate), 'dd/MM/yyyy')}` : v('report.invalidDates');
 
   // Ação de exportar CSV
-  const handleExportCSV = async () => {
+  const handleExportCSV = async (fileType: 'csv' | 'xlsx' = 'csv') => {
     try {
       setIsExporting(true);
       setStatusMessage(null);
 
-      exportFullReportToCSV({
+      const exportReport = fileType === 'xlsx' ? (await import('../lib/reportWorkbook')).exportReportWorkbook : exportFullReportToCSV;
+      await exportReport({
+        currency, language, languageMode, filterDescription: `${v('report.payment')}: ${v('report.pay.' + paymentType)}`,
         purchases,
         sales,
         customers,
+        products,
         periodLabel: periodLabelFormatted,
         startDate,
         endDate,
@@ -133,6 +145,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
       });
 
       showToast('✓ Relatório exportado com sucesso!');
+      onClose();
       setStatusMessage({
         type: 'success',
         text: `Relatório exportado com sucesso! Arquivo baixado com ${sales.length} vendas e ${purchases.length} compras.`
@@ -145,7 +158,6 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
       });
     } finally {
       setIsExporting(false);
-      onClose();
     }
   };
 
@@ -156,6 +168,8 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
       setStatusMessage(null);
 
       const url = await withActionDeadline(exportToSheets)({
+        currency, language, languageMode, startDate, endDate, periodLabel: periodLabelFormatted, storeName: settings?.storeName,
+        filterDescription: `${v('report.payment')}: ${v('report.pay.' + paymentType)}`,
         sales,
         expenses: [],
         customers,
@@ -218,7 +232,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                   </span>
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Escolha as datas exatas que você deseja analisar e baixar em Excel (.CSV) ou Google Sheets.
+                  Escolha as datas para baixar os dados em CSV ou uma planilha Excel com análise e gráficos.
                 </p>
               </div>
             </div>
@@ -481,7 +495,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
               <button
                 type="button"
                 onClick={handleExportSheets}
-                disabled={isExporting}
+                disabled={isExporting || loadingMetrics || loadFailed}
                 className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
                 title="Salvar planilha no Google Drive"
               >
@@ -489,14 +503,18 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                 <span>Google Sheets</span>
               </button>
 
+              <button type="button" onClick={() => handleExportCSV('xlsx')} disabled={isExporting || loadingMetrics || loadFailed} title={v('report.analysisHelp')} className="px-4 py-2.5 rounded-xl bg-primary text-white text-xs font-bold disabled:opacity-50">
+                {isExporting ? v('report.analysisLoading') : v('report.analysisDownload')}
+              </button>
+
               <button
                 type="button"
-                onClick={handleExportCSV}
-                disabled={isExporting}
+                onClick={() => handleExportCSV()}
+                disabled={isExporting || loadingMetrics || loadFailed}
                 className="px-5 py-2.5 rounded-xl bg-primary hover:opacity-90 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md transition-opacity disabled:opacity-50 cursor-pointer"
               >
                 <FileSpreadsheet className="w-4 h-4" />
-                <span>{isExporting ? 'Exportando...' : 'Baixar Planilha Excel (.CSV)'}</span>
+                <span>{isExporting ? 'Exportando...' : 'Baixar dados (.CSV)'}</span>
               </button>
             </div>
           </div>

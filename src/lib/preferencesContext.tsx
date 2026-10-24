@@ -86,6 +86,10 @@ export const LANGUAGE_MODE_INFOS: LanguageModeInfo[] = [
 // Unified, consistent dictionary per language mode
 export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   technical: {
+    "report.analysisDownload": "Exportar análise e gráficos (.xlsx)",
+    "report.analysisHelp": "Planilha com indicadores, gráficos editáveis, bases de dados e metodologia do período filtrado.",
+    "report.analysisLoading": "Preparando planilha...",
+    "report.analysisSuccess": "Planilha com dados, análise e gráficos baixada com sucesso.",
     "report.pay.cardsOnly": "Todos os cartões",
     "report.owner": "Dono",
     "report.purchaseFilterNote": "A forma de pagamento filtra as vendas. Funcionário e categoria filtram vendas e compras.",
@@ -599,6 +603,10 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Frente de Caixa',
   },
   neutral: {
+    "report.analysisDownload": "Baixar análise com gráficos (.xlsx)",
+    "report.analysisHelp": "Baixa uma planilha com dados, gráficos e explicações do período escolhido.",
+    "report.analysisLoading": "Preparando planilha...",
+    "report.analysisSuccess": "Planilha com dados, análise e gráficos baixada com sucesso.",
     "report.pay.cardsOnly": "Todos os cartões",
     "report.owner": "Dono",
     "report.purchaseFilterNote": "A forma de pagamento filtra as vendas. Funcionário e categoria filtram vendas e compras.",
@@ -1112,6 +1120,10 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Caixa',
   },
   basic: {
+    "report.analysisDownload": "Baixar números e gráficos (.xlsx)",
+    "report.analysisHelp": "Veja o que vendeu, o que gastou e como ler cada número.",
+    "report.analysisLoading": "Preparando planilha...",
+    "report.analysisSuccess": "Planilha com dados, análise e gráficos baixada com sucesso.",
     "report.pay.cardsOnly": "Todos os cartões",
     "report.owner": "Dono",
     "report.purchaseFilterNote": "A forma de pagamento filtra as vendas. Funcionário e categoria filtram vendas e compras.",

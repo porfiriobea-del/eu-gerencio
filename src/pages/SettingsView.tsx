@@ -409,6 +409,8 @@ export default function SettingsView() {
     return { startTimestamp, endTimestamp, periodLabel };
   };
 
+  const reportSelectionDescription = () => `${v('report.payment')}: ${v('report.pay.' + reportFilters.payment, reportFilters.payment)}; ${v('report.employee')}: ${reportFilters.employee === 'all' ? v('report.allEmployees') : reportFilters.employee === 'owner' ? v('report.owner') : employees.find(e=>e.id===reportFilters.employee)?.name || 'Funcionário não encontrado'}; ${v('report.category')}: ${reportFilters.category === 'all' ? v('report.allCategories') : reportFilters.category}`;
+
   const loadFilteredReport=async()=>{
     const {startTimestamp,endTimestamp}=getPeriodTimestamps();
     if((period==='personalizado'&&(!startDate||!endDate))||startTimestamp>endTimestamp)throw new Error(v('report.invalidDates'));
@@ -507,13 +509,16 @@ export default function SettingsView() {
       const {sales:fetchedSales,purchases:fetchedPurchases}=await loadFilteredReport();
 
       const url = await exportToSheets({
+        languageMode, storeName: storeName || settings?.storeName,
+        startDate: format(new Date(startTimestamp),'yyyy-MM-dd'), endDate: format(new Date(endTimestamp),'yyyy-MM-dd'),
+        filterDescription: reportSelectionDescription(),
         currency, language,
         sales: fetchedSales,
         expenses: [],
         customers: reportExportEntities(fetchedSales,customers,products,reportFilters).customers,
         purchases: fetchedPurchases
       });
-      setExportMessage(`Relatório criado com sucesso com as abas de Vendas, Compras e Fiado! Você pode acessá-lo no seu Google Drive.`);
+      setExportMessage(`Relatório criado com sucesso com as abas de Vendas, Compras, Fiado e Análise com gráficos! Você pode acessá-lo no seu Google Drive.`);
       window.open(url, '_blank');
     } catch (err: any) {
       setExportMessage("Erro ao exportar: " + err.message);
@@ -522,7 +527,7 @@ export default function SettingsView() {
     }
   };
 
-  const handleExportCSV = async () => {
+  const handleExportCSV = async (fileType: 'csv' | 'xlsx' = 'csv') => {
     try {
       setIsExporting(true);
       setExportMessage('');
@@ -530,15 +535,18 @@ export default function SettingsView() {
 
       const {sales:fetchedSales,purchases:fetchedPurchases}=await loadFilteredReport();
 
-      exportFullReportToCSV({
+      const exportReport = fileType === 'xlsx' ? (await import('../lib/reportWorkbook')).exportReportWorkbook : exportFullReportToCSV;
+      await exportReport({
+        languageMode,
+        filterDescription: reportSelectionDescription(),
         currency, language,
         purchases: fetchedPurchases,
         sales: fetchedSales,
         customers: reportExportEntities(fetchedSales,customers,products,reportFilters).customers,
         products: reportExportEntities(fetchedSales,customers,products,reportFilters).products,
         periodLabel,
-        startDate: period === 'personalizado' ? startDate : undefined,
-        endDate: period === 'personalizado' ? endDate : undefined,
+        startDate: format(new Date(startTimestamp), 'yyyy-MM-dd'),
+        endDate: format(new Date(endTimestamp), 'yyyy-MM-dd'),
         storeName: storeName || settings?.storeName,
         inflow: fetchedSales.reduce((n,s)=>n+s.total,0),
         outflow: fetchedPurchases.reduce((n,p)=>n+p.totalCost,0),
@@ -546,7 +554,7 @@ export default function SettingsView() {
         fiadoInflow: fetchedSales.filter(s=>s.type==='fiado').reduce((n,s)=>n+s.total,0)
       });
 
-      setExportMessage(`Planilha completa baixada com sucesso (${fetchedPurchases.length} compras, ${fetchedSales.length} vendas e ${products.length} produtos analisados com venda diária e estoque de segurança).`);
+      setExportMessage(fileType === 'xlsx' ? v('report.analysisSuccess') : `CSV baixado com ${fetchedPurchases.length} compras e ${fetchedSales.length} vendas.`);
     } catch (err: any) {
       setExportMessage("Erro ao baixar planilha: " + err.message);
     } finally {
@@ -1699,17 +1707,21 @@ export default function SettingsView() {
                 <span>Venda Diária & Estoque Segurança (.csv)</span>
               </button>
 
+              <button type="button" onClick={() => handleExportCSV('xlsx')} disabled={isExporting} className="w-full sm:w-auto px-4 py-2.5 bg-primary text-white rounded-xl flex items-center justify-center gap-2 font-bold text-sm disabled:opacity-50" title={v('report.analysisHelp')}>
+                <FileSpreadsheet className="w-4 h-4" />{isExporting ? v('report.analysisLoading') : v('report.analysisDownload')}
+              </button>
+
               <button 
                 type="button"
-                onClick={handleExportCSV}
+                onClick={() => handleExportCSV()}
                 disabled={isExporting}
                 className="w-full sm:w-auto px-4 py-2.5 bg-muted/40 text-muted-foreground border border-border rounded-xl flex items-center justify-center gap-2 hover:bg-muted hover:text-foreground font-bold text-sm disabled:opacity-50 transition-colors shadow cursor-pointer"
-                title="Baixar planilha Excel (.csv) com abas de Compras, Vendas, Fiado e Estoque de Segurança"
+                title="Baixar relatório em CSV, sem abas ou gráficos"
               >
                 <FileSpreadsheet className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                 {period === 'personalizado'
                   ? `Baixar Planilha (${format(parseISO(startDate), 'dd/MM')} a ${format(parseISO(endDate), 'dd/MM')})`
-                  : (languageMode === 'basic' ? 'Baixar Planilha (Excel / CSV)' : 'Baixar Planilha Excel/CSV Completa')}
+                  : 'Baixar dados (.CSV)'}
               </button>
 
               <button 
