@@ -1,3 +1,4 @@
+import { saleFee } from '../lib/paymentFees';
 import { useCurrency } from '../lib/useCurrency';
 import { showToast, showActionError, withActionDeadline } from '../lib/actionFeedback';
 import { useState, useEffect } from 'react';
@@ -89,7 +90,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
           filteredSales = fetchedSales.filter(s => s.type === paymentType);
         }
 
-        setSales(filteredSales);
+        setSales(filteredSales.filter(s => !s.cancelledAt));
         setPurchases(fetchedPurchases);
       } catch (err) {
         if (!isCancelled) {
@@ -117,7 +118,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
   const cardInflow = sales.filter(s => s.type === 'card').reduce((sum, s) => sum + (s.total || 0), 0);
   const fiadoInflow = sales.filter(s => s.type === 'fiado').reduce((sum, s) => sum + (s.total || 0), 0);
   const totalOutflow = purchases.reduce((sum, p) => sum + (p.totalCost || 0), 0);
-  const balance = totalInflow - totalOutflow;
+  const balance = Math.round((totalInflow - totalOutflow - sales.reduce((total,sale)=>total+saleFee(sale),0))*100)/100;
 
   const periodLabelFormatted = startDate && endDate && isFinite(+parseISO(startDate)) && isFinite(+parseISO(endDate)) ? `${format(parseISO(startDate), 'dd/MM/yyyy')} até ${format(parseISO(endDate), 'dd/MM/yyyy')}` : v('report.invalidDates');
 
@@ -426,7 +427,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                   <div className={`text-[11px] font-bold flex items-center justify-between ${
                     balance >= 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'
                   }`}>
-                    <span>{languageMode === 'basic' ? 'O que sobrou no bolso' : 'Resultado Líquido'}</span>
+                    <span>{v('report.balanceTitle')}</span>
                     <Wallet className="w-3.5 h-3.5" />
                   </div>
                   <div className={`text-base sm:text-lg font-black mt-1 ${
@@ -435,7 +436,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                     {formatMoney(balance)}
                   </div>
                   <div className="text-[10px] text-muted-foreground mt-0.5">
-                    {balance >= 0 ? 'Sobra livre' : 'Reposição'}
+                    {v('report.balanceNote')}
                   </div>
                 </div>
 

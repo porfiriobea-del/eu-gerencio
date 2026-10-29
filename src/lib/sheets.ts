@@ -1,8 +1,13 @@
-import { analysisSheet, visualReport, type AnalysisInput } from './reportAnalysis';
+import { analysisSheet, analysisMergeStart, visualReport, type AnalysisInput } from './reportAnalysis';
 import { normalizeCurrency, type MoneyOptions } from './currency';
 import { paymentLabel, saleFee, saleNet } from './paymentFees';
 import { getAccessToken } from "./auth";
-import { format } from "date-fns";
+import { format, isValid, parseISO } from "date-fns";
+
+const sourceDate = (value: number | string, purchase = false) => {
+  const date = typeof value === 'string' ? parseISO(value) : new Date(value);
+  return isValid(date) ? format(date, purchase ? 'dd/MM/yyyy' : 'dd/MM/yyyy HH:mm') : 'Data inválida';
+};
 
 export async function exportToSheets(data: Pick<AnalysisInput, 'startDate' | 'endDate' | 'periodLabel' | 'storeName' | 'filterDescription' | 'languageMode' | 'products'> & {
   currency?: MoneyOptions['currency'],
@@ -46,13 +51,13 @@ export async function exportToSheets(data: Pick<AnalysisInput, 'startDate' | 'en
   // 2. Prepare Data
   const salesData = [
     ["Data", "Tipo", ("Total (" + csvCurrency + ")"), ("Taxa (" + csvCurrency + ")"), ("Valor líquido (" + csvCurrency + ")")],
-    ...data.sales.map(s => [format(new Date(s.createdAt), "dd/MM/yyyy HH:mm"), paymentLabel(s), Number(s.total || 0), saleFee(s), saleNet(s)])
+    ...data.sales.map(s => [sourceDate(s.createdAt), paymentLabel(s), Number(s.total || 0), saleFee(s), saleNet(s)])
   ];
 
   const purchasesData = [
     ["Data da Compra", "Produto", "Categoria", "Qtd Unidades", "Fardos/Pacotes", ("Custo Unitário (" + csvCurrency + ")"), ("Total Desembolsado (" + csvCurrency + ")"), "Fornecedor / Local", "Observações"],
     ...(data.purchases || []).map(p => [
-      p.date ? format(new Date(p.date + 'T12:00:00'), "dd/MM/yyyy") : format(new Date(p.createdAt), "dd/MM/yyyy"),
+      sourceDate(p.date || p.createdAt, true),
       p.productName || "",
       p.category || "",
       p.quantity || 0,
@@ -98,7 +103,7 @@ export async function exportToSheets(data: Pick<AnalysisInput, 'startDate' | 'en
     ...analysis.rows.flatMap((row,index)=>{
       if (!row.some(value=>value!=='')) return [];
       const requests: object[]=[{updateDimensionProperties: {range: {sheetId: 100, dimension: 'ROWS', startIndex: index, endIndex: index+1}, properties: {pixelSize: 64}, fields: 'pixelSize'}}];
-      const start=typeof row[1]==='string'&&row[1].length>65?1:typeof row[2]==='string'&&row[2].length>65?2:null;
+      const start=analysisMergeStart(row);
       if(start!==null)requests.push({mergeCells:{range:{sheetId:100,startRowIndex:index,endRowIndex:index+1,startColumnIndex:start,endColumnIndex:6},mergeType:'MERGE_ALL'}});
       return requests;
     }),

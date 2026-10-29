@@ -9,6 +9,13 @@ export interface AnalysisInput extends MoneyOptions {
   filterDescription?: string; languageMode?: 'basic'|'neutral'|'technical';
 }
 export type AnalysisRow = (string|number)[];
+/** Merge explanatory prose only when every cell to its right is empty. */
+export function analysisMergeStart(row:AnalysisRow): 1 | 2 | null {
+  const empty=(value:unknown)=>value===''||value===null||value===undefined;
+  if(typeof row[1]==='string'&&row[1].length>65&&row.slice(2).every(empty))return 1;
+  if(typeof row[2]==='string'&&row[2].length>65&&row.slice(3).every(empty))return 2;
+  return null;
+}
 export interface AnalysisChart {type:'column'|'pie'|'bar'; title:string; col?:number; width?:number; hole?:number; unit?:'money'|'stock'; row:number; labels:string[]; values:number[]; dataStart:number; dataEnd:number; column:number;}
 const cents=(n:number)=>Math.round((n+Number.EPSILON)*100);
 const amount=(n:number)=>n/100;

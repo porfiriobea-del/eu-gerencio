@@ -95,3 +95,11 @@ test('executive stock diagnosis respects supplier packages, separates units, and
  // No overlapping merged regions anywhere in either column of the dashboard.
  const occupied=new Set();for(const m of panel.merges)for(let c=m.from;c<=m.to;c++){const key=`${m.row}:${c}`;assert.ok(!occupied.has(key),key);occupied.add(key);}
 });
+
+test('long category text does not merge away stock quantities, limits or suggested purchases',async()=>{
+ const data=input();data.products=[{name:'Produto',category:'Categoria muito longa para conferir a integridade dos campos numéricos após a formatação',type:'comum',stock:0,safetyStock:5,maxStock:10,purchaseForm:'unidade'}];
+ const bytes=await buildReportWorkbook(data),book=new ExcelJS.Workbook();await book.xlsx.load(bytes);
+ const sheet=book.getWorksheet('Análise');let target;
+ sheet.eachRow(row=>{if(row.getCell(1).value==='Produto'&&row.getCell(2).value===data.products[0].category)target=row;});
+ assert.ok(target);assert.equal(target.getCell(3).value,0);assert.equal(target.getCell(4).value,5);assert.equal(target.getCell(5).value,10);assert.equal(target.getCell(6).value,'unidades');
+});

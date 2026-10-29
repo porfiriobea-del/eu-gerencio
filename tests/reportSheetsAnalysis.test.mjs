@@ -33,3 +33,14 @@ test('chart failure never reports a fully successful analysis export',async t=>{
  let count=0;t.mock.method(globalThis,'fetch',async()=>{count++;return count===3?new Response('Unavailable',{status:503}):Response.json(count===1?{spreadsheetId:'test'}:{});});
  await assert.rejects(()=>exportToSheets(data),/não foi possível concluir os gráficos/);
 });
+
+test('invalid legacy dates remain visible in source tabs without aborting the entire Sheets export',async t=>{
+ const calls=[];t.mock.method(globalThis,'fetch',async(url,init)=>{calls.push(JSON.parse(init.body));return Response.json(calls.length===1?{spreadsheetId:'legacy'}:{});});
+ await exportToSheets({...data,sales:[...data.sales,{total:25,type:'cash',createdAt:NaN}],purchases:[{date:'invalid',totalCost:10}]});
+ const sales=calls[1].data.find(d=>d.range==='Vendas!A1').values;
+ const purchases=calls[1].data.find(d=>d.range==='Compras!A1').values;
+ assert.equal(sales[2][0],'Data inválida');assert.equal(purchases[1][0],'Data inválida');
+ const summary=calls[1].data.find(d=>d.range==="'Análise'!A1").values;
+ assert.ok(summary.some(r=>r[0]==='Vendas inválidas excluídas'&&r[1]===1));
+ assert.ok(summary.some(r=>r[0]==='Compras inválidas excluídas'&&r[1]===1));
+});

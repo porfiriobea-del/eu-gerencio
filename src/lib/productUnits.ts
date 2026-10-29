@@ -84,8 +84,10 @@ export function cigaretteStockFields(product: Partial<Product>): Partial<Product
 }
 
 /** Display the physical balance using integer cigarettes, never supplier packages. */
-export function stockInputValue(stock: number | undefined): number | '' {
-  return stock === undefined || !Number.isFinite(stock) ? '' : Math.round((stock + Number.EPSILON) * 100) / 100;
+export function stockInputValue(stock: number | string | null | undefined): number | '' {
+  if (stock === undefined || stock === null || (typeof stock === 'string' && !stock.trim())) return '';
+  const value = typeof stock === 'string' ? Number(stock.trim().replace(',', '.')) : stock;
+  return !Number.isFinite(value) ? '' : Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 export function formatStockNumber(stock: number, language = 'pt-BR'): string {

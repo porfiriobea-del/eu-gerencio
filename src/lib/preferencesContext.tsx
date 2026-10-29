@@ -86,6 +86,8 @@ export const LANGUAGE_MODE_INFOS: LanguageModeInfo[] = [
 // Unified, consistent dictionary per language mode
 export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   technical: {
+    "report.balanceTitle": "Saldo operacional",
+    "report.balanceNote": "Vendas − compras − taxas; inclui fiado. Não é lucro nem fluxo de caixa recebido.",
     "report.analysisDownload": "Exportar análise e gráficos (.xlsx)",
     "report.analysisHelp": "Planilha com indicadores, gráficos editáveis, bases de dados e metodologia do período filtrado.",
     "report.csvOnly": "Somente dados (.CSV, sem gráficos)",
@@ -605,6 +607,8 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Frente de Caixa',
   },
   neutral: {
+    "report.balanceTitle": "Saldo das operações",
+    "report.balanceNote": "Inclui fiado ainda não recebido. Não equivale ao lucro.",
     "report.analysisDownload": "Baixar análise com gráficos (.xlsx)",
     "report.analysisHelp": "Baixa uma planilha com dados, gráficos e explicações do período escolhido.",
     "report.csvOnly": "Somente dados (.CSV, sem gráficos)",
@@ -1124,6 +1128,8 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Caixa',
   },
   basic: {
+    "report.balanceTitle": "Vendas menos compras e taxas",
+    "report.balanceNote": "Inclui fiado. Não é o lucro nem dinheiro já recebido.",
     "report.analysisDownload": "Baixar números e gráficos (.xlsx)",
     "report.analysisHelp": "Veja o que vendeu, o que gastou e como ler cada número.",
     "report.csvOnly": "Somente dados (.CSV, sem gráficos)",

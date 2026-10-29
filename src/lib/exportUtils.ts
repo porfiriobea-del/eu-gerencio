@@ -3,6 +3,12 @@ import { paymentLabel, saleFee, saleNet } from './paymentFees';
 import { format } from 'date-fns';
 import { Purchase, Sale, Customer, Product } from '../types';
 
+/** Escape every CSV cell centrally, including titles and explanatory text. */
+function serializeCSV(rows: string[][]) {
+  return rows.map(row => row.map(value => /[;"\r\n]/.test(value)
+    ? `"${value.replace(/"/g, '""')}"` : value).join(';')).join('\r\n');
+}
+
 /**
  * Downloads a text content as a file with UTF-8 BOM so Excel opens with proper accents.
  */
@@ -58,15 +64,15 @@ export function exportPurchasesToCSV(purchases: Purchase[], filenamePrefix = 're
 
     rows.push([
       dateFormatted,
-      `"${(p.productName || '').replace(/"/g, '""')}"`,
-      `"${(p.category || '').replace(/"/g, '""')}"`,
+      (p.productName || ''),
+      (p.category || ''),
       String(p.quantity || 0),
-      `"${pkgStr}"`,
+      pkgStr,
       formatAmount(Number(p.unitCost || 0), csvOptions),
       formatAmount(Number(p.totalCost || 0), csvOptions),
-      `"${(p.supplier || 'Não informado').replace(/"/g, '""')}"`,
-      `"${(p.notes || '').replace(/"/g, '""')}"`,
-      String(p.bonusQuantity || 0), `"${(p.bonusProductName || '').replace(/"/g, '""')}"`, p.bonusStockUnit || '',
+      (p.supplier || 'Não informado'),
+      (p.notes || ''),
+      String(p.bonusQuantity || 0), (p.bonusProductName || ''), p.bonusStockUnit || '',
       formatAmount(p.effectiveUnitCost ?? p.unitCost ?? 0,csvOptions), formatAmount(p.bonusSavings || 0,csvOptions), p.averageCostAfter===undefined?'':formatAmount(p.averageCostAfter,csvOptions)
     ]);
   });
@@ -84,7 +90,7 @@ export function exportPurchasesToCSV(purchases: Purchase[], filenamePrefix = 're
     ''
   ]);
 
-  const csvContent = rows.map(r => r.join(';')).join('\r\n');
+  const csvContent = serializeCSV(rows);
   const filename = `${filenamePrefix}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
   downloadFile(csvContent, filename);
 }
@@ -152,7 +158,7 @@ export function exportFullReportToCSV(data: {
   data.sales.forEach(s => {
     totalSalesAmount += Number(s.total || 0);
     const typeLabel = paymentLabel(s);
-    const itemsText = s.itemsSummary ? `"${s.itemsSummary.replace(/"/g, '""')}"` : '"Venda registrada"';
+    const itemsText = s.itemsSummary || 'Venda registrada';
     rows.push([
       format(new Date(s.createdAt), 'dd/MM/yyyy HH:mm'),
       typeLabel,
@@ -194,14 +200,14 @@ export function exportFullReportToCSV(data: {
 
     rows.push([
       dateFormatted,
-      `"${(p.productName || '').replace(/"/g, '""')}"`,
-      `"${(p.category || '').replace(/"/g, '""')}"`,
+      (p.productName || ''),
+      (p.category || ''),
       String(p.quantity || 0),
-      `"${p.packageQuantity && p.packageQuantity > 0 ? `${p.packageQuantity} ${p.packageType || 'emb.'}` : '-'}"`,
+      p.packageQuantity && p.packageQuantity > 0 ? `${p.packageQuantity} ${p.packageType || 'emb.'}` : '-',
       formatAmount(Number(p.unitCost || 0), csvOptions),
       formatAmount(Number(p.totalCost || 0), csvOptions),
-      `"${(p.supplier || 'Não informado').replace(/"/g, '""')}"`,
-      `"${(p.notes || '').replace(/"/g, '""')}"`
+      (p.supplier || 'Não informado'),
+      (p.notes || '')
     ]);
   });
 
@@ -227,8 +233,8 @@ export function exportFullReportToCSV(data: {
   data.customers.filter(c => c.totalDebt > 0).forEach(c => {
     totalDebt += Number(c.totalDebt || 0);
     rows.push([
-      `"${(c.name || '').replace(/"/g, '""')}"`,
-      `"${(c.phone || '').replace(/"/g, '""')}"`,
+      (c.name || ''),
+      (c.phone || ''),
       formatAmount(Number(c.totalDebt || 0), csvOptions)
     ]);
   });
@@ -272,20 +278,20 @@ export function exportFullReportToCSV(data: {
       }
 
       rows.push([
-        `"${(p.name || '').replace(/"/g, '""')}"`,
-        `"${(p.category || '').replace(/"/g, '""')}"`,
+        (p.name || ''),
+        (p.category || ''),
         String(currentStock),
         dailyAvg.toFixed(1).replace('.', ','),
         String(leadTimeDays),
         String(suggestedSafety),
         String(configuredMin),
-        `"${status}"`,
+        status,
         String(purchaseSuggestion)
       ]);
     });
   }
 
-  const csvContent = rows.map(r => r.join(';')).join('\r\n');
+  const csvContent = serializeCSV(rows);
   const safeDateRange = data.startDate && data.endDate 
     ? `${data.startDate}-a-${data.endDate}` 
     : format(new Date(), 'yyyy-MM-dd');
@@ -352,8 +358,8 @@ export function exportDailySalesAndSafetyStockToCSV(
     }
 
     rows.push([
-      `"${(p.name || '').replace(/"/g, '""')}"`,
-      `"${(p.category || '').replace(/"/g, '""')}"`,
+      (p.name || ''),
+      (p.category || ''),
       String(currentStock),
       dailyAvg.toFixed(1).replace('.', ','),
       String(leadTimeDays),
@@ -361,7 +367,7 @@ export function exportDailySalesAndSafetyStockToCSV(
       String(configuredMin),
       formatAmount(unitCost, csvOptions),
       formatAmount(safetyCapital, csvOptions),
-      `"${status}"`,
+      status,
       String(orderQty)
     ]);
   });
@@ -373,7 +379,7 @@ export function exportDailySalesAndSafetyStockToCSV(
   rows.push(['Produtos em Ponto de Pedido (Comprar com Urgência)', String(totalWarningItems)]);
   rows.push(['Capital Total Recomendado Imobilizado em Segurança', formatMoney(totalSafetyCapital,csvOptions)]);
 
-  const csvContent = rows.map(r => r.join(';')).join('\r\n');
+  const csvContent = serializeCSV(rows);
   const filename = `${filenamePrefix}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
   downloadFile(csvContent, filename);
 }

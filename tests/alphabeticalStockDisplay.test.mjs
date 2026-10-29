@@ -38,3 +38,9 @@ test('physical stock never exposes floating point residue and cigarette labels u
   assert.ok(!formatCigaretteStock(original,language).includes('9999'));
  }
 });
+
+test('stock inputs retain numeric strings from React change events instead of clearing entered limits',()=>{
+ for(const [input,value] of [['50',50],['5',5],['0',0],['33.1',33.1],['3,1',3.1],['0.05',0.05],[' 12 ',12]])assert.equal(stockInputValue(input),value);
+ for(const input of ['', ' ', 'invalid', null, undefined, NaN, Infinity])assert.equal(stockInputValue(input),'');
+ assert.equal(stockInputValue('0.03'),0.03); // display must not silently force an invalid cigarette quantity to a valid one
+});

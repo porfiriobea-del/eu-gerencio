@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import {format} from 'date-fns';
-import {analysisSheet, visualReport, type AnalysisInput, type AnalysisChart} from './reportAnalysis';
+import {analysisSheet, analysisMergeStart, visualReport, type AnalysisInput, type AnalysisChart} from './reportAnalysis';
 import {normalizeCurrency} from './currency';
 import {paymentLabel, saleFee, saleNet} from './paymentFees';
 
@@ -80,8 +80,8 @@ export async function buildReportWorkbook(input:AnalysisInput) {
   analysis.eachRow(row=>{row.height=30;row.alignment={vertical:'middle',wrapText:true};
     const values=row.values as unknown[];
     if(typeof values[1]==='string'&&/^\d\. /.test(values[1])){row.font={bold:true,color:{argb:'FFFFFFFF'}};row.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1E3A5F'}};}
-    if(typeof values[2]==='string'&&String(values[2]).length>65){analysis.mergeCells(row.number,2,row.number,6);row.height=60;}
-    else if(typeof values[3]==='string'&&String(values[3]).length>65){analysis.mergeCells(row.number,3,row.number,6);row.height=45;}
+    const mergeStart=analysisMergeStart(values.slice(1) as (string|number)[]);
+    if(mergeStart!==null){analysis.mergeCells(row.number,mergeStart+1,row.number,6);row.height=mergeStart===1?60:45;}
     if(['Indicador','Data','Forma','Componente'].includes(String(values[1]))){row.font={bold:true};row.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFDBEAFE'}};}
     row.eachCell(cell=>{if(typeof cell.value==='number')cell.numFmt='#,##0.00';cell.border={bottom:{style:'hair',color:{argb:'FFE2E8F0'}}};});
   });
