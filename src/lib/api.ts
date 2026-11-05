@@ -1,3 +1,4 @@
+import {correctedPurchase,correctedProductCosts,type PurchaseCorrection} from './purchaseCorrection';
 import {inventoryLots,receiptLots,lotFields,consumeLots,restoreLots,stockTicks} from './fifoCost';
 import {costPriceReview,changedPrices} from './costPricing';
 import { bonusCost, validBonusRule } from './purchaseBonus';
@@ -1162,6 +1163,57 @@ export const recordPurchaseInvoice=withActionDeadline(async(invoice:PurchaseInvo
   });
   if(fresh)reportUsage('compra_registrada',uid,total);
   return entries.map(e=>e.ref.id);
+});
+
+/** Correct financial input in one cloud transaction; never receive the same inventory twice. */
+export const updatePurchase=withActionDeadline(async(purchaseId:string,patch:PurchaseCorrection)=>{
+  requireManagement();const uid=getEffectiveOwnerId();if(!uid)throw new Error('Entre na sua conta.');
+  const now=Date.now(),ref=doc(db,'purchases',purchaseId),auditRef=doc(db,'movements',`purchase-correction-${purchaseId}-${patch.correctionId}`);
+  await runTransaction(db,async transaction=>{
+    const snapshot=await transaction.get(ref);
+    if(!snapshot.exists()||snapshot.data().ownerId!==uid)throw new Error('Compra não encontrada nesta loja.');
+    const before={...snapshot.data(),id:purchaseId} as Purchase;
+    if(before.lastCorrectionId===patch.correctionId){
+      if(before.totalCost!==Math.round(patch.totalCost*100)/100||(before.supplier||'')!==patch.supplier.trim()||(before.notes||'')!==patch.notes.trim())throw new Error('Esta correção já foi confirmada com outros dados. Atualize a compra.');
+      return;
+    }
+    const after=correctedPurchase(before,patch,now,auth.currentUser?.uid||uid);
+    const historySnapshot=await getDocs(query(collection(db,'purchases'),where('ownerId','==',uid)));
+    const history=historySnapshot.docs.map(d=>({...d.data(),id:d.id} as Purchase));
+    // Resolve aliases once, including bonus SKUs and previously merged products.
+    const products=new Map<string,Awaited<ReturnType<typeof resolveActiveProduct>>>();
+    for(const id of new Set([before.productId,...((before.bonusQuantity||0)>0?[before.bonusProductId||before.productId]:[])])){
+      const product=await resolveActiveProduct(transaction,id);
+      if(product.exists()){
+        if(product.data().ownerId!==uid)throw new Error('Sem acesso ao produto desta compra.');
+        products.set(product.id,product);
+      }
+    }
+    for(const product of products.values()){
+      const current=normalizeCigaretteStock({...product.data(),id:product.id} as Product);
+      const fields=correctedProductCosts(current,before,after,history,patch.correctionId,now);
+      if(Object.keys(fields).length)transaction.update(product.ref,removeUndefinedFields({...cigaretteStockFields(current),...fields}));
+    }
+    // Keep totals on every line of a supplier invoice consistent with its corrected item.
+    if(before.invoiceId){
+      const members=history.filter(p=>p.invoiceId===before.invoiceId);
+      const live=await Promise.all(members.map(p=>transaction.get(doc(db,'purchases',p.id!))));
+      if(live.some(s=>!s.exists()||s.data().ownerId!==uid))throw new Error('A nota mudou. Atualize a lista de compras.');
+      const invoiceTotal=live.reduce((sum,s)=>sum+Math.round((s.id===purchaseId?after.totalCost:Number(s.data().totalCost))*100),0)/100;
+      if(!Number.isFinite(invoiceTotal))throw new Error('Confira os valores da nota.');
+      for(const member of live)if(member.id!==purchaseId)transaction.update(member.ref,{invoiceTotal});
+      after.invoiceTotal=invoiceTotal;
+    }
+    const {id:_id,...fields}=after;
+    transaction.update(ref,removeUndefinedFields(fields));
+    const employee=getActiveEmployeeStorage();
+    transaction.set(auditRef,{ownerId:uid,createdAt:now,timestamp:now,type:'manual_entry',entityId:purchaseId,entityName:before.productName,
+      employeeId:employee.id,employeeName:employee.name,actorUserId:auth.currentUser?.uid||uid,
+      description:`Correção de compra: "${before.productName}"; total ${before.totalCost.toFixed(2)} → ${after.totalCost.toFixed(2)}. Quantidade mantida.`,
+      amount:Math.round((after.totalCost-before.totalCost)*100)/100,
+      purchaseCorrection:{purchaseId,oldTotal:before.totalCost,newTotal:after.totalCost,oldSupplier:before.supplier||'',newSupplier:after.supplier||'',oldNotes:before.notes||'',newNotes:after.notes||'',correctionId:patch.correctionId}
+    });
+  });
 });
 
 export const deletePurchase = withActionDeadline(async (purchaseId: string, revertStock?: { productId: string; quantityToSubtract: number }) => {

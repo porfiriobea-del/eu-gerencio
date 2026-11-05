@@ -228,6 +228,9 @@ export interface BonusRule {
 }
 
 export interface Purchase {
+  updatedAt?: number;
+  updatedBy?: string;
+  lastCorrectionId?: string;
   invoiceId?: string;
   invoiceTotal?: number;
   invoiceItemCount?: number;

@@ -1,3 +1,4 @@
+import {PurchaseEditModal} from '../components/PurchaseEditModal';
 import {AllPurchaseItems} from '../components/AllPurchaseItems';
 import {PurchaseInvoiceModal} from '../components/PurchaseInvoiceModal';
 import {createPortal} from 'react-dom';
@@ -19,7 +20,7 @@ import { exportPurchasesToCSV } from '../lib/exportUtils';
 import { Product, Purchase, SaleItem, BonusRule } from '../types';
 import { 
   ShoppingBag, Plus, Check, Clock, Calendar, AlertTriangle, 
-  Search, Trash2, Printer, CheckCircle2,
+  Search, Trash2, Printer, CheckCircle2, Edit2,
   Sparkles, DollarSign, Store, Tag, X,
   ArrowRight, PackageCheck, ListChecks, History, Info, FileSpreadsheet,
   Flame, Percent, ChevronDown, ChevronUp
@@ -42,6 +43,7 @@ export default function Purchases() {
   const { v, entityName, languageMode, isBasicMode, simpleViewMode } = usePreferences();
   const [products, setProducts] = useState<Product[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [purchaseToEdit,setPurchaseToEdit]=useState<Purchase|null>(null);
   const [sales, setSales] = useState<SaleItem[]>([]);
   const [salesReady, setSalesReady] = useState(false);
   const [salesError, setSalesError] = useState(false);
@@ -582,6 +584,7 @@ export default function Purchases() {
         </button>
       </div>
 
+      {purchaseToEdit&&<PurchaseEditModal purchase={purchaseToEdit} stockType={products.find(p=>p.id===purchaseToEdit.productId||p.mergedProductIds?.includes(purchaseToEdit.productId))?.type} suppliers={quickSuppliers} onClose={()=>setPurchaseToEdit(null)}/>}
       {invoiceOpen&&<PurchaseInvoiceModal products={products} rules={bonusRules} suppliers={quickSuppliers} onClose={()=>setInvoiceOpen(false)}/>}
       {activeTab==='all'&&<AllPurchaseItems products={products} onBuy={handleOpenPurchaseModal}/>}
       {activeTab==='bonus' && <BonusRules rules={bonusRules} products={products} suppliers={quickSuppliers} ready={bonusReady}/>}
@@ -913,6 +916,7 @@ export default function Purchases() {
                           </td>
 
                           <td className="p-3 text-center">
+                            <button type="button" onClick={()=>setPurchaseToEdit(item)} aria-label={`${v('purchase.edit.title')}: ${item.productName}`} title={v('purchase.edit.title')} className="p-2 text-primary hover:bg-muted rounded-lg"><Edit2 className="w-4 h-4"/></button>
                             <button
                               onClick={() => setPurchaseToDelete(item)}
                               className="p-1.5 text-muted-foreground hover:text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"

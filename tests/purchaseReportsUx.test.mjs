@@ -5,11 +5,11 @@ for(const key of ['window','document','navigator','HTMLElement','Node','CustomEv
 globalThis.IS_REACT_ACT_ENVIRONMENT=true;globalThis.requestAnimationFrame=cb=>{queueMicrotask(cb);return 1;};window.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});
 const React=await import('react'),{render,fireEvent,act,cleanup,within}=await import('@testing-library/react');
 const folder=await mkdtemp(new URL('../.purchase-reports-',import.meta.url).pathname);
-await build({stdin:{resolveDir:new URL('..',import.meta.url).pathname,loader:'tsx',contents:"export {PreferencesProvider} from './src/lib/preferencesContext';export {ReportFilters} from './src/components/ReportFilters';export {AllPurchaseItems} from './src/components/AllPurchaseItems';export {PurchaseInvoiceModal} from './src/components/PurchaseInvoiceModal';"},bundle:true,packages:'external',platform:'node',format:'esm',jsx:'automatic',outfile:folder+'/ui.mjs',plugins:[{name:'api',setup(b){b.onResolve({filter:/\/lib\/api$/},()=>({path:'api',namespace:'mock'}));b.onLoad({filter:/.*/,namespace:'mock'},()=>({contents:'export const recordPurchaseInvoice=(...args)=>globalThis.__saveInvoice(...args);',loader:'js'}));}}]});
-const {PreferencesProvider,ReportFilters,AllPurchaseItems,PurchaseInvoiceModal}=await import(folder+'/ui.mjs');
+await build({stdin:{resolveDir:new URL('..',import.meta.url).pathname,loader:'tsx',contents:"export {PreferencesProvider} from './src/lib/preferencesContext';export {ReportFilters} from './src/components/ReportFilters';export {AllPurchaseItems} from './src/components/AllPurchaseItems';export {PurchaseInvoiceModal} from './src/components/PurchaseInvoiceModal';export {PurchaseEditModal} from './src/components/PurchaseEditModal';"},bundle:true,packages:'external',platform:'node',format:'esm',jsx:'automatic',outfile:folder+'/ui.mjs',plugins:[{name:'api',setup(b){b.onResolve({filter:/\/lib\/api$/},()=>({path:'api',namespace:'mock'}));b.onLoad({filter:/.*/,namespace:'mock'},()=>({contents:'export const recordPurchaseInvoice=(...args)=>globalThis.__saveInvoice(...args);export const updatePurchase=(...args)=>globalThis.__updatePurchase(...args);',loader:'js'}));}}]});
+const {PreferencesProvider,ReportFilters,AllPurchaseItems,PurchaseInvoiceModal,PurchaseEditModal}=await import(folder+'/ui.mjs');
 const p={id:'a',name:'Água ORIGINAL',category:'Bebidas',type:'comum',unitsPerPackage:6,stock:3,unitCost:1,lastCost:4},c={id:'c',name:'Cigarro ORIGINAL',category:'Cigarros',type:'cigarro',stockUnit:'carteira',stock:1.95,unitsPerPackage:10,supplierPackageUnits:5,unitCost:10,lastCost:12};
 const wrap=child=>React.createElement(PreferencesProvider,null,child);
-afterEach(()=>{cleanup();localStorage.clear();delete globalThis.__saveInvoice;});after(async()=>{await rm(folder,{recursive:true,force:true});dom.window.close();});
+afterEach(()=>{cleanup();localStorage.clear();delete globalThis.__saveInvoice;delete globalThis.__updatePurchase;});after(async()=>{await rm(folder,{recursive:true,force:true});dom.window.close();});
 function FilterHarness(){const [period,setPeriod]=React.useState('hoje'),[start,setStart]=React.useState('2026-10-01'),[end,setEnd]=React.useState('2026-10-23'),[filters,setFilters]=React.useState({payment:'todas',employee:'all',category:'all'});return React.createElement(ReportFilters,{period,setPeriod,start,end,setStart,setEnd,filters,setFilters,employees:[{id:'e',name:'Zé ORIGINAL'}],categories:['Sedas','Água','Bebidas'],onClear:()=>{setFilters({payment:'todas',employee:'all',category:'all'});setPeriod('hoje');}});}
 test('report period buttons, separate custom dates, active badges and Clear work in all three modes',()=>{
  for(const mode of ['basic','neutral','technical']){localStorage.setItem('app_lang_mode',mode);const ui=render(wrap(React.createElement(FilterHarness)));
@@ -32,4 +32,23 @@ test('one invoice has shared supplier/date, sequential products, optional bonuse
 });
 test('invoice failure preserves editable rows, resets loading and does not report success',async()=>{
  globalThis.__saveInvoice=async()=>{throw Error('Falha de rede');};const ui=render(wrap(React.createElement(InvoiceHarness)));fireEvent.change(ui.getByLabelText('Produto'),{target:{value:'a'}});await act(async()=>fireEvent.submit(ui.getByRole('dialog').querySelector('form')));assert.match(ui.getByRole('alert').textContent,/Falha de rede/);assert.equal(ui.getByRole('button',{name:'Confirmar compra'}).disabled,false);assert.equal(ui.getByLabelText('Produto').value,'a');
+});
+
+const editPurchase={id:'purchase-edit',productId:'a',productName:'Água ORIGINAL',quantity:10,bonusQuantity:2,totalCost:100,unitCost:10,createdAt:10,date:'2026-11-01',supplier:'Fornecedor',ownerId:'owner'};
+function EditHarness(){const [open,setOpen]=React.useState(true);return open?React.createElement(PurchaseEditModal,{purchase:editPurchase,suppliers:['Fornecedor'],onClose:()=>setOpen(false)}):React.createElement('p',null,'Edição fechada');}
+test('edit purchase confirms the corrected total and bonus-adjusted cost before closing in all language modes',async()=>{
+ for(const mode of ['basic','neutral','technical']){
+  localStorage.setItem('app_lang_mode',mode);let saved,release;globalThis.__updatePurchase=async(id,patch)=>{saved={id,patch};await new Promise(resolve=>release=resolve);};
+  const ui=render(wrap(React.createElement(EditHarness)));
+  assert.ok(ui.getByText('Água ORIGINAL'));fireEvent.change(ui.getByLabelText(/Total pago na compra/),{target:{value:'60'}});assert.ok(ui.getByText(/5,00/));
+  await act(async()=>fireEvent.submit(ui.getByRole('dialog').querySelector('form')));
+  assert.equal(saved.id,'purchase-edit');assert.equal(saved.patch.totalCost,60);assert.equal(saved.patch.expectedUpdatedAt,10);assert.equal(saved.patch.quantity,undefined);assert.ok(ui.getByRole('dialog'));assert.ok(ui.getByRole('button',{name:'Salvando...'}).disabled);
+  await act(async()=>release());assert.ok(ui.getByText('Edição fechada'));cleanup();
+ }
+});
+test('failed edit keeps its values, releases loading and reuses the correction id on an unchanged retry',async()=>{
+ const ids=[];globalThis.__updatePurchase=async(_id,patch)=>{ids.push(patch.correctionId);if(ids.length===1)throw new Error('Falha de rede');};
+ const ui=render(wrap(React.createElement(EditHarness)));fireEvent.change(ui.getByLabelText(/Total pago na compra/),{target:{value:'60'}});
+ await act(async()=>fireEvent.submit(ui.getByRole('dialog').querySelector('form')));assert.match(ui.getByRole('alert').textContent,/Falha de rede/);assert.equal(ui.getByLabelText(/Total pago na compra/).value,'60');
+ await act(async()=>fireEvent.submit(ui.getByRole('dialog').querySelector('form')));assert.equal(ids[0],ids[1]);assert.ok(ui.getByText('Edição fechada'));
 });

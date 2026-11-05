@@ -569,3 +569,36 @@ test('supplier invoice preserves fractional carteira precision across repeated l
  await api.recordPurchaseInvoice({id:'invoice-cigarette-test',supplier:'Fornecedor',date:'2026-10-23',items:[{productId:ref.id,productName:'Cigarro nota',quantity:.5,unitCost:12,totalCost:6},{productId:ref.id,productName:'Cigarro nota',quantity:.05,unitCost:10,totalCost:.5,bonusProductId:ref.id,bonusQuantity:.05}]});
  const current=(await store.getDoc(ref)).data();assert.equal(current.stock,2.55);assert.equal(current.fifoLots.reduce((n,l)=>n+Math.round(l.quantity*20),0),51);assert.equal(current.lastCost,5);
 });
+
+test('purchase amount corrections persist atomically, preserve sold costs, do not add stock, and are idempotent',async()=>{
+ const ref=store.doc(store.db,'products','purchase-edit-product');await store.setDoc(ref,{ownerId:'owner',name:'Produto correção',type:'comum',stock:0,unitCost:10,lastCost:10,basePrice:20,unitsPerPackage:1});
+ const id=await api.recordPurchase({productId:ref.id,productName:'Produto correção',quantity:10,unitCost:10,totalCost:100,date:'2026-11-01'});
+ const sale=await api.recordSale({total:40,type:'cash',paymentMethod:'cash'},[{productId:ref.id,name:'Produto correção',format:'Padrão',quantity:2,price:20,unitCost:0,stockDeduction:1}]);
+ const beforeSale=await api.getSaleItems(sale),purchaseRef=store.doc(store.db,'purchases',id),original=(await store.getDoc(purchaseRef)).data();
+ const edit={totalCost:60,supplier:'Fornecedor corrigido',notes:'Valor digitado errado',expectedUpdatedAt:original.createdAt,correctionId:'correction-cloud-123'};
+ forcedConflicts=1;await api.updatePurchase(id,edit);
+ const product=(await store.getDoc(ref)).data(),corrected=(await store.getDoc(purchaseRef)).data();
+ assert.equal(corrected.totalCost,60);assert.equal(corrected.unitCost,6);assert.equal(product.stock,8);assert.equal(product.unitCost,6);assert.equal(product.basePrice,20);assert.deepEqual(await api.getSaleItems(sale),beforeSale);
+ await api.updatePurchase(id,edit);assert.equal((await store.getDoc(ref)).data().stock,8);
+ const audits=(await store.getDocs(store.collection(store.db,'movements'))).docs.filter(d=>d.data().purchaseCorrection?.purchaseId===id);assert.equal(audits.length,1);assert.equal(audits[0].data().purchaseCorrection.oldTotal,100);
+ await assert.rejects(api.updatePurchase(id,{...edit,correctionId:'new-correction-stale'}),/outro aparelho/);
+ await api.cancelSale(sale);assert.equal((await store.getDoc(ref)).data().stock,10);
+});
+test('purchase correction updates cross-product bonus costs and all supplier invoice totals without extra receipts',async()=>{
+ const a=store.doc(store.db,'products','edit-note-a'),b=store.doc(store.db,'products','edit-note-b');
+ await store.setDoc(a,{ownerId:'owner',name:'A',type:'comum',stock:0,unitCost:1,basePrice:10});await store.setDoc(b,{ownerId:'owner',name:'B',type:'comum',stock:0,unitCost:1,basePrice:10});
+ const ids=await api.recordPurchaseInvoice({id:'invoice-edit-123',supplier:'Fornecedor',date:'2026-11-01',items:[{productId:a.id,productName:'A',quantity:10,unitCost:10,totalCost:100,bonusProductId:b.id,bonusQuantity:2},{productId:b.id,productName:'B',quantity:5,unitCost:2,totalCost:10}]});
+ const original=(await store.getDoc(store.doc(store.db,'purchases',ids[0]))).data();
+ await api.updatePurchase(ids[0],{totalCost:60,supplier:'Fornecedor',notes:'Corrigido',expectedUpdatedAt:original.createdAt,correctionId:'invoice-edit-correction'});
+ const left=(await store.getDoc(a)).data(),right=(await store.getDoc(b)).data();assert.equal(left.stock,10);assert.equal(right.stock,7);assert.equal(left.unitCost,5);assert.equal(right.fifoLots.find(l=>l.purchaseId===ids[0]).unitCost,5);assert.equal(right.lastCost,2);
+ for(const id of ids)assert.equal((await store.getDoc(store.doc(store.db,'purchases',id))).data().invoiceTotal,70);
+});
+
+test('purchase corrections cannot change another shop or accept invalid totals, and failures leave the original record untouched',async()=>{
+ const ref=store.doc(store.db,'purchases','edit-other-store');await store.setDoc(ref,{ownerId:'another-owner',productId:'x',productName:'Outra loja',quantity:1,totalCost:10,createdAt:10});
+ await assert.rejects(api.updatePurchase(ref.id,{totalCost:20,supplier:'',notes:'',expectedUpdatedAt:10,correctionId:'correction-denied'}),/nesta loja/);
+ assert.equal((await store.getDoc(ref)).data().totalCost,10);
+ const own=store.doc(store.db,'purchases','edit-invalid-total');await store.setDoc(own,{ownerId:'owner',productId:'x',productName:'Teste',quantity:1,totalCost:10,createdAt:10});
+ await assert.rejects(api.updatePurchase(own.id,{totalCost:-1,supplier:'',notes:'',expectedUpdatedAt:10,correctionId:'correction-invalid'}),/valor válido/);
+ assert.equal((await store.getDoc(own)).data().totalCost,10);
+});
