@@ -178,7 +178,7 @@ export default function Purchases() {
     return replenishList.reduce((acc, item) => acc + item.suggestedBuyUnits, 0);
   }, [replenishList]);
 
-  // Hours per week spent replenishing calculation (User requested metric!)
+  // Actual purchase totals from the last seven days.
   const weeklyMetrics = useMemo(() => {
     const now = new Date();
     const oneWeekAgo = subDays(now, 7);
@@ -190,30 +190,7 @@ export default function Purchases() {
     });
 
     const weeklySpend = pastWeekPurchases.reduce((sum, p) => sum + p.totalCost, 0);
-    const weeklyUnits = pastWeekPurchases.reduce((sum, p) => sum + p.quantity, 0);
-    const replenishmentCount = pastWeekPurchases.length;
-
-    // Time estimate:
-    // Without Eu Gerencio automatic list: ~25 mins per manual product check, notes, and individual editing.
-    // With Eu Gerencio: ~5-8 mins per organized replenishment session!
-    // Estimated hours spent manually:
-    // Base time: 0.5h minimum + 0.15h (~9 min) per recorded replenishment session
-    const estimatedHoursSpent = replenishmentCount === 0 
-      ? 0.5 
-      : Number((0.4 + (replenishmentCount * 0.18)).toFixed(1));
-
-    // Hours saved by the automatic 'Repor Agora' list and 1-click batch stock update:
-    const hoursSaved = replenishmentCount === 0
-      ? 1.5
-      : Number((replenishmentCount * 0.45 + 1.2).toFixed(1));
-
-    return {
-      replenishmentCount,
-      weeklySpend,
-      weeklyUnits,
-      estimatedHoursSpent,
-      hoursSaved
-    };
+    return {weeklySpend,replenishmentCount:pastWeekPurchases.length};
   }, [purchases]);
 
   // Filtered purchases history
@@ -463,32 +440,8 @@ export default function Purchases() {
       </div>
 
       <div className="space-y-3">{products.filter(p=>p.pendingPriceReview).map(product=><CostPriceReview key={product.id} product={product}/>)}</div>
-      {/* Primary Indicator Cards: Time Saved & Replenish Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Core User-Requested Metric: Horas/semana gastas repondo estoque */}
-        <div className="bg-surface p-5 rounded-2xl border border-border shadow-xs relative overflow-hidden">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Tempo Gasto em Reposição
-            </span>
-            <div className="p-2 bg-palette-1 text-primary rounded-xl">
-              <Clock className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-foreground">
-              {weeklyMetrics.estimatedHoursSpent}h
-            </span>
-            <span className="text-xs text-muted-foreground font-medium">/semana</span>
-          </div>
-          <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium bg-emerald-50 dark:bg-emerald-950/30 p-2 rounded-xl">
-            <Sparkles className="w-4 h-4 shrink-0" />
-            <span>
-              Economizando <strong>~{weeklyMetrics.hoursSaved}h/semana</strong> com a lista pronta e entrada automática!
-            </span>
-          </div>
-        </div>
-
+      {/* Replenishment needs and estimated purchase cost */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Total a Comprar Card */}
         <div className="bg-surface p-5 rounded-2xl border border-border shadow-xs">
           <div className="flex items-center justify-between mb-2">
