@@ -1,7 +1,8 @@
+import {exportErrorText,logExportError,openExportLink,type ExportNotice} from '../lib/reportExportFeedback';
 import { saleFee } from '../lib/paymentFees';
 import { useCurrency } from '../lib/useCurrency';
-import { showToast, showActionError, withActionDeadline } from '../lib/actionFeedback';
-import { useState, useEffect } from 'react';
+import { showToast } from '../lib/actionFeedback';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, 
@@ -22,14 +23,24 @@ interface ExportPeriodModalProps {
   onClose: () => void;
   defaultStartDate?: string;
   defaultEndDate?: string;
+  onExportStart?: () => void;
+  onExportResult?: (notice: ExportNotice) => void;
 }
 
-export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEndDate }: ExportPeriodModalProps) {
+export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEndDate, onExportStart, onExportResult }: ExportPeriodModalProps) {
   const { formatMoney, currencySymbol, currency, language } = useCurrency();
 
   const { languageMode, v } = usePreferences();
   const [startDate, setStartDate] = useState(() => defaultStartDate || format(subDays(new Date(), 7), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(() => defaultEndDate || format(new Date(), 'yyyy-MM-dd'));
+  const wasOpen=useRef(false);
+  useEffect(()=>{
+    if(isOpen&&!wasOpen.current){
+      if(defaultStartDate)setStartDate(defaultStartDate);
+      if(defaultEndDate)setEndDate(defaultEndDate);
+    }
+    wasOpen.current=isOpen;
+  },[isOpen,defaultStartDate,defaultEndDate]);
   const [paymentType, setPaymentType] = useState<'todas' | 'cash' | 'card' | 'fiado'>('todas');
   
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -41,7 +52,8 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
   const [sales, setSales] = useState<Sale[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [isExporting, setIsExporting] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const exportingRef=useRef(false);
+  const [statusMessage, setStatusMessage] = useState<ExportNotice | null>(null);
 
   // Carrega clientes e dados do comércio
   useEffect(() => {
@@ -124,6 +136,9 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
 
   // Ação de exportar CSV
   const handleExportCSV = async (fileType: 'csv' | 'xlsx' = 'xlsx') => {
+    if(exportingRef.current || loadingMetrics || loadFailed)return;
+    exportingRef.current=true;
+    onExportStart?.();
     try {
       setIsExporting(true);
       setStatusMessage(null);
@@ -145,30 +160,28 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
         fiadoInflow
       });
 
-      showToast('✓ Relatório exportado com sucesso!');
+      const notice:ExportNotice={type:'success',text:v(fileType==='xlsx'?'report.analysisSuccess':'report.exportCsvSuccess')};
+      setStatusMessage(notice);onExportResult?.(notice);showToast(notice.text);
       onClose();
-      setStatusMessage({
-        type: 'success',
-        text: `Relatório exportado com sucesso! Arquivo baixado com ${sales.length} vendas e ${purchases.length} compras.`
-      });
-    } catch (err: any) {
-      showActionError(err, 'Não foi possível exportar o relatório. Tente novamente.');
-      setStatusMessage({
-        type: 'error',
-        text: `Erro ao exportar planilha: ${err.message || 'Erro desconhecido'}`
-      });
+    } catch (err: unknown) {
+      logExportError(fileType,err);
+      const notice:ExportNotice={type:'error',text:exportErrorText(err,v),url:(err as {partialUrl?:string})?.partialUrl};
+      setStatusMessage(notice);onExportResult?.(notice);showToast(notice.text,'error');
     } finally {
-      setIsExporting(false);
+      exportingRef.current=false;setIsExporting(false);
     }
   };
 
   // Ação de exportar Google Sheets
   const handleExportSheets = async () => {
+    if(exportingRef.current || loadingMetrics || loadFailed)return;
+    exportingRef.current=true;
+    onExportStart?.();
     try {
       setIsExporting(true);
       setStatusMessage(null);
 
-      const url = await withActionDeadline(exportToSheets)({
+      const url = await exportToSheets({
         products,
         currency, language, languageMode, startDate, endDate, periodLabel: periodLabelFormatted, storeName: settings?.storeName,
         filterDescription: `${v('report.payment')}: ${v('report.pay.' + paymentType)}`,
@@ -178,27 +191,28 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
         purchases
       });
 
-      showToast('✓ Relatório exportado com sucesso!');
-      setStatusMessage({
-        type: 'success',
-        text: 'Relatório criado com sucesso no seu Google Drive/Google Sheets!'
-      });
-      window.open(url, '_blank');
-    } catch (err: any) {
-      showActionError(err, 'Não foi possível exportar o relatório. Tente novamente.');
-      setStatusMessage({
-        type: 'error',
-        text: `Erro ao enviar para Google Sheets: ${err.message || 'Erro desconhecido'}`
-      });
-    } finally {
-      setIsExporting(false);
+      const notice:ExportNotice={type:'success',text:v('report.exportSheetsSuccess'),url};
+      setStatusMessage(notice);onExportResult?.(notice);showToast(notice.text);
+      openExportLink(url);
       onClose();
+    } catch (err: unknown) {
+      logExportError('sheets',err);
+      const notice:ExportNotice={type:'error',text:exportErrorText(err,v),url:(err as {partialUrl?:string})?.partialUrl};
+      setStatusMessage(notice);onExportResult?.(notice);showToast(notice.text,'error');
+    } finally {
+      exportingRef.current=false;setIsExporting(false);
     }
   };
 
   // Impressão visual direta
   const handlePrint = () => {
-    window.print();
+    if(exportingRef.current||loadingMetrics||loadFailed)return;
+    onExportStart?.();setStatusMessage(null);
+    try {window.print();} catch(error) {
+      logExportError('print',error);
+      const notice:ExportNotice={type:'error',text:exportErrorText(error,v)};
+      setStatusMessage(notice);onExportResult?.(notice);showToast(notice.text,'error');
+    }
   };
 
   if (!isOpen) return null;
@@ -211,17 +225,17 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 bg-black/60 backdrop-blur-xs"
-          onClick={onClose}
+          onClick={() => {if(!exportingRef.current)onClose();}}
         />
 
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 16 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 16 }}
-          className="relative w-full max-w-2xl bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden z-10 my-8 text-foreground"
+          role="dialog" aria-modal="true" aria-label={v('report.exportTitle')} className="relative flex flex-col w-full max-w-2xl max-h-[calc(100dvh-1.5rem)] bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden z-10 text-foreground"
         >
           {/* Header */}
-          <div className="p-5 sm:p-6 border-b border-border flex items-center justify-between gap-3 bg-muted/20">
+          <div className="p-5 sm:p-6 shrink-0 border-b border-border flex items-center justify-between gap-3 bg-muted/20">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-palette-1 text-primary flex items-center justify-center border border-primary/20 shrink-0">
                 <FileSpreadsheet className="w-5 h-5" />
@@ -240,14 +254,14 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
             </div>
 
             <button
-              onClick={onClose}
+              onClick={() => {if(!exportingRef.current)onClose();}}
               className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          <div className="p-5 sm:p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+          <div className="p-5 sm:p-6 space-y-5 flex-1 min-h-0 overflow-y-auto overscroll-contain">
             {/* Atalhos Rápidos de Período */}
             <div>
               <label className="text-xs font-semibold text-muted-foreground mb-2 block">
@@ -255,7 +269,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
               </label>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <button
-                  type="button"
+                  type="button" disabled={isExporting}
                   onClick={() => {
                     const today = format(new Date(), 'yyyy-MM-dd');
                     setStartDate(today);
@@ -266,7 +280,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                   Hoje
                 </button>
                 <button
-                  type="button"
+                  type="button" disabled={isExporting}
                   onClick={() => {
                     const now = new Date();
                     setStartDate(format(startOfWeek(now), 'yyyy-MM-dd'));
@@ -277,7 +291,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                   Esta Semana
                 </button>
                 <button
-                  type="button"
+                  type="button" disabled={isExporting}
                   onClick={() => {
                     setStartDate(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
                     setEndDate(format(new Date(), 'yyyy-MM-dd'));
@@ -287,7 +301,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                   Últimos 7 dias
                 </button>
                 <button
-                  type="button"
+                  type="button" disabled={isExporting}
                   onClick={() => {
                     setStartDate(format(subDays(new Date(), 15), 'yyyy-MM-dd'));
                     setEndDate(format(new Date(), 'yyyy-MM-dd'));
@@ -297,7 +311,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                   Últimos 15 dias
                 </button>
                 <button
-                  type="button"
+                  type="button" disabled={isExporting}
                   onClick={() => {
                     setStartDate(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
                     setEndDate(format(new Date(), 'yyyy-MM-dd'));
@@ -307,7 +321,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                   Últimos 30 dias
                 </button>
                 <button
-                  type="button"
+                  type="button" disabled={isExporting}
                   onClick={() => {
                     const now = new Date();
                     setStartDate(format(startOfMonth(now), 'yyyy-MM-dd'));
@@ -318,7 +332,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                   Este Mês
                 </button>
                 <button
-                  type="button"
+                  type="button" disabled={isExporting}
                   onClick={() => {
                     const now = new Date();
                     setStartDate(format(startOfMonth(subMonths(now, 1)), 'yyyy-MM-dd'));
@@ -339,7 +353,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                   Data Inicial (De)
                 </label>
                 <input
-                  type="date"
+                  type="date" disabled={isExporting}
                   value={startDate}
                   onChange={e => setStartDate(e.target.value)}
                   className="w-full bg-surface border border-border text-foreground text-xs font-semibold rounded-lg p-2.5 outline-none focus:border-primary cursor-pointer"
@@ -352,7 +366,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                   Data Final (Até)
                 </label>
                 <input
-                  type="date"
+                  type="date" disabled={isExporting}
                   value={endDate}
                   onChange={e => setEndDate(e.target.value)}
                   className="w-full bg-surface border border-border text-foreground text-xs font-semibold rounded-lg p-2.5 outline-none focus:border-primary cursor-pointer"
@@ -364,7 +378,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                   <Filter className="w-3.5 h-3.5 text-primary" />
                   Forma de Pagamento
                 </label>
-                <select
+                <select disabled={isExporting}
                   value={paymentType}
                   onChange={e => setPaymentType(e.target.value as any)}
                   className="w-full bg-surface border border-border text-foreground text-xs font-semibold rounded-lg p-2.5 outline-none focus:border-primary cursor-pointer"
@@ -468,26 +482,30 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
                 ) : (
                   <X className="w-4 h-4 text-rose-600 shrink-0" />
                 )}
-                <span>{statusMessage.text}</span>
+                <span>{statusMessage.text}{statusMessage.url && <a href={statusMessage.url} target="_blank" rel="noopener noreferrer" className="block underline mt-1">{v(statusMessage.type==='error'?'report.exportOpenPartial':'report.exportOpen')}</a>}</span>
               </div>
             )}
           </div>
 
           {/* Footer com Botões de Exportação */}
-          <div className="p-4 sm:p-5 border-t border-border bg-muted/20 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="p-3 sm:p-4 shrink-0 border-t border-border bg-muted/20 flex flex-col gap-2">
+            <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={onClose}
+              disabled={isExporting}
+              onClick={() => {if(!exportingRef.current)onClose();}}
               className="px-4 py-2.5 rounded-xl border border-border text-foreground hover:bg-muted text-xs font-semibold transition-colors cursor-pointer text-center"
             >
               Fechar
             </button>
 
             <p className="text-xs text-muted-foreground">{v('report.visualHint')}</p>
-            <div className="flex items-center gap-2 flex-wrap">
+            </div>
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={handlePrint}
+                disabled={isExporting || loadingMetrics || loadFailed}
                 className="px-3.5 py-2.5 rounded-xl border border-border text-foreground hover:bg-muted text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 title="Imprimir visualização deste relatório"
               >

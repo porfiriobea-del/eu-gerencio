@@ -1,3 +1,4 @@
+import {reportDate} from './reportDates';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import {format} from 'date-fns';
@@ -94,7 +95,7 @@ export async function buildReportWorkbook(input:AnalysisInput) {
     ws.eachRow(r=>{r.alignment={vertical:'top',wrapText:true};r.eachCell(c=>{if(typeof c.value==='number')c.numFmt='#,##0.00';});});
     return ws;
   };
-  const date=(value:number)=>Number.isFinite(value)&&!isNaN(new Date(value).getTime())?format(new Date(value),'yyyy-MM-dd HH:mm:ss'):'Data inválida';
+  const date=(value:unknown)=>reportDate(value,'yyyy-MM-dd HH:mm:ss');
   raw('Vendas',['ID','Data e hora','Pagamento',`Total (${currency})`,`Taxa (${currency})`,`Líquido de taxa (${currency})`,'Resumo','Funcionário','Cancelada','Incluída na análise'],input.sales.map(s=>[s.id,date(s.createdAt),paymentLabel(s),s.total,s.feeAmount??'Não informada',saleNet(s),s.itemsSummary,s.employeeName,s.cancelledAt?'Sim':'Não',result.analysis.sales.includes(s)?'Sim':'Não']));
   raw('Compras',['ID','Data','Produto','Categoria','Quantidade (unidade de estoque)',`Custo unitário registrado (${currency})`,`Valor pago (${currency})`,'Fornecedor','Quantidade de bônus','Produto de bônus','Unidade do bônus','Incluída na análise'],input.purchases.map(p=>[p.id,p.date||date(p.createdAt),p.productName,p.category,p.quantity,p.unitCost,p.totalCost,p.supplier,p.bonusQuantity??0,p.bonusProductName,p.bonusStockUnit,result.analysis.purchases.includes(p)?'Sim':'Não']));
   raw('Fiado atual',['Cliente','Dívida atual','Referência'],input.customers.map(c=>[c.name,c.totalDebt,'Posição atual na extração; não é saldo histórico do período']));

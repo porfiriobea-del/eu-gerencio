@@ -1,3 +1,4 @@
+import {exportErrorText,logExportError,openExportLink} from '../lib/reportExportFeedback';
 import {ReportFilters} from '../components/ReportFilters';
 import {filterReport,emptyReportFilters,reportExportEntities} from '../lib/reportFilters';
 import { sortCategories } from '../lib/alphabetical';
@@ -68,6 +69,9 @@ export default function SettingsView() {
   
   const [isExporting, setIsExporting] = useState(false);
   const [exportMessage, setExportMessage] = useState('');
+  const [exportError,setExportError]=useState(false);
+  const [exportUrl,setExportUrl]=useState<string|undefined>();
+  const exportBusyRef=useRef(false);
   const [isExportPeriodModalOpen, setIsExportPeriodModalOpen] = useState(false);
 
   // Delete Account State
@@ -497,9 +501,12 @@ export default function SettingsView() {
   }, [period, startDate, endDate, reportFilters, products]);
 
   const handleExport = async () => {
+    if(exportBusyRef.current)return;
     const confirmed = window.confirm("Deseja executar e exportar o Relatório completo (Vendas, Compras e Fiado) para o Google Sheets?");
     if(!confirmed) return;
 
+    if(exportBusyRef.current)return;
+    exportBusyRef.current=true;setExportError(false);setExportUrl(undefined);
     try {
       setIsExporting(true);
       setExportMessage('');
@@ -519,16 +526,19 @@ export default function SettingsView() {
         customers: reportExportEntities(fetchedSales,customers,products,reportFilters).customers,
         purchases: fetchedPurchases
       });
+      setExportUrl(url);
       setExportMessage(`Relatório criado com sucesso com as abas de Vendas, Compras, Fiado e Análise com gráficos! Você pode acessá-lo no seu Google Drive.`);
-      window.open(url, '_blank');
-    } catch (err: any) {
-      setExportMessage("Erro ao exportar: " + err.message);
+      openExportLink(url);
+    } catch (err: unknown) {
+      logExportError('sheets',err);setExportUrl((err as {partialUrl?:string})?.partialUrl);setExportError(true);setExportMessage(exportErrorText(err,v));
     } finally {
-      setIsExporting(false);
+      exportBusyRef.current=false;setIsExporting(false);
     }
   };
 
   const handleExportCSV = async (fileType: 'csv' | 'xlsx' = 'xlsx') => {
+    if(exportBusyRef.current)return;
+    exportBusyRef.current=true;setExportError(false);setExportUrl(undefined);
     try {
       setIsExporting(true);
       setExportMessage('');
@@ -556,19 +566,24 @@ export default function SettingsView() {
       });
 
       setExportMessage(fileType === 'xlsx' ? v('report.analysisSuccess') : `CSV baixado com ${fetchedPurchases.length} compras e ${fetchedSales.length} vendas.`);
-    } catch (err: any) {
-      setExportMessage("Erro ao baixar planilha: " + err.message);
+    } catch (err: unknown) {
+      logExportError('file',err);setExportError(true);setExportMessage(exportErrorText(err,v));
     } finally {
-      setIsExporting(false);
+      exportBusyRef.current=false;setIsExporting(false);
     }
   };
 
   const handleExportDailySalesAndSafety = () => {
+    setExportMessage('');
+    if(exportBusyRef.current)return;
+    exportBusyRef.current=true;setExportError(false);setExportUrl(undefined);
     try {
       exportDailySalesAndSafetyStockToCSV(products, storeName || settings?.storeName, undefined, {currency,language});
       setExportMessage(`Relatório exclusivo de Venda Diária e Estoque de Segurança baixado com sucesso para ${products.length} itens cadastrados!`);
-    } catch (err: any) {
-      setExportMessage("Erro ao gerar relatório de estoque de segurança: " + (err.message || err));
+    } catch (err: unknown) {
+      logExportError('stock-csv',err);setExportError(true);setExportMessage(exportErrorText(err,v));
+    } finally {
+      exportBusyRef.current=false;setIsExporting(false);
     }
   };
 
@@ -1249,7 +1264,7 @@ export default function SettingsView() {
                     cnpj,
                     phone,
                   });
-                  window.open(url, '_blank');
+                  openExportLink(url);
                   setEmailNoticeFeedback('Aberto no Gmail com os dados da conta preenchidos!');
                   setTimeout(() => setEmailNoticeFeedback(''), 4000);
                 }}
@@ -1691,7 +1706,8 @@ export default function SettingsView() {
             <div className="flex items-center gap-2.5 w-full sm:w-auto flex-wrap">
               <button 
                 type="button"
-                onClick={() => setIsExportPeriodModalOpen(true)}
+                disabled={isExporting}
+                onClick={() => {setExportMessage('');setExportError(false);setIsExportPeriodModalOpen(true);}}
                 className="w-full sm:w-auto px-4 py-2.5 bg-purple-600/20 text-purple-700 dark:text-purple-300 border border-purple-500/40 rounded-xl flex items-center justify-center gap-2 hover:bg-purple-600/30 hover:text-foreground font-bold text-xs transition-colors shadow cursor-pointer"
                 title="Abrir janela de exportação por intervalo personalizado de datas"
               >
@@ -1702,6 +1718,7 @@ export default function SettingsView() {
               <button 
                 type="button"
                 onClick={handleExportDailySalesAndSafety}
+                disabled={isExporting}
                 className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-600/30 hover:text-foreground font-bold text-xs transition-colors shadow cursor-pointer"
                 title="Exportar planilha de consumo diário médio de cada produto e sugestão de estoque de segurança"
               >
@@ -1757,9 +1774,9 @@ export default function SettingsView() {
         </div>
 
         {exportMessage && (
-          <div className={`mt-6 p-4 rounded-xl flex gap-3 text-sm border ${exportMessage.includes('Erro') ? 'bg-red-900/20 text-red-400 border-red-900/50' : 'bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-900/50'}`}>
+          <div className={`mt-6 p-4 rounded-xl flex gap-3 text-sm border ${exportError ? 'bg-red-900/20 text-red-400 border-red-900/50' : 'bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-900/50'}`}>
             <AlertCircle className="w-5 h-5 shrink-0" />
-            <span>{exportMessage}</span>
+            <span>{exportMessage}{exportUrl && <a href={exportUrl} target="_blank" rel="noopener noreferrer" className="block underline mt-1">{v(exportError?'report.exportOpenPartial':'report.exportOpen')}</a>}</span>
           </div>
         )}
       </div>
@@ -1938,6 +1955,8 @@ export default function SettingsView() {
       {/* Modal de Exportação por Período Personalizado */}
       <ExportPeriodModal
         isOpen={isExportPeriodModalOpen}
+        onExportStart={() => {setExportMessage('');setExportError(false);setExportUrl(undefined);}}
+        onExportResult={notice => {setExportMessage(notice.text);setExportError(notice.type==='error');setExportUrl(notice.url);}}
         onClose={() => setIsExportPeriodModalOpen(false)}
         defaultStartDate={startDate}
         defaultEndDate={endDate}

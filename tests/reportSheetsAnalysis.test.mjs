@@ -31,7 +31,7 @@ test('Google Sheets export creates an analysis tab and editable charts using RAW
 });
 test('chart failure never reports a fully successful analysis export',async t=>{
  let count=0;t.mock.method(globalThis,'fetch',async()=>{count++;return count===3?new Response('Unavailable',{status:503}):Response.json(count===1?{spreadsheetId:'test'}:{});});
- await assert.rejects(()=>exportToSheets(data),/não foi possível concluir os gráficos/);
+ await assert.rejects(()=>exportToSheets(data),error=>error.code==='GOOGLE_FAILURE'&&error.stage==='charts'&&error.status===503&&error.partialUrl.includes('/test/'));
 });
 
 test('invalid legacy dates remain visible in source tabs without aborting the entire Sheets export',async t=>{
@@ -43,4 +43,10 @@ test('invalid legacy dates remain visible in source tabs without aborting the en
  const summary=calls[1].data.find(d=>d.range==="'Análise'!A1").values;
  assert.ok(summary.some(r=>r[0]==='Vendas inválidas excluídas'&&r[1]===1));
  assert.ok(summary.some(r=>r[0]==='Compras inválidas excluídas'&&r[1]===1));
+});
+
+test('Google export allocates enough rows for source tabs beyond the default 1000-row grid',async t=>{
+ const calls=[];t.mock.method(globalThis,'fetch',async(url,init)=>{calls.push(JSON.parse(init.body));return Response.json(calls.length===1?{spreadsheetId:'large'}:{});});
+ await exportToSheets({...data,sales:Array.from({length:1200},()=>data.sales[0])});
+ assert.equal(calls[0].sheets.find(s=>s.properties.title==='Vendas').properties.gridProperties.rowCount,1201);
 });

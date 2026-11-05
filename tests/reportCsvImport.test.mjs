@@ -59,3 +59,13 @@ test('CSV round-trip preserves semicolons, quotes and newlines in metadata, name
  exportPurchasesToCSV([purchase]);rows=parseCSV(await blob.text());assert.equal(rows.find(r=>r[1]===name)[4],`1 ${pack}`);
  exportDailySalesAndSafetyStockToCSV([product],'Loja; Centro');rows=parseCSV(await blob.text());assert.equal(rows.find(r=>r[0]===name)[1],category);
 });
+
+test('CSV reports retain invalid legacy dates as labels instead of failing the entire download',async t=>{
+ let blob;const previous=globalThis.document;
+ globalThis.document={createElement:()=>({click(){}}),body:{appendChild(){},removeChild(){}}};t.after(()=>{globalThis.document=previous;});
+ t.mock.method(URL,'createObjectURL',value=>{blob=value;return 'blob:test';});t.mock.method(URL,'revokeObjectURL',()=>{});
+ const purchase={productName:'Produto',date:'invalid',totalCost:5,quantity:1};
+ exportPurchasesToCSV([purchase]);assert.ok((await blob.text()).includes('Data inválida'));
+ exportFullReportToCSV({purchases:[purchase],sales:[{total:10,type:'cash',createdAt:NaN}],customers:[],periodLabel:'Teste'});
+ const rows=parseCSV(await blob.text());assert.equal(rows.filter(r=>r[0]==='Data inválida').length,2);
+});

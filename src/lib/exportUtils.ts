@@ -1,3 +1,4 @@
+import {reportDate} from './reportDates';
 import { formatAmount, formatMoney, normalizeCurrency, type MoneyOptions } from './currency';
 import { paymentLabel, saleFee, saleNet } from './paymentFees';
 import { format } from 'date-fns';
@@ -54,9 +55,7 @@ export function exportPurchasesToCSV(purchases: Purchase[], filenamePrefix = 're
     totalSpent += Number(p.totalCost || 0);
     totalUnits += Number(p.quantity || 0);
 
-    const dateFormatted = p.date 
-      ? format(new Date(p.date + 'T12:00:00'), 'dd/MM/yyyy') 
-      : format(new Date(p.createdAt), 'dd/MM/yyyy HH:mm');
+    const dateFormatted = reportDate(p.date || p.createdAt, p.date ? 'dd/MM/yyyy' : 'dd/MM/yyyy HH:mm');
 
     const pkgStr = p.packageQuantity && p.packageQuantity > 0 
       ? `${p.packageQuantity} ${p.packageType || 'emb.'}` 
@@ -160,7 +159,7 @@ export function exportFullReportToCSV(data: {
     const typeLabel = paymentLabel(s);
     const itemsText = s.itemsSummary || 'Venda registrada';
     rows.push([
-      format(new Date(s.createdAt), 'dd/MM/yyyy HH:mm'),
+      reportDate(s.createdAt),
       typeLabel,
       itemsText,
       formatAmount(Number(s.total || 0), csvOptions),
@@ -194,9 +193,7 @@ export function exportFullReportToCSV(data: {
     totalPurchasesSpent += Number(p.totalCost || 0);
     totalPurchasesUnits += Number(p.quantity || 0);
 
-    const dateFormatted = p.date 
-      ? format(new Date(p.date + 'T12:00:00'), 'dd/MM/yyyy') 
-      : format(new Date(p.createdAt), 'dd/MM/yyyy');
+    const dateFormatted = reportDate(p.date || p.createdAt, 'dd/MM/yyyy');
 
     rows.push([
       dateFormatted,

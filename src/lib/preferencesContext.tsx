@@ -86,6 +86,18 @@ export const LANGUAGE_MODE_INFOS: LanguageModeInfo[] = [
 // Unified, consistent dictionary per language mode
 export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   technical: {
+    "report.exportOpen": "Abrir planilha",
+    "report.exportOpenPartial": "Abrir planilha parcial (pode estar incompleta)",
+    "report.exportTitle": "Exportar relatório",
+    "report.exportCsvSuccess": "Arquivo CSV gerado para download.",
+    "report.exportSheetsSuccess": "Planilha criada no Google Sheets com dados e gráficos.",
+    "report.exportAuth": "O Google não autorizou a exportação. Entre novamente com o Google ou baixe o Excel (.xlsx).",
+    "report.exportQuota": "O Google atingiu o limite de requisições. Aguarde um pouco ou baixe o Excel (.xlsx).",
+    "report.exportTimeout": "O Google demorou para responder e a requisição foi cancelada. Tente novamente ou baixe o Excel (.xlsx).",
+    "report.exportNetwork": "A conexão falhou durante a exportação. Confira a internet e tente novamente.",
+    "report.exportGoogleFailed": "O Google não concluiu a planilha com todos os dados e gráficos. Tente novamente ou baixe o Excel (.xlsx).",
+    "report.exportFailed": "Não foi possível gerar este relatório. Tente novamente; se persistir, use outro formato.",
+
     "report.balanceTitle": "Saldo operacional",
     "report.balanceNote": "Vendas − compras − taxas; inclui fiado. Não é lucro nem fluxo de caixa recebido.",
     "report.analysisDownload": "Exportar análise e gráficos (.xlsx)",
@@ -607,6 +619,18 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Frente de Caixa',
   },
   neutral: {
+    "report.exportOpen": "Abrir planilha",
+    "report.exportOpenPartial": "Abrir planilha parcial (pode estar incompleta)",
+    "report.exportTitle": "Exportar relatório",
+    "report.exportCsvSuccess": "Arquivo CSV gerado para download.",
+    "report.exportSheetsSuccess": "Planilha criada no Google Sheets com dados e gráficos.",
+    "report.exportAuth": "O Google não autorizou a exportação. Entre novamente com o Google ou baixe o Excel (.xlsx).",
+    "report.exportQuota": "O Google atingiu o limite de requisições. Aguarde um pouco ou baixe o Excel (.xlsx).",
+    "report.exportTimeout": "O Google demorou para responder e a requisição foi cancelada. Tente novamente ou baixe o Excel (.xlsx).",
+    "report.exportNetwork": "A conexão falhou durante a exportação. Confira a internet e tente novamente.",
+    "report.exportGoogleFailed": "O Google não concluiu a planilha com todos os dados e gráficos. Tente novamente ou baixe o Excel (.xlsx).",
+    "report.exportFailed": "Não foi possível gerar este relatório. Tente novamente; se persistir, use outro formato.",
+
     "report.balanceTitle": "Saldo das operações",
     "report.balanceNote": "Inclui fiado ainda não recebido. Não equivale ao lucro.",
     "report.analysisDownload": "Baixar análise com gráficos (.xlsx)",
@@ -1128,6 +1152,18 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Caixa',
   },
   basic: {
+    "report.exportOpen": "Abrir planilha",
+    "report.exportOpenPartial": "Abrir planilha parcial (pode estar incompleta)",
+    "report.exportTitle": "Exportar relatório",
+    "report.exportCsvSuccess": "Arquivo CSV gerado para download.",
+    "report.exportSheetsSuccess": "Planilha criada no Google Sheets com dados e gráficos.",
+    "report.exportAuth": "O Google não autorizou a exportação. Entre novamente com o Google ou baixe o Excel (.xlsx).",
+    "report.exportQuota": "O Google atingiu o limite de requisições. Aguarde um pouco ou baixe o Excel (.xlsx).",
+    "report.exportTimeout": "O Google demorou para responder e a requisição foi cancelada. Tente novamente ou baixe o Excel (.xlsx).",
+    "report.exportNetwork": "A conexão falhou durante a exportação. Confira a internet e tente novamente.",
+    "report.exportGoogleFailed": "O Google não concluiu a planilha com todos os dados e gráficos. Tente novamente ou baixe o Excel (.xlsx).",
+    "report.exportFailed": "Não foi possível gerar este relatório. Tente novamente; se persistir, use outro formato.",
+
     "report.balanceTitle": "Vendas menos compras e taxas",
     "report.balanceNote": "Inclui fiado. Não é o lucro nem dinheiro já recebido.",
     "report.analysisDownload": "Baixar números e gráficos (.xlsx)",

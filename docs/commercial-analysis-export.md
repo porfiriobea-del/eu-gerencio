@@ -36,3 +36,13 @@ O Painel visual agora usa duas colunas: tabelas e indicadores à esquerda; parec
 A disponibilidade é a proporção de produtos com saldo positivo entre os cadastros ativos incluídos. Não é valor de estoque nem total físico. A sugestão de compra usa o maior limite entre máximo e mínimo cadastrados menos o saldo, arredondando para a embalagem do fornecedor. Cigarros respeitam 5 ou 10 carteiras por embalagem; carteiras e unidades comuns são identificadas separadamente. Sem limites não se inventa uma quantidade, e sem produtos fornecidos não se conclui que a loja está vazia. Esse diagnóstico por limites não substitui a Lista de Reposição baseada no histórico de vendas.
 
 Os pareceres são textos determinísticos derivados dos indicadores, sem atribuir causas, perdas de vendas ou lucros não comprovados. As tabelas completas e os dados de origem dos gráficos permanecem na aba Análise. A estrutura se aplica ao Excel e ao Google Sheets; o modo simples usa títulos mais diretos.
+
+## Falhas e alternância entre formatos
+
+Cada tentativa limpa o resultado anterior e publica somente seu próprio sucesso ou falha, incluindo as tentativas do modal por período. Erros preservam o modal e permitem tentar outro formato. Um bloqueio síncrono evita exportações duplicadas em cliques rápidos. O modal respeita a altura disponível e mantém o conteúdo rolável e as ações no rodapé. Ao reabrir, usa as datas atuais fornecidas pela tela principal.
+
+CSV e Excel suportam registros com datas antigas inválidas, identificadas como “Data inválida”. O sucesso de download significa que o arquivo foi gerado e entregue ao navegador; não comprova a gravação no disco nem a escolha feita na janela de impressão.
+
+O transporte Google possui cancelamento real por requisição (60 segundos). Diferencia autorização (401/403), limite de requisições (429), rede, demora e demais falhas. Se uma etapa falhar após criar a planilha, disponibiliza o link identificado como parcial. A mensagem de sucesso só aparece depois de dados e gráficos serem confirmados. Pop-up bloqueado não transforma uma exportação concluída em falha: um link normal permanece na tela. As abas de origem recebem uma grade compatível com o número de registros, inclusive acima de 1.000 linhas.
+
+Os testes cobrem alternância sucesso/falha, reenvio, clique duplicado, download XLSX real em ambiente de teste, CSV com datas inválidas, grades grandes, erro de autorização/cota, cancelamento da requisição e pop-up bloqueado. Google Sheets é validado com respostas simuladas; isso não comprova acesso ou gravação na conta Google de produção.

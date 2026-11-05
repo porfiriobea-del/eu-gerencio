@@ -1,13 +1,12 @@
+import {googleReportRequest,ReportExportError} from './reportExportFeedback';
+import {reportDate} from './reportDates';
 import { analysisSheet, analysisMergeStart, visualReport, type AnalysisInput } from './reportAnalysis';
 import { normalizeCurrency, type MoneyOptions } from './currency';
 import { paymentLabel, saleFee, saleNet } from './paymentFees';
 import { getAccessToken } from "./auth";
-import { format, isValid, parseISO } from "date-fns";
+import { format } from "date-fns";
 
-const sourceDate = (value: number | string, purchase = false) => {
-  const date = typeof value === 'string' ? parseISO(value) : new Date(value);
-  return isValid(date) ? format(date, purchase ? 'dd/MM/yyyy' : 'dd/MM/yyyy HH:mm') : 'Data inválida';
-};
+const sourceDate=(value:unknown,purchase=false)=>reportDate(value,purchase?'dd/MM/yyyy':'dd/MM/yyyy HH:mm');
 
 export async function exportToSheets(data: Pick<AnalysisInput, 'startDate' | 'endDate' | 'periodLabel' | 'storeName' | 'filterDescription' | 'languageMode' | 'products'> & {
   currency?: MoneyOptions['currency'],
@@ -22,11 +21,11 @@ export async function exportToSheets(data: Pick<AnalysisInput, 'startDate' | 'en
   const analysis = analysisSheet(analysisInput);
   const dashboard = visualReport(analysisInput,analysis);
   const token = await getAccessToken();
-  if (!token) throw new Error("Google Drive access token missing.");
+  if (!token) throw new ReportExportError('GOOGLE_AUTH','authenticate');
 
   // 1. Create a new Spreadsheet
   const title = `Relatório Eu Gerencio - ${format(new Date(), "dd/MM/yyyy")}`;
-  const createRes = await fetch("https://sheets.googleapis.com/v4/spreadsheets", {
+  const createRes = await googleReportRequest("https://sheets.googleapis.com/v4/spreadsheets", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -36,17 +35,17 @@ export async function exportToSheets(data: Pick<AnalysisInput, 'startDate' | 'en
       properties: { title },
       sheets: [
         { properties: { title: "Painel visual", sheetId: 101, gridProperties: {rowCount: Math.max(1000,dashboard.rows.length+30), columnCount: 16, frozenRowCount: 2} } },
-        { properties: { title: "Vendas", sheetId: 1 } },
-        { properties: { title: "Compras", sheetId: 2 } },
-        { properties: { title: "Fiado", sheetId: 3 } },
+        { properties: { title: "Vendas", sheetId: 1, gridProperties:{rowCount:Math.max(1000,data.sales.length+1),columnCount:5} } },
+        { properties: { title: "Compras", sheetId: 2, gridProperties:{rowCount:Math.max(1000,(data.purchases||[]).length+1),columnCount:9} } },
+        { properties: { title: "Fiado", sheetId: 3, gridProperties:{rowCount:Math.max(1000,data.customers.length+1),columnCount:3} } },
         { properties: { title: "Análise", sheetId: 100, gridProperties: {rowCount: Math.max(1000, analysis.rows.length + 30), columnCount: 6, frozenRowCount: 8} } },
       ]
     })
-  });
-
-  if (!createRes.ok) throw new Error("Failed to create spreadsheet.");
+  },'create');
   const spreadSheet = await createRes.json();
   const spreadsheetId = spreadSheet.spreadsheetId;
+  if(typeof spreadsheetId!=='string'||!spreadsheetId)throw new ReportExportError('GOOGLE_FAILURE','create');
+  const partialUrl=`https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/edit#gid=101`;
 
   // 2. Prepare Data
   const salesData = [
@@ -75,7 +74,7 @@ export async function exportToSheets(data: Pick<AnalysisInput, 'startDate' | 'en
   ];
 
   // 3. Update Sheets with data
-  const updateReq = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+  await googleReportRequest(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -91,9 +90,7 @@ export async function exportToSheets(data: Pick<AnalysisInput, 'startDate' | 'en
         { range: "'Painel visual'!A1", values: dashboard.rows },
       ]
     })
-  });
-
-  if (!updateReq.ok) throw new Error("Failed to populate spreadsheet data.");
+  },'write',partialUrl);
 
   // Native charts reference the same numeric cells that readers can inspect and edit.
   const requests: object[] = [
@@ -128,9 +125,8 @@ export async function exportToSheets(data: Pick<AnalysisInput, 'startDate' | 'en
       }}};
     })
   ];
-  const chartResponse = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+  await googleReportRequest(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
     method: 'POST', headers: {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'}, body: JSON.stringify({requests})
-  });
-  if (!chartResponse.ok) throw new Error('Os dados foram exportados, mas não foi possível concluir os gráficos. Tente exportar novamente.');
-  return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=101`;
+  },'charts',partialUrl);
+  return partialUrl;
 }
