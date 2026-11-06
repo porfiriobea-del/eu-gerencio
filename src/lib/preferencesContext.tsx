@@ -86,6 +86,14 @@ export const LANGUAGE_MODE_INFOS: LanguageModeInfo[] = [
 // Unified, consistent dictionary per language mode
 export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   technical: {
+    "stock.saveUnconfirmed": "A confirmação demorou. Confira se a alteração apareceu no estoque antes de reenviar. Seus valores foram mantidos.",
+    "stock.saveWorking": "Salvando...",
+    "stock.saveFailure": "Falha ao confirmar a gravação do produto. O formulário foi preservado; consulte os detalhes antes de reenviar.",
+    "stock.saveDetails": "Ver motivo do erro",
+    "stock.saveLots": "Os lotes não conferem com o saldo do estoque. Seus valores foram mantidos. Atualize a loja e, se persistir, informe os detalhes ao suporte.",
+    "stock.savePermission": "Sua conta não tem permissão para alterar este produto. Os valores digitados foram mantidos.",
+    "stock.saveSession": "A sessão não foi reconhecida pelo banco. Entre novamente na sua conta antes de salvar.",
+
     "purchase.invalidUnits": "Informe uma quantidade inteira maior que zero para a embalagem.",
     "purchase.referenceUnit": "Custo por unidade na compra",
     "purchase.invalidReference": "Informe um valor válido para a embalagem, com até duas casas decimais.",
@@ -641,6 +649,14 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Frente de Caixa',
   },
   neutral: {
+    "stock.saveUnconfirmed": "A confirmação demorou. Confira se a alteração apareceu no estoque antes de reenviar. Seus valores foram mantidos.",
+    "stock.saveWorking": "Salvando...",
+    "stock.saveFailure": "Não foi possível confirmar o salvamento. Os valores foram mantidos para você tentar novamente.",
+    "stock.saveDetails": "Ver motivo do erro",
+    "stock.saveLots": "Os lotes não conferem com o saldo do estoque. Seus valores foram mantidos. Atualize a loja e, se persistir, informe os detalhes ao suporte.",
+    "stock.savePermission": "Sua conta não tem permissão para alterar este produto. Os valores digitados foram mantidos.",
+    "stock.saveSession": "A sessão não foi reconhecida pelo banco. Entre novamente na sua conta antes de salvar.",
+
     "purchase.invalidUnits": "Informe uma quantidade inteira maior que zero para a embalagem.",
     "purchase.referenceUnit": "Custo por unidade na compra",
     "purchase.invalidReference": "Informe um valor válido para a embalagem, com até duas casas decimais.",
@@ -1196,6 +1212,14 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Caixa',
   },
   basic: {
+    "stock.saveUnconfirmed": "A confirmação demorou. Confira se a alteração apareceu no estoque antes de reenviar. Seus valores foram mantidos.",
+    "stock.saveWorking": "Salvando...",
+    "stock.saveFailure": "Não consegui salvar. O que você digitou continua aqui. Veja o motivo abaixo e tente de novo.",
+    "stock.saveDetails": "Ver motivo do erro",
+    "stock.saveLots": "Os lotes não conferem com o saldo do estoque. Seus valores foram mantidos. Atualize a loja e, se persistir, informe os detalhes ao suporte.",
+    "stock.savePermission": "Sua conta não tem permissão para alterar este produto. Os valores digitados foram mantidos.",
+    "stock.saveSession": "A sessão não foi reconhecida pelo banco. Entre novamente na sua conta antes de salvar.",
+
     "purchase.invalidUnits": "Informe uma quantidade inteira maior que zero para a embalagem.",
     "purchase.referenceUnit": "Custo por unidade na compra",
     "purchase.invalidReference": "Informe um valor válido para a embalagem, com até duas casas decimais.",

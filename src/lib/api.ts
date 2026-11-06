@@ -347,7 +347,7 @@ export const updateProduct = withProductWriteQueue(async (id: string, data: Part
   const {lastCost:_lastCost,pendingPriceReview:_pending,fifoLots:_lots,initialUnitCost:_initial,...editable}=data;data=editable;
   const uid = getEffectiveOwnerId();
   if (!uid) throw new Error('Unauthenticated');
-  if (data.imageUrl !== undefined) data = { ...data, imageUrl: await storeProductImage(data.imageUrl, uid) };
+  let imageUpload:Promise<string|undefined>|undefined;
   const priceMovementRef=doc(collection(db,'movements'));
   const costReviewId=crypto.randomUUID();
   try {
@@ -357,11 +357,16 @@ export const updateProduct = withProductWriteQueue(async (id: string, data: Part
       const current = await transaction.get(ref);
       if (!current.exists()) throw new Error('Produto não encontrado.');
       if(current.data().ownerId!==uid)throw new Error('Sem acesso a este produto.');
+      const fields={...data};
+      if(fields.imageUrl!==undefined){
+        if(fields.imageUrl===current.data().imageUrl)delete fields.imageUrl;
+        else fields.imageUrl=await(imageUpload??=storeProductImage(fields.imageUrl,uid));
+      }
       if(data.unitsPerPackage!==undefined&&(!Number.isSafeInteger(data.unitsPerPackage)||data.unitsPerPackage<1))throw new Error('Informe uma quantidade inteira de unidades por embalagem.');
       if(data.supplierPackageCost!==undefined&&typeof data.supplierPackageCost==='number'&&(!Number.isFinite(data.supplierPackageCost)||data.supplierPackageCost<0||Math.abs(data.supplierPackageCost*100-Math.round(data.supplierPackageCost*100))>1e-7))throw new Error('Informe um valor válido para a embalagem.');
       if (current.data().mergedIntoId) throw new Error('Este produto foi mesclado. Abra o produto existente.');
       const stockFields = cigaretteStockFields(current.data() as Product);
-      const merged = normalizeCigaretteStock({ ...current.data(), ...stockFields, ...data } as Product);
+      const merged = normalizeCigaretteStock({ ...current.data(), ...stockFields, ...fields } as Product);
       if ((data.maxStock !== undefined || data.safetyStock !== undefined) && stockLimitError(merged)) throw new Error('O estoque máximo precisa ser igual ou maior que o estoque de segurança.');
       if (merged.type === 'cigarro' && (!isValidStockQuantity(merged.stock) || (merged.initialStock !== undefined && !isValidStockQuantity(merged.initialStock)))) throw new Error('Estoque inválido: use carteiras em passos de 0,05.');
       const before=normalizeCigaretteStock(current.data() as Product);
@@ -374,7 +379,7 @@ export const updateProduct = withProductWriteQueue(async (id: string, data: Part
       Object.assign(merged,lotFields(merged,lots));
       const changes=changedPrices(before,merged);
       const pending=changes.length?null:data.unitCost!==undefined && merged.unitCost!==before.unitCost?costPriceReview(before,merged.unitCost,costReviewId,now):before.pendingPriceReview;
-      transaction.update(ref, { ...removeUndefinedFields({ ...stockFields, ...data, ...cigaretteStockFields(merged),...lotFields(merged,lots),pendingPriceReview:pending }), updatedAt: now });
+      transaction.update(ref, { ...removeUndefinedFields({ ...stockFields, ...fields, ...cigaretteStockFields(merged),...lotFields(merged,lots),pendingPriceReview:pending }), updatedAt: now });
       if(changes.length) transaction.set(priceMovementRef,priceAudit(id,merged,changes,uid,now));
       return {...merged,__pricesAudited:changes.length>0};
     });

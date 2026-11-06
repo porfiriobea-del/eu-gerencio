@@ -12,13 +12,13 @@ const {MemoryRouter}=await import('react-router-dom');
 const {render,act,fireEvent,cleanup}=await import('@testing-library/react');
 const dir=await mkdtemp(new URL('../node_modules/stock-edit-regression-',import.meta.url));
 const mocks={
- api:`export const subscribeProducts=cb=>{globalThis.__stockRefresh=cb;cb([globalThis.__stockProduct]);return()=>{};};export const subscribeTodaySales=cb=>{cb([]);return()=>{};};export const updateProduct=async(id,data)=>{globalThis.__stockSaved={id,data};};export const getProductDuplicates=async()=>[];export const adjustProductStock=async()=>{};export const addProduct=async()=>{};export const addMultipleProducts=async()=>{};export const deleteProduct=async()=>{};export const deleteMultipleProducts=async()=>{};export const recordMovement=async()=>{};export const mergeProducts=async()=>{};export const getEffectiveOwnerId=()=> 'owner';`,
+ api:`export const subscribeProducts=cb=>{globalThis.__stockRefresh=cb;cb([globalThis.__stockProduct]);return()=>{};};export const subscribeTodaySales=cb=>{cb([]);return()=>{};};export const updateProduct=async(id,data)=>{globalThis.__stockSaveCalls=(globalThis.__stockSaveCalls||0)+1;await globalThis.__stockPending;if(globalThis.__stockFailure)throw globalThis.__stockFailure;globalThis.__stockSaved={id,data};};export const getProductDuplicates=async()=>[];export const adjustProductStock=async()=>{};export const addProduct=async()=>{};export const addMultipleProducts=async()=>{};export const deleteProduct=async()=>{};export const deleteMultipleProducts=async()=>{};export const recordMovement=async()=>{};export const mergeProducts=async()=>{};export const getEffectiveOwnerId=()=> 'owner';`,
  preferencesContext:`export const usePreferences=()=>({languageMode:globalThis.__stockMode||'neutral',isBasicMode:false,simpleViewMode:false,v:(key,fallback)=>fallback||key,entityName:plural=>plural?'Produtos':'Produto'});`,
  permissionsContext:`export const usePermissions=()=>({isOwner:true});`,
  categories:`export const getAllCategories=()=>['Cigarros','Diversos','Bebidas'];export const saveCustomCategory=()=>{};`,
  cloudStore:`export const deleteField=()=>({deleted:true});`,
  usageReporting:`export const reportUsage=()=>{};`,
- actionFeedback:`export class ConfirmationTimeoutError extends Error{};export const showToast=()=>{};export const showActionError=e=>{throw e;};`,
+ actionFeedback:`export class ConfirmationTimeoutError extends Error{};export const showToast=()=>{};export const showActionError=()=>{};`,
  geminiProductScanner:`export const recognizeProductFromImage=async()=>({});export const prepareProductImage=async()=>'';`,
  MobileStockList:`import React from 'react';export const MobileStockList=({products,onEdit})=>React.createElement('button',{onClick:()=>onEdit(products[0])},'Editar teste');`
 };
@@ -28,7 +28,7 @@ for(const name of ['CostPriceReview','ProductCosts','ReplenishmentDuplicates','P
 }
 await build({stdin:{contents:"export {default as Stock} from './src/pages/Stock';",resolveDir:process.cwd()},bundle:true,packages:'external',platform:'node',format:'esm',jsx:'automatic',outfile:`${dir}/stock.mjs`,plugins:[{name:'mock',setup(b){b.onResolve({filter:/^react$/},()=>({path:'react',external:true}));b.onResolve({filter:/.*/},a=>{const name=a.path.split('/').at(-1);return mocks[name]?{path:name,namespace:'mock'}:undefined;});b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:mocks[a.path],loader:'js'}));}}]});
 const {Stock}=await import(pathToFileURL(`${dir}/stock.mjs`));
-afterEach(()=>{cleanup();localStorage.clear();delete globalThis.__stockProduct;delete globalThis.__stockSaved;delete globalThis.__stockMode;delete globalThis.__stockRefresh;});
+afterEach(()=>{cleanup();localStorage.clear();delete globalThis.__stockProduct;delete globalThis.__stockSaved;delete globalThis.__stockMode;delete globalThis.__stockRefresh;delete globalThis.__stockFailure;delete globalThis.__stockPending;delete globalThis.__stockSaveCalls;});
 after(async()=>{await rm(dir,{recursive:true,force:true});dom.window.close();});
 async function setup(type,overrides={}){
  globalThis.__stockProduct={id:'p1',name:'Produto ORIGINAL',type,stockUnit:type==='cigarro'?'carteira':'unidade',category:type==='cigarro'?'Cigarros':'Diversos',stock:type==='cigarro'?33.1:4,initialStock:4,safetyStock:0,maxStock:50,unitCost:1,basePrice:2,priceCart:5,purchaseForm:type==='cigarro'?'pacote':'unidade',unitsPerPackage:type==='cigarro'?10:1,supplierPackageUnits:10,createdAt:1,dailyAverageSales:0,replacementDays:3,...overrides};
@@ -70,4 +70,25 @@ for(const mode of ['basic','neutral','technical'])test(`Heineken Long saves 24 u
  const updated={...globalThis.__stockProduct};for(const [key,value] of Object.entries(payload)){if(value&&typeof value==='object'&&value.deleted)delete updated[key];else updated[key]=value;}updated.unitCost=4.5;
  await act(async()=>globalThis.__stockRefresh([updated]));await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Editar teste'})));
  assert.equal(ui.getByPlaceholderText('Ex: 38.00').value,'150');assert.equal(ui.getByText(/^Quantas unidades vêm no fardo/).parentElement.querySelector('input').value,'24');
+});
+
+test('editing an existing photo does not resend it when only packaging, supplier price and physical stock change',async()=>{
+ const ui=await setup('comum',{name:'Heineken long',category:'Bebidas',purchaseForm:'fardo',unitsPerPackage:6,stock:27,initialStock:32,unitCost:0,imageUrl:'data:image/jpeg;base64,legacy-incomplete'});
+ const qty=ui.getByText(/^Quantas unidades vêm no fardo/).parentElement.querySelector('input'),cost=ui.getByPlaceholderText('Ex: 38.00');
+ fireEvent.change(qty,{target:{value:'24'}});fireEvent.change(cost,{target:{value:'150'}});
+ const group=ui.getByText('Estoque Atual Físico em Prateleira/Depósito:').parentElement.parentElement;fireEvent.change(group.querySelectorAll('input')[1],{target:{value:'8'}});
+ await act(async()=>fireEvent.submit(cost.closest('form')));
+ const saved=globalThis.__stockSaved.data;assert.equal(saved.unitsPerPackage,24);assert.equal(saved.supplierPackageCost,150);assert.equal(saved.stock,32);assert.equal(saved.imageUrl,undefined);
+});
+for(const mode of ['basic','neutral','technical'])test(`save failure preserves the form, actual reason and editable values for retry (${mode})`,async t=>{
+ t.mock.method(console,'warn',()=>{});globalThis.__stockMode=mode;const ui=await setup('comum');
+ const max=ui.getByPlaceholderText('Ex: 50');fireEvent.change(max,{target:{value:'100'}});globalThis.__stockFailure=new Error('Os lotes não conferem com o estoque.');
+ await act(async()=>fireEvent.submit(max.closest('form')));
+ assert.equal(max.value,'100');assert.ok(ui.getByRole('alert').textContent.includes('Os lotes não conferem'));assert.ok(ui.getByRole('button',{name:'Salvar Produto'}));assert.equal(ui.getByRole('button',{name:'Salvar Produto'}).disabled,false);
+ delete globalThis.__stockFailure;await act(async()=>fireEvent.submit(max.closest('form')));assert.equal(globalThis.__stockSaved.data.maxStock,100);assert.equal(ui.queryByPlaceholderText('Ex: 50'),null);
+});
+test('rapid repeated submits share one in-flight save and release the button only after confirmation',async()=>{
+ let release;globalThis.__stockPending=new Promise(resolve=>{release=resolve;});const ui=await setup('comum');const form=ui.getByPlaceholderText('Ex: 50').closest('form');
+ await act(async()=>{fireEvent.submit(form);fireEvent.submit(form);});assert.equal(globalThis.__stockSaveCalls,1);assert.ok(ui.getByRole('button',{name:'stock.saveWorking'}).disabled);
+ await act(async()=>release());assert.equal(ui.queryByPlaceholderText('Ex: 50'),null);
 });

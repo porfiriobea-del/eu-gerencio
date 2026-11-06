@@ -90,6 +90,8 @@ export default function Stock() {
   const [initialStockEditLoose, setInitialStockEditLoose] = useState<number>(0);
   const [isSavingInitialStock, setIsSavingInitialStock] = useState<boolean>(false);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const savingProductRef=useRef(false);
+  const [productSaveError,setProductSaveError]=useState<{message:string;detail:string}|null>(null);
 
   // States for deleting product (single & multiple)
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
@@ -273,6 +275,7 @@ export default function Stock() {
   };
 
   const openModal = (product?: Product) => {
+    setProductSaveError(null);
     originalEditingCost.current=product?supplierUnitCost(product):null;
     originalEditingPrices.current=product?{...product,pricePackage:product.pricePackage ?? (getPackageUnits(product)>1?Number((product.basePrice*getPackageUnits(product)).toFixed(2)):undefined),priceUnit:product.type==='cigarro'?product.priceUnit:product.basePrice}:{};
     if (product) {
@@ -327,6 +330,8 @@ export default function Stock() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if(savingProductRef.current)return;
+    setProductSaveError(null);
     const stockNum = Number(formData.stock);
     const safetyNum = Number(formData.safetyStock);
     const maxNum = Number(formData.maxStock);
@@ -455,11 +460,11 @@ export default function Stock() {
     }
 
     if (isSavingProduct) return;
+    savingProductRef.current=true;
     setIsSavingProduct(true);
-    let submitted = false;
     try {
       if (!await checkProductDuplicate(payload, editingId || undefined)) return;
-      submitted = true;
+      if(editingId && (payload.imageUrl||'')===(originalEditingPrices.current.imageUrl||''))delete payload.imageUrl;
       if(editingId && originalEditingPrices.current.type===formData.type) {
         if(Number(formData.stock)===Number(originalEditingPrices.current.stock)) delete payload.stock;
         if(Number(formData.initialStock)===Number(originalEditingPrices.current.initialStock ?? originalEditingPrices.current.stock)) delete payload.initialStock;
@@ -470,11 +475,16 @@ export default function Stock() {
       if (editingId) await updateProduct(editingId, payload);
       else await addProduct(payload);
       showToast(editingId ? '✓ Alterações salvas!' : '✓ Produto cadastrado com sucesso!');
+      setIsModalOpen(false);
     } catch (error) {
-      showActionError(error, 'Não foi possível salvar o produto. Confira os dados e tente novamente.');
+      const detail=error instanceof Error?error.message:v('stock.saveFailure');
+      const code=String((error as {code?:string})?.code||'');
+      const key=error instanceof ConfirmationTimeoutError?'stock.saveUnconfirmed':/lotes|FIFO/i.test(detail)?'stock.saveLots':/permission|access denied|sem acesso/i.test(detail)||code==='42501'?'stock.savePermission':/JWT|Unauthenticated|sessão|PGRST30/i.test(detail+code)?'stock.saveSession':'stock.saveFailure';
+      const message=v(key);
+      setProductSaveError({message,detail});showActionError(error,message);
+      console.warn('[Product save]',{code:code||'PRODUCT_SAVE_FAILED'});
     } finally {
-      if (submitted) setIsModalOpen(false);
-      setIsSavingProduct(false);
+      savingProductRef.current=false;setIsSavingProduct(false);
     }
   };
 
@@ -1708,7 +1718,7 @@ export default function Stock() {
         <div 
           className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs overflow-y-auto"
           onClick={(e) => {
-            if (e.target === e.currentTarget) {
+            if (e.target === e.currentTarget && !savingProductRef.current) {
               setIsModalOpen(false);
             }
           }}
@@ -2967,10 +2977,12 @@ export default function Stock() {
                 onApply={values => { setFormData((previous: any) => ({...previous, ...values})); showToast(v('suggestion.applied')); }}
               />
 
+              {productSaveError&&<div role="alert" className="mt-4 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950/30 dark:text-red-200"><p>{productSaveError.message}</p><details className="mt-2"><summary className="cursor-pointer font-semibold">{v('stock.saveDetails')}</summary><p className="mt-2 whitespace-pre-wrap break-words">{productSaveError.detail}</p></details></div>}
               <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3 mt-8 pt-4 border-t border-border">
                 {editingId ? (
                   <button 
                     type="button" 
+                    disabled={isSavingProduct}
                     onClick={() => {
                       const prod = products.find(p => p.id === editingId);
                       if (prod) {
@@ -2987,7 +2999,8 @@ export default function Stock() {
                 <div className="flex items-center justify-end gap-3">
                   <button 
                     type="button" 
-                    onClick={() => setIsModalOpen(false)} 
+                    disabled={isSavingProduct}
+                    onClick={() => {if(!savingProductRef.current)setIsModalOpen(false);}}
                     className="px-4 py-2.5 border border-border rounded-xl hover:bg-muted text-muted-foreground font-medium cursor-pointer"
                   >
                     {v('ui.cancel', "Cancelar")}
@@ -2996,7 +3009,7 @@ export default function Stock() {
                     type="submit" disabled={isSavingProduct}
                     className="px-5 py-2.5 bg-primary text-white rounded-xl hover:opacity-90 font-bold cursor-pointer shadow-sm"
                   >
-                    {v('ui.saveProduct', "Salvar Produto")}
+                    {isSavingProduct?v('stock.saveWorking'):v('ui.saveProduct', "Salvar Produto")}
                   </button>
                 </div>
               </div>

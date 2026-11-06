@@ -610,3 +610,14 @@ test('supplier package configuration persists without changing inventory, FIFO c
  const saved=(await store.getDoc(ref)).data();assert.equal(saved.unitsPerPackage,24);assert.equal(saved.supplierPackageCost,150);assert.equal(saved.stock,32);assert.equal(saved.unitCost,4.5);assert.equal(saved.lastCost,5.5);assert.equal(saved.basePrice,10);assert.equal(saved.pricePackage,60);
  assert.equal(saved.fifoLots[0].unitCost,4.5);
 });
+
+test('unchanged legacy Base64 photo cannot block unrelated stock, package and supplier cost updates',async()=>{
+ const ref=store.doc(store.db,'products','heineken-legacy-photo'),imageUrl='data:image/jpeg;base64,legacy-incomplete';
+ await store.setDoc(ref,{ownerId:'owner',name:'Heineken long',type:'comum',stock:27,initialStock:32,safetyStock:5,maxStock:24,unitCost:0,lastCost:0,basePrice:8,pricePackage:48,purchaseForm:'fardo',unitsPerPackage:6,imageUrl});
+ await api.updateProduct(ref.id,{unitsPerPackage:24,supplierPackageCost:150,unitCost:6.25,stock:32,imageUrl});
+ const saved=(await store.getDoc(ref)).data();assert.equal(saved.unitsPerPackage,24);assert.equal(saved.supplierPackageCost,150);assert.equal(saved.stock,32);assert.equal(saved.unitCost,6.25);assert.equal(saved.imageUrl,imageUrl);assert.equal(saved.basePrice,8);
+ assert.equal(saved.fifoLots.reduce((n,l)=>n+Math.round(l.quantity*20),0),640);
+ // A genuinely changed image still undergoes validation, with no partial inventory write on failure.
+ await assert.rejects(api.updateProduct(ref.id,{stock:99,imageUrl:'data:image/jpeg;base64,different-incomplete'}),/foto.*válida/);
+ assert.equal((await store.getDoc(ref)).data().stock,32);
+});
