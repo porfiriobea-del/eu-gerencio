@@ -4,6 +4,7 @@ export interface PriceChange {field:PriceField;oldPrice:number;newPrice:number;}
 export interface PriceReview {id:string;oldCost:number;newCost:number;changePercent:number;prices:PriceChange[];createdAt:number;}
 
 export interface Product {
+  supplierPackageCost?: number; // Reference price for the configured supplier package; independent of FIFO lots.
   id?: string;
   name: string;
   type: 'comum' | 'cigarro';

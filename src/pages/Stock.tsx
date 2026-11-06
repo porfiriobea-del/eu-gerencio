@@ -1,3 +1,4 @@
+import {supplierPackageCost,supplierUnitCost} from '../lib/supplierCost';
 import {CostPriceReview,ProductCosts} from '../components/CostPriceReview';
 import {usePermissions} from '../lib/permissionsContext';
 import {ReplenishmentDuplicates} from '../components/ReplenishmentDuplicates';
@@ -272,20 +273,19 @@ export default function Stock() {
   };
 
   const openModal = (product?: Product) => {
-    originalEditingCost.current=product?.unitCost ?? null;
+    originalEditingCost.current=product?supplierUnitCost(product):null;
     originalEditingPrices.current=product?{...product,pricePackage:product.pricePackage ?? (getPackageUnits(product)>1?Number((product.basePrice*getPackageUnits(product)).toFixed(2)):undefined),priceUnit:product.type==='cigarro'?product.priceUnit:product.basePrice}:{};
     if (product) {
       const unitsPkg = getPackageUnits(product);
-      const calculatedPkgCost = product.unitCost && getPurchasePackageUnits(product) > 1
-        ? Number((product.unitCost * getPurchasePackageUnits(product)).toFixed(2))
-        : product.unitCost;
+      const calculatedPkgCost = supplierPackageCost(product);
       setFormData({
         ...product,
+        unitCost: supplierUnitCost(product),
         stockCoverageDays: product.stockCoverageDays || 7,
         unitsPerPackage: unitsPkg,
         purchaseForm: product.type === 'cigarro' ? 'pacote' : product.purchaseForm,
         imageUrl: product.imageUrl || '',
-        purchaseTotalCost: calculatedPkgCost ? String(calculatedPkgCost) : '',
+        purchaseTotalCost: String(calculatedPkgCost),
         initialStock: product.initialStock !== undefined ? product.initialStock : product.stock,
         initialStockDate: product.initialStockDate || (product.createdAt ? format(new Date(product.createdAt), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')),
         maxStock: product.maxStock ?? Math.max(product.stock, product.safetyStock * 2 || 20),
@@ -335,6 +335,7 @@ export default function Stock() {
     }
     const initStockNum = Number(formData.initialStock !== undefined ? formData.initialStock : stockNum);
     const unitsPkg = getPackageUnits(formData);
+    if(formData.type!=='cigarro'&&(!Number.isSafeInteger(Number(formData.unitsPerPackage))||Number(formData.unitsPerPackage)<1)){showToast(v('purchase.invalidUnits'),'error');return;}
     if (!(formData.type === 'cigarro' ? isValidStockQuantity(stockNum) && isValidStockQuantity(initStockNum) : Number.isSafeInteger(stockNum) && stockNum >= 0 && Number.isSafeInteger(initStockNum) && initStockNum >= 0)) {
       alert('Informe um estoque válido: cigarros em carteiras (incrementos de 0,05), demais produtos em unidades inteiras.');
       return;
@@ -364,6 +365,13 @@ export default function Stock() {
       basePrice: Number(formData.basePrice) || 0
     };
 
+    const referenceCost = String(formData.purchaseTotalCost ?? '').trim();
+    if(referenceCost!=='') {
+      const cost=Number(referenceCost);
+      if(!Number.isFinite(cost)||cost<0||Math.abs(cost*100-Math.round(cost*100))>1e-7){showToast(v('purchase.invalidReference'),'error');return;}
+      payload.supplierPackageCost=Math.round(cost*100)/100;
+    } else if(editingId) payload.supplierPackageCost=deleteField();
+    else delete payload.supplierPackageCost;
     delete payload.purchaseTotalCost;
     delete payload.lastCost;
     delete payload.pendingPriceReview;
@@ -1968,7 +1976,7 @@ export default function Stock() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {formData.type === 'cigarro' ? <CigarettePurchaseOptions value={formData.supplierPackageUnits === 5 ? 5 : 10} onChange={size => setFormData((previous: any) => ({
                       ...previous, supplierPackageUnits: size, purchaseForm: 'pacote', unitsPerPackage: 10,
-                      unitCost: Number(previous.purchaseTotalCost) > 0 ? Number((Number(previous.purchaseTotalCost) / size).toFixed(2)) : previous.unitCost,
+                      unitCost: Number(previous.purchaseTotalCost) > 0 ? Number(previous.purchaseTotalCost) / size : previous.unitCost,
                     }))} /> : <>
 
                     <div>
@@ -1984,7 +1992,7 @@ export default function Stock() {
                           const defaultUnits = newForm === 'unidade' ? 1 : (currentUnits > 1 ? currentUnits : (newForm === 'fardo' ? 6 : 12));
                           const totalCost = parseFloat(formData.purchaseTotalCost);
                           const newUnitCost = !isNaN(totalCost) && totalCost > 0 
-                            ? Number((totalCost / defaultUnits).toFixed(2)) 
+                            ? totalCost / defaultUnits
                             : formData.unitCost;
 
                           setFormData((prev: any) => ({
@@ -2011,14 +2019,19 @@ export default function Stock() {
                         <input 
                           type="number" 
                           required 
-                          min={1} 
-                          value={formUnitsPerPackage}
+                          min={1}
+                          step="1"
+                          onFocus={e=>e.currentTarget.select()}
+                          value={formData.unitsPerPackage ?? formUnitsPerPackage}
                           disabled={formData.type === 'cigarro'}
                           onChange={e => {
-                            const newUnits = Math.max(1, parseInt(e.target.value) || 1);
+                            const raw=e.target.value;
+                            if(raw===''){setFormData((prev:any)=>({...prev,unitsPerPackage:''}));return;}
+                            const newUnits=Number(raw);
+                            if(!Number.isSafeInteger(newUnits)||newUnits<1){setFormData((prev:any)=>({...prev,unitsPerPackage:raw}));return;}
                             const totalCost = parseFloat(formData.purchaseTotalCost);
                             const newUnitCost = !isNaN(totalCost) && totalCost > 0 
-                              ? Number((totalCost / newUnits).toFixed(2)) 
+                              ? totalCost / newUnits
                               : formData.unitCost;
                             
                             setFormData((prev: any) => ({
@@ -2068,6 +2081,7 @@ export default function Stock() {
                     <p className="text-xs text-muted-foreground">Estoque contado em carteiras: 1 maço = 10 carteiras; meia carteira = 0,5; avulso = 0,05.</p>
                   )}
 
+                  <p className="text-xs text-muted-foreground">{v('purchase.referenceHelp')}</p>
                   {/* Campos de Valor de Compra e Custo por Unidade Automático + Editável */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                     {formData.purchaseForm !== 'unidade' && (
@@ -2091,13 +2105,13 @@ export default function Stock() {
                               const numVal = parseFloat(val);
                               const units = formUnitsPerPackage || 1;
                               const calcUnitCost = !isNaN(numVal) && numVal > 0 
-                                ? Number((numVal / units).toFixed(2))
+                                ? numVal / units
                                 : 0;
                               
                               setFormData((prev: any) => ({
                                 ...prev,
                                 purchaseTotalCost: val,
-                                unitCost: !isNaN(numVal) && numVal > 0 ? calcUnitCost : prev.unitCost
+                                unitCost: !isNaN(numVal) && numVal >= 0 ? calcUnitCost : prev.unitCost
                               }));
                             }} 
                             className="w-full border border-border pl-8 pr-3 py-2 rounded-lg bg-surface text-foreground font-bold text-base text-primary" 
@@ -2112,7 +2126,7 @@ export default function Stock() {
                     <div className={`p-3 bg-surface rounded-xl border border-border ${formData.purchaseForm === 'unidade' ? 'col-span-1 sm:col-span-2' : ''}`}>
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-foreground">
-                          {v('cost.average')} / {formData.type === 'cigarro' ? 'carteira' : 'unidade'} ({currencySymbol}) *
+                          {v('purchase.referenceUnit')} / {formData.type === 'cigarro' ? 'carteira' : 'unidade'} ({currencySymbol}) *
                         </label>
                         <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
                           Automático & Editável
@@ -2122,7 +2136,7 @@ export default function Stock() {
                         <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">{currencySymbol}</span>
                         <input 
                           type="number" 
-                          step="0.01" 
+                          step={formUnitsPerPackage > 1 ? "any" : "0.01"}
                           required 
                           min={0}
                           value={formData.unitCost} 
@@ -2133,7 +2147,7 @@ export default function Stock() {
                             setFormData((prev: any) => ({
                               ...prev,
                               unitCost: val,
-                              purchaseTotalCost: units > 1 ? String(Number((numVal * units).toFixed(2))) : prev.purchaseTotalCost
+                              purchaseTotalCost: String(Number((numVal * units).toFixed(2)))
                             }));
                           }} 
                           className="w-full border border-border pl-8 pr-3 py-2 rounded-lg bg-surface text-foreground font-bold text-base" 
@@ -2156,7 +2170,7 @@ export default function Stock() {
                               if (total > 0) {
                                 setFormData((prev: any) => ({
                                   ...prev,
-                                  unitCost: Number((total / units).toFixed(2))
+                                  unitCost: total / units
                                 }));
                               }
                             }}
@@ -2924,7 +2938,7 @@ export default function Stock() {
                   <label className="block text-sm font-medium text-foreground mb-1">{formData.type === 'cigarro' ? 'Média de carteiras vendidas por dia' : 'Média de unidades vendidas por dia'}</label>
                   <input 
                     type="number" 
-                    step="any"
+                    step={formUnitsPerPackage > 1 ? "any" : "0.01"}
                     required 
                     min={0}
                     value={formData.dailyAverageSales} 

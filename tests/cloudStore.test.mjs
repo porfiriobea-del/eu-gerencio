@@ -602,3 +602,11 @@ test('purchase corrections cannot change another shop or accept invalid totals, 
  await assert.rejects(api.updatePurchase(own.id,{totalCost:-1,supplier:'',notes:'',expectedUpdatedAt:10,correctionId:'correction-invalid'}),/valor válido/);
  assert.equal((await store.getDoc(own)).data().totalCost,10);
 });
+
+test('supplier package configuration persists without changing inventory, FIFO cost, sale prices or old receipts',async()=>{
+ const ref=store.doc(store.db,'products','supplier-heineken-long');
+ await store.setDoc(ref,{ownerId:'owner',name:'Heineken Long',type:'comum',stock:32,unitCost:4.5,lastCost:5.5,basePrice:10,pricePackage:60,purchaseForm:'fardo',unitsPerPackage:6,fifoLots:[{id:'old-heineken',kind:'initial',quantity:32,unitCost:4.5,createdAt:0}],initialUnitCost:4.5});
+ await api.updateProduct(ref.id,{unitsPerPackage:24,purchaseForm:'fardo',supplierPackageCost:150,unitCost:6.25});
+ const saved=(await store.getDoc(ref)).data();assert.equal(saved.unitsPerPackage,24);assert.equal(saved.supplierPackageCost,150);assert.equal(saved.stock,32);assert.equal(saved.unitCost,4.5);assert.equal(saved.lastCost,5.5);assert.equal(saved.basePrice,10);assert.equal(saved.pricePackage,60);
+ assert.equal(saved.fifoLots[0].unitCost,4.5);
+});

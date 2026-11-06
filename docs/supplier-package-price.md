@@ -1,0 +1,9 @@
+# Embalagem e preço do fornecedor
+
+O cadastro do produto conserva `unitsPerPackage` (unidades comuns), `supplierPackageUnits` (5 ou 10 carteiras para cigarro) e `supplierPackageCost` (valor de referência da embalagem configurada). Esse preço é independente de `unitCost`, que representa o lote PEPS atual, e de `lastCost`, que representa uma aquisição efetivamente registrada.
+
+Antes, `purchaseTotalCost` existia somente no formulário e era removido antes de salvar. O valor da embalagem era reconstruído na abertura pelo custo do lote antigo, fazendo a alteração parecer perdida. O formulário agora salva o preço do fornecedor, reabre a partir dele e usa a divisão exata por embalagem para sugerir o custo da próxima compra. O campo de unidades permite apagar e digitar novamente; o salvamento exige um inteiro positivo. Custos derivados de uma divisão podem ter mais de duas casas decimais, sem impedir a validação nativa do formulário; o total pago pela embalagem continua em centavos.
+
+Exemplo validado com dados de teste: Heineken Long, fardo com 24 unidades a R$ 150, referência de R$ 6,25 por unidade. A edição da embalagem não aumenta nem converte o saldo físico e não reescreve compras, custos de lotes conhecidos ou preços de venda. Compras e notas usam a referência no preenchimento inicial; o comerciante pode corrigir o valor efetivamente pago antes de confirmar.
+
+Não há migração SQL: o campo é guardado no documento do produto pela transação Supabase existente. Os testes verificam edição/reabertura nos três modos, persistência no transporte simulado e preservação do saldo e dos custos antigos. Nenhum cadastro de produção foi alterado pelos testes. Para atualizar um produto real é necessário abrir sua loja com uma sessão autenticada e salvar o formulário, ou disponibilizar uma conexão administrativa autorizada com escopo identificado da loja.

@@ -86,6 +86,10 @@ export const LANGUAGE_MODE_INFOS: LanguageModeInfo[] = [
 // Unified, consistent dictionary per language mode
 export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   technical: {
+    "purchase.invalidUnits": "Informe uma quantidade inteira maior que zero para a embalagem.",
+    "purchase.referenceUnit": "Custo por unidade na compra",
+    "purchase.invalidReference": "Informe um valor válido para a embalagem, com até duas casas decimais.",
+    "purchase.referenceHelp": "Referência comercial persistida separadamente do custo PEPS e do último custo de aquisição. Não altera lotes nem compras históricas.",
     "pos.quantity": "Quantidade",
     "pos.quantityHint": "Informe a quantidade inteira do formato selecionado; o estoque é validado ao confirmar.",
     "pos.quantityInvalid": "Informe uma quantidade inteira maior que zero.",
@@ -637,6 +641,10 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Frente de Caixa',
   },
   neutral: {
+    "purchase.invalidUnits": "Informe uma quantidade inteira maior que zero para a embalagem.",
+    "purchase.referenceUnit": "Custo por unidade na compra",
+    "purchase.invalidReference": "Informe um valor válido para a embalagem, com até duas casas decimais.",
+    "purchase.referenceHelp": "Preço de referência do fornecedor, salvo com a embalagem. Compras e custos dos lotes já recebidos são preservados.",
     "pos.quantity": "Quantidade",
     "pos.quantityHint": "Digite a quantidade do formato escolhido. Confirme com Enter ou ao sair do campo.",
     "pos.quantityInvalid": "Informe uma quantidade inteira maior que zero.",
@@ -1188,6 +1196,10 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Caixa',
   },
   basic: {
+    "purchase.invalidUnits": "Informe uma quantidade inteira maior que zero para a embalagem.",
+    "purchase.referenceUnit": "Custo por unidade na compra",
+    "purchase.invalidReference": "Informe um valor válido para a embalagem, com até duas casas decimais.",
+    "purchase.referenceHelp": "Este valor fica salvo para a próxima compra. O custo do estoque antigo não muda.",
     "pos.quantity": "Quantidade",
     "pos.quantityHint": "Digite quantos quer vender. Confirme com Enter ou toque fora do campo.",
     "pos.quantityInvalid": "Informe uma quantidade inteira maior que zero.",

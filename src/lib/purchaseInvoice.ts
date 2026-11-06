@@ -1,3 +1,4 @@
+import {supplierUnitCost} from './supplierCost';
 import type {BonusRule,Product} from '../types';
 import {calculateBonus,supplierKey} from './purchaseBonus';
 import {getPurchasePackageUnits} from './productUnits';
@@ -9,7 +10,8 @@ export function invoiceLine(line:InvoiceDraftLine,products:Product[],rules:Bonus
  const factor=product&&line.measure==='package'?getPurchasePackageUnits(product):1;
  const quantity=Math.round(count*factor*20)/20;
  const validQuantity=Number.isFinite(count)&&count>0&&(line.measure==='package'?Number.isSafeInteger(count):product?.type==='cigarro'?Math.abs(count*20-Math.round(count*20))<1e-7:Number.isSafeInteger(count));
- const cost=line.cost===null?(product&&(product.lastCost ?? product.unitCost ?? 0)>0?Math.round(quantity*(product.lastCost ?? product.unitCost)*100)/100:NaN):line.cost.trim()?Number(line.cost):NaN;
+ const referenceCost=product?supplierUnitCost(product):0;
+ const cost=line.cost===null?(referenceCost>0?Math.round(quantity*referenceCost*100)/100:NaN):line.cost.trim()?Number(line.cost):NaN;
  const rule=rules.find(r=>r.productId===product?.id&&supplierKey(r.supplier || '')===supplierKey(supplier));
  const bonusProductId=line.manualBonus?line.bonusProductId:rule?.bonusProductId || '';
  const bonusProduct=products.find(p=>p.id===bonusProductId&&!p.mergedIntoId);

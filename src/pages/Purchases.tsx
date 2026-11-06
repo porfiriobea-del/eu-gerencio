@@ -1,3 +1,4 @@
+import {supplierUnitCost} from '../lib/supplierCost';
 import {PurchaseEditModal} from '../components/PurchaseEditModal';
 import {AllPurchaseItems} from '../components/AllPurchaseItems';
 import {PurchaseInvoiceModal} from '../components/PurchaseInvoiceModal';
@@ -246,14 +247,14 @@ export default function Purchases() {
       const pkgs = Math.ceil(qtyToUse / unitsPerPkg) || 1;
       setPackageQty(pkgs);
       setLooseUnitsQty(pkgs * unitsPerPkg);
-      const cost = product.lastCost ?? product.unitCost ?? 0;
+      const cost = supplierUnitCost(product);
       setUnitCost(cost);
       setTotalCost(Number((pkgs * unitsPerPkg * cost).toFixed(2)));
     } else {
       setPurchaseType('unit');
       setPackageQty(1);
       setLooseUnitsQty(qtyToUse);
-      const cost = product.lastCost ?? product.unitCost ?? 0;
+      const cost = supplierUnitCost(product);
       setUnitCost(cost);
       setTotalCost(Number((qtyToUse * cost).toFixed(2)));
     }

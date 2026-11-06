@@ -356,6 +356,9 @@ export const updateProduct = withProductWriteQueue(async (id: string, data: Part
       const ref = doc(db, 'products', id);
       const current = await transaction.get(ref);
       if (!current.exists()) throw new Error('Produto não encontrado.');
+      if(current.data().ownerId!==uid)throw new Error('Sem acesso a este produto.');
+      if(data.unitsPerPackage!==undefined&&(!Number.isSafeInteger(data.unitsPerPackage)||data.unitsPerPackage<1))throw new Error('Informe uma quantidade inteira de unidades por embalagem.');
+      if(data.supplierPackageCost!==undefined&&typeof data.supplierPackageCost==='number'&&(!Number.isFinite(data.supplierPackageCost)||data.supplierPackageCost<0||Math.abs(data.supplierPackageCost*100-Math.round(data.supplierPackageCost*100))>1e-7))throw new Error('Informe um valor válido para a embalagem.');
       if (current.data().mergedIntoId) throw new Error('Este produto foi mesclado. Abra o produto existente.');
       const stockFields = cigaretteStockFields(current.data() as Product);
       const merged = normalizeCigaretteStock({ ...current.data(), ...stockFields, ...data } as Product);
@@ -381,7 +384,8 @@ export const updateProduct = withProductWriteQueue(async (id: string, data: Part
     if (data.name) descParts.push(`nome: "${data.name}"`);
     if (data.stock !== undefined) descParts.push(`estoque: ${formatProductStock(changedProduct)}`);
     if (data.basePrice !== undefined) descParts.push(`preço atualizado para ${data.basePrice.toFixed(2)}`);
-    if (data.unitCost !== undefined) descParts.push(`custo atualizado para ${data.unitCost.toFixed(2)}`);
+    if (typeof data.supplierPackageCost === 'number') descParts.push(`referência da embalagem: ${data.supplierPackageCost.toFixed(2)}`);
+    else if (data.unitCost !== undefined) descParts.push(`custo do lote: ${changedProduct.unitCost.toFixed(2)}`);
 
     if(!changedProduct.__pricesAudited) recordMovement({
       sourceOwnerId: uid,
