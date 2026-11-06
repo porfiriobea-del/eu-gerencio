@@ -7,10 +7,10 @@ import { ShoppingCart, Pin, PinOff, X, Plus, Minus, Trash2 } from 'lucide-react'
 import type { Product } from '../types';
 
 export interface CartItem { product: Product; format: string; quantity: number; price: number; stockDeduction: number }
-interface Props { items: CartItem[]; total: number; busy?: boolean; onQuantity: (index: number, delta: number) => void; onRemove: (index: number) => void; onCheckout: () => void; onFiado: () => void }
+interface Props { items: CartItem[]; total: number; busy?: boolean; onQuantity: (index: number, delta: number) => void; onSetQuantity: (index:number,quantity:number)=>boolean; onRemove: (index: number) => void; onCheckout: () => void; onFiado: () => void }
 const storageKey = 'eu_gerencio_pos_cart_pinned';
 
-export function CartDrawer({ items, total, busy = false, onQuantity, onRemove, onCheckout, onFiado }: Props) {
+export function CartDrawer({ items, total, busy = false, onQuantity, onSetQuantity, onRemove, onCheckout, onFiado }: Props) {
   const { formatProductStock } = useStockFormatting();
   const { formatMoney, currencySymbol } = useCurrency(); const money = formatMoney;
 
@@ -41,7 +41,7 @@ export function CartDrawer({ items, total, busy = false, onQuantity, onRemove, o
     const keyboard = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); setOpen(false); }
       if (event.key !== 'Tab') return;
-      const controls = Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled)') || []);
+      const controls = Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled)') || []);
       const first = controls[0], last = controls.at(-1);
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
@@ -49,7 +49,14 @@ export function CartDrawer({ items, total, busy = false, onQuantity, onRemove, o
     document.addEventListener('keydown', keyboard);
     return () => { document.body.style.overflow = overflow; document.removeEventListener('keydown', keyboard); previous?.focus(); };
   }, [open, expanded]);
-  const checkout = (action: () => void) => { setOpen(false); action(); };
+  const checkout = (action: () => void) => {
+    // Touch browsers do not always blur an input before clicking checkout.
+    for(const input of panel.current?.querySelectorAll<HTMLInputElement>('input[data-cart-quantity]') || []) {
+      const index=Number(input.dataset.cartQuantity),quantity=input.value.trim()===''?NaN:Number(input.value);
+      if(quantity!==items[index]?.quantity && !onSetQuantity(index,quantity)){input.focus();return;}
+    }
+    setOpen(false);action();
+  };
   const content = <div ref={panel} id={panelId} role={expanded ? 'complementary' : 'dialog'} aria-modal={expanded ? undefined : true} aria-labelledby={titleId}
     className={`flex min-h-0 flex-col overflow-hidden border border-border bg-surface text-foreground shadow-xl ${expanded ? 'sticky self-start top-20 h-[calc(100dvh-7rem)] w-80 shrink-0 rounded-2xl xl:w-96' : 'h-full w-full max-w-md rounded-l-2xl'}`}>
     <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border p-4">
@@ -63,8 +70,9 @@ export function CartDrawer({ items, total, busy = false, onQuantity, onRemove, o
       {!items.length && <p className="py-12 text-center text-muted-foreground">{v('pos.emptyCart', 'Carrinho vazio')}</p>}
       {items.map((item, index) => <article key={`${item.product.id}:${item.format}`} className="rounded-xl border border-border p-3">
         <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words font-semibold notranslate normal-case" translate="no">{item.product.name}</h3><p className="text-xs text-muted-foreground">{item.format}</p><p className="mt-1 text-xs">{item.quantity} × {money(item.price)}</p></div><strong className="shrink-0 text-primary">{money(item.price * item.quantity)}</strong></div>
+        <p className="mt-2 text-xs text-muted-foreground">{v('pos.quantityHint','Digite a quantidade do formato escolhido e confirme com Enter ou toque fora.')}</p>
         <p className="mt-2 text-xs text-muted-foreground">Baixa: {formatProductStock(item.product, Math.round(item.quantity * item.stockDeduction * 20) / 20)}</p>
-        <div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-3"><button type="button" disabled={busy} aria-label={`Diminuir ${item.product.name}, ${item.format}`} onClick={() => onQuantity(index, -1)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-border disabled:opacity-50 notranslate normal-case" translate="no"><Minus className="h-4 w-4" /></button><span className="text-sm font-bold">{item.quantity}</span><button type="button" disabled={busy} aria-label={`Aumentar ${item.product.name}, ${item.format}`} onClick={() => onQuantity(index, 1)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-border disabled:opacity-50 notranslate normal-case" translate="no"><Plus className="h-4 w-4" /></button></div><button type="button" disabled={busy} aria-label={`Remover ${item.product.name}, ${item.format}`} onClick={() => onRemove(index)} className="flex h-11 w-11 items-center justify-center rounded-lg text-red-500 disabled:opacity-50 notranslate normal-case" translate="no"><Trash2 className="h-4 w-4" /></button></div>
+        <div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-3"><button type="button" disabled={busy} aria-label={`Diminuir ${item.product.name}, ${item.format}`} onClick={() => onQuantity(index, -1)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-border disabled:opacity-50 notranslate normal-case" translate="no"><Minus className="h-4 w-4" /></button><CartQuantityInput index={index} quantity={item.quantity} busy={busy} label={`${v('pos.quantity','Quantidade')}: ${item.product.name}, ${item.format}`} onCommit={quantity=>onSetQuantity(index,quantity)} /><button type="button" disabled={busy} aria-label={`Aumentar ${item.product.name}, ${item.format}`} onClick={() => onQuantity(index, 1)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-border disabled:opacity-50 notranslate normal-case" translate="no"><Plus className="h-4 w-4" /></button></div><button type="button" disabled={busy} aria-label={`Remover ${item.product.name}, ${item.format}`} onClick={() => onRemove(index)} className="flex h-11 w-11 items-center justify-center rounded-lg text-red-500 disabled:opacity-50 notranslate normal-case" translate="no"><Trash2 className="h-4 w-4" /></button></div>
       </article>)}
     </div>
     <footer className="shrink-0 space-y-3 border-t border-border p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -82,4 +90,14 @@ export function CartDrawer({ items, total, busy = false, onQuantity, onRemove, o
     </button>
     {open && createPortal(<div className="fixed inset-0 z-[80] flex justify-end bg-black/60 backdrop-blur-sm" onClick={event => { if (event.target === event.currentTarget) setOpen(false); }}>{content}</div>, document.body)}
   </>;
+}
+
+function CartQuantityInput({index,quantity,busy,label,onCommit}:{index:number;quantity:number;busy:boolean;label:string;onCommit:(quantity:number)=>boolean}) {
+  const [draft,setDraft]=useState(String(quantity));
+  useEffect(()=>setDraft(String(quantity)),[quantity]);
+  return <input data-cart-quantity={index} type="number" inputMode="numeric" min="1" step="1" value={draft} disabled={busy} aria-label={label} translate="no"
+    className="notranslate h-11 w-20 min-w-0 rounded-lg border border-border bg-surface px-2 text-center text-base font-bold disabled:opacity-50"
+    onFocus={e=>e.currentTarget.select()} onChange={e=>setDraft(e.target.value)}
+    onBlur={()=>{const next=draft.trim()===''?NaN:Number(draft);if(next===quantity){setDraft(String(quantity));return;}const accepted=onCommit(next);setDraft(String(accepted?next:quantity));}}
+    onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();e.currentTarget.blur();}}}/>;
 }

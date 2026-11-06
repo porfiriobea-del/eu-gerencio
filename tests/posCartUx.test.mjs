@@ -191,3 +191,47 @@ for(const isDesktop of [false,true])test(`POS hides depleted products in every l
  await act(async()=>globalThis.__updatePosProducts([standard,cigarettes]));assert.ok(catalog.getByRole('heading',{name:'Suco'}));assert.equal(ui.queryByRole('dialog',{name:'Escolher formato'}),null);fireEvent.click(shortcuts.getByRole('button',{name:'Favoritos'}));assert.ok(shortcuts.getByRole('button',{name:'Escolher Suco'}));
  fireEvent.change(ui.getByPlaceholderText(/Buscar.*nome/),{target:{value:'Suco'}});await act(async()=>globalThis.__updatePosProducts([{...standard,stock:0},cigarettes]));assert.equal(catalog.queryByRole('heading',{name:'Suco'}),null);
 });
+
+for(const isDesktop of [false,true])test(`cart accepts a typed quantity above ten and recalculates the sale (${isDesktop?'desktop':'mobile'})`,async()=>{
+ let saved;const ui=setup(async(...args)=>{saved=args;},isDesktop);
+ await act(async()=>globalThis.__updatePosProducts([{...standard,stock:100},cigarettes]));
+ addStandard(ui);if(!isDesktop)openCart(ui);
+ const input=ui.getByRole('spinbutton',{name:'Quantidade: Suco, Padrão'});
+ await act(async()=>input.focus());fireEvent.change(input,{target:{value:'25'}});fireEvent.keyDown(input,{key:'Enter'});
+ assert.equal(input.value,'25');assert.ok(ui.getAllByText(/125,00/).length>=1);
+ fireEvent.click(ui.getByRole('button',{name:'Finalizar Compra / Receber'}));
+ await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Confirmar'})));
+ assert.equal(saved[0].total,125);assert.equal(saved[1][0].quantity,25);assert.equal(saved[2][0].newStock,75);
+});
+test('typed cart quantities reject missing stock and nonpositive or noninteger values without removing the item',()=>{
+ const ui=setup();addStandard(ui);openCart(ui);
+ const input=ui.getByRole('spinbutton',{name:'Quantidade: Suco, Padrão'});
+ fireEvent.change(input,{target:{value:'11'}});fireEvent.blur(input);
+ assert.equal(input.value,'1');assert.ok(ui.getByText(/Estoque insuficiente para Suco/));
+ for(const value of ['0','-1','1.5','']){
+  fireEvent.change(input,{target:{value}});fireEvent.blur(input);assert.equal(input.value,'1');
+  assert.ok(ui.getByText('Informe uma quantidade inteira maior que zero.'));
+ }
+ assert.ok(ui.getByRole('button',{name:'Abrir carrinho, 1 item'}));
+});
+test('typed cigarette quantities keep the selected format and shared fractional stock deduction exact',async()=>{
+ let saved;const ui=setup(async(...args)=>{saved=args;});
+ fireEvent.click(ui.getByRole('button',{name:/Carteira \(1 carteira fechada\)/}));
+ fireEvent.click(ui.getByRole('button',{name:/Unidade Avulsa \(1 cigarro\)/}));openCart(ui);
+ const input=ui.getByRole('spinbutton',{name:/Quantidade: Cigarro, Unidade Avulsa/});
+ fireEvent.change(input,{target:{value:'25'}});fireEvent.blur(input);
+ assert.equal(input.value,'25');assert.ok(ui.getByText('Baixa: 1 carteira e 5 cigarros'));
+ fireEvent.click(ui.getByRole('button',{name:'Finalizar Compra / Receber'}));await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Confirmar'})));
+ assert.equal(saved[0].total,70);assert.deepEqual(saved[1].map(i=>[i.quantity,i.stockDeduction]),[[1,1],[25,.05]]);assert.equal(saved[2][0].newStock,17.75);
+});
+
+test('checkout commits a quantity still being typed and refuses insufficient draft stock before opening payment',async()=>{
+ let saved;const ui=setup(async(...args)=>{saved=args;});addStandard(ui);openCart(ui);
+ const input=ui.getByRole('spinbutton',{name:'Quantidade: Suco, Padrão'});
+ fireEvent.change(input,{target:{value:'11'}});
+ fireEvent.click(ui.getByRole('button',{name:'Finalizar Compra / Receber'}));assert.ok(ui.getByRole('dialog',{name:/Carrinho/}));
+ fireEvent.change(input,{target:{value:'10'}});
+ fireEvent.click(ui.getByRole('button',{name:'Finalizar Compra / Receber'}));
+ await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Confirmar'})));
+ assert.equal(saved[0].total,50);assert.equal(saved[1][0].quantity,10);assert.equal(saved[2][0].newStock,0);
+});

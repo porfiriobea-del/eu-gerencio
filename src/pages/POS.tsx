@@ -185,6 +185,13 @@ export default function POS() {
     }
   };
 
+  const setCartQuantity = (index:number,quantity:number):boolean => {
+    if(checkoutInProgressRef.current || !cartRef.current[index])return false;
+    if(!Number.isSafeInteger(quantity)||quantity<1){showToast(v('pos.quantityInvalid','Informe uma quantidade inteira maior que zero.'),'error');return false;}
+    const next=cartRef.current.map((item,i)=>i===index?{...item,quantity}:item);
+    try {calculateStockUpdates(next,products);cartRef.current=next;setCart(next);return true;}
+    catch(error){showActionError(error,error instanceof Error?error.message:'Estoque insuficiente.');return false;}
+  };
   const changeCartQuantity = (index: number, delta: number) => {
     if (checkoutInProgressRef.current) return;
     const next = cartRef.current.map((item, i) => i === index ? { ...item, quantity: item.quantity + delta } : item).filter(item => item.quantity > 0);
@@ -750,7 +757,7 @@ export default function POS() {
         </div>
       </div>
 
-      <CartDrawer items={cart} total={cartTotal} busy={isCompletingSale} onQuantity={changeCartQuantity} onRemove={removeFromCart}
+      <CartDrawer items={cart} total={cartTotal} busy={isCompletingSale} onQuantity={changeCartQuantity} onSetQuantity={setCartQuantity} onRemove={removeFromCart}
         onCheckout={() => { setPaymentType(fiadoIntent?'fiado':'cash'); setIsCheckoutOpen(true); }}
         onFiado={() => { setPaymentType('fiado'); setIsCheckoutOpen(true); }} />
 

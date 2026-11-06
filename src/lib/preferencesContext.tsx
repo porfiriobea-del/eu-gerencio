@@ -86,6 +86,9 @@ export const LANGUAGE_MODE_INFOS: LanguageModeInfo[] = [
 // Unified, consistent dictionary per language mode
 export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   technical: {
+    "pos.quantity": "Quantidade",
+    "pos.quantityHint": "Informe a quantidade inteira do formato selecionado; o estoque é validado ao confirmar.",
+    "pos.quantityInvalid": "Informe uma quantidade inteira maior que zero.",
     "purchase.edit.close": "Fechar",
     "purchase.edit.cancel": "Cancelar",
     "purchase.edit.total": "Total pago na compra",
@@ -634,6 +637,9 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Frente de Caixa',
   },
   neutral: {
+    "pos.quantity": "Quantidade",
+    "pos.quantityHint": "Digite a quantidade do formato escolhido. Confirme com Enter ou ao sair do campo.",
+    "pos.quantityInvalid": "Informe uma quantidade inteira maior que zero.",
     "purchase.edit.close": "Fechar",
     "purchase.edit.cancel": "Cancelar",
     "purchase.edit.total": "Total pago na compra",
@@ -1182,6 +1188,9 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Caixa',
   },
   basic: {
+    "pos.quantity": "Quantidade",
+    "pos.quantityHint": "Digite quantos quer vender. Confirme com Enter ou toque fora do campo.",
+    "pos.quantityInvalid": "Informe uma quantidade inteira maior que zero.",
     "purchase.edit.close": "Fechar",
     "purchase.edit.cancel": "Cancelar",
     "purchase.edit.total": "Total pago na compra",
