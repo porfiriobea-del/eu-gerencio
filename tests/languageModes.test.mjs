@@ -18,7 +18,7 @@ const mocks = {
  export const importSupplierCatalog=async()=>0;export const adjustProductStock=async()=>{};
  export const updateSettings=async patch=>{globalThis.__settingsPatches.push(patch);};
  export const getSalesByDateRange=async()=>[];export const getSaleItems=async()=>[];export const getPurchasesByDateRange=async()=>[];export const deleteEntireAccountData=async()=>{};`,
- auth: 'export const deleteUserAccountAuth=async()=>{};',
+ auth: 'export const deleteUserAccountAuth=async()=>{};export const getAccessToken=async()=>"token";',
  sheets:'export const exportToSheets=async()=>{};',
  exportUtils:'export const exportFullReportToCSV=()=>{};export const exportDailySalesAndSafetyStockToCSV=()=>{};',
  emailNotification:'export const openWelcomeEmail=()=>{};export const getGmailComposeUrl=()=>"";',

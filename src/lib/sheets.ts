@@ -1,10 +1,17 @@
-import {googleReportRequest,ReportExportError} from './reportExportFeedback';
+import {googleReportRequest as request,ReportExportError} from './reportExportFeedback';
 import {reportDate} from './reportDates';
 import { analysisSheet, analysisMergeStart, visualReport, type AnalysisInput } from './reportAnalysis';
 import { normalizeCurrency, type MoneyOptions } from './currency';
 import { paymentLabel, saleFee, saleNet } from './paymentFees';
-import { getAccessToken } from "./auth";
+import { getAccessToken, invalidateGoogleAccessToken } from "./auth";
 import { format } from "date-fns";
+
+async function googleReportRequest(...args:Parameters<typeof request>){
+  try{return await request(...args);}catch(error){
+    if(error instanceof ReportExportError && error.code==='GOOGLE_AUTH')invalidateGoogleAccessToken();
+    throw error;
+  }
+}
 
 const sourceDate=(value:unknown,purchase=false)=>reportDate(value,purchase?'dd/MM/yyyy':'dd/MM/yyyy HH:mm');
 

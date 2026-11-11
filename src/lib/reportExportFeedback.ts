@@ -6,6 +6,8 @@ export class ReportExportError extends Error {
 }
 const errorKeys:Record<string,string>={GOOGLE_AUTH:'report.exportAuth',GOOGLE_QUOTA:'report.exportQuota',EXPORT_TIMEOUT:'report.exportTimeout',EXPORT_NETWORK:'report.exportNetwork',GOOGLE_FAILURE:'report.exportGoogleFailed'};
 export function exportErrorText(error:unknown,v:(key:string)=>string) {
+  const detail=error as {code?:string}|null;
+  if(detail?.code?.startsWith('auth/') || (error instanceof Error&&error.message==='GOOGLE_AUTH'))return v('report.exportAuth');
   const code=error instanceof Error&&(error as ReportExportError).code;
   return v(code&&errorKeys[code] || 'report.exportFailed');
 }

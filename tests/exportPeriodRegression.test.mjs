@@ -11,6 +11,7 @@ const React=(await import('react')).default;
 const {render,act,fireEvent,cleanup,waitFor}=await import('@testing-library/react');
 const dir=await mkdtemp(new URL('../node_modules/export-period-regression-',import.meta.url));
 const mocks={
+ auth:`export const getAccessToken=async()=>{if(globalThis.__googleAuthFailure)throw globalThis.__googleAuthFailure;return "token";};`,
  api:`export const subscribeCustomers=cb=>{cb([]);return()=>{};};export const subscribeProducts=subscribeCustomers;export const subscribeSettings=cb=>{cb({storeName:'Loja'});return()=>{};};export const getSalesByDateRange=async()=>globalThis.__periodSales;export const getPurchasesByDateRange=async()=>[{totalCost:5,date:'2026-10-23'}];`,
  preferencesContext:`export const usePreferences=()=>({languageMode:'basic',v:key=>({'report.csvOnly':'Somente dados CSV','report.analysisDownload':'Análise XLSX','report.balanceTitle':'Vendas menos compras e taxas','report.balanceNote':'Inclui fiado. Não é o lucro.','report.loadError':'Falha ao carregar','report.invalidDates':'Datas inválidas'}[key]||key)});`,
  exportUtils:`export const exportFullReportToCSV=async data=>{globalThis.__periodExport=data;if(globalThis.__periodFileFailure)throw globalThis.__periodFileFailure;};`,
@@ -19,7 +20,7 @@ const mocks={
 };
 await build({stdin:{contents:"export {ExportPeriodModal} from './src/components/ExportPeriodModal';",resolveDir:process.cwd()},bundle:true,packages:'external',platform:'node',format:'esm',jsx:'automatic',outfile:`${dir}/modal.mjs`,plugins:[{name:'mock',setup(b){b.onResolve({filter:/.*/},a=>{const name=a.path.split('/').at(-1);return mocks[name]?{path:name,namespace:'mock'}:undefined;});b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:mocks[a.path]}));}}]});
 const {ExportPeriodModal}=await import(pathToFileURL(`${dir}/modal.mjs`));
-afterEach(()=>{cleanup();delete globalThis.__periodSales;delete globalThis.__periodExport;for(const k of ['__sheetCalls','__sheetPending','__sheetFailure','__periodFileFailure','__exportToasts'])delete globalThis[k];});
+afterEach(()=>{cleanup();delete globalThis.__periodSales;delete globalThis.__periodExport;for(const k of ['__sheetCalls','__sheetPending','__sheetFailure','__periodFileFailure','__exportToasts','__googleAuthFailure'])delete globalThis[k];});
 after(async()=>{await rm(dir,{recursive:true,force:true});dom.window.close();});
 async function setup(props={}){
  globalThis.__periodSales=[{total:18.1,type:'card',feeAmount:0.6,createdAt:new Date(2026,9,23,12).getTime()},{total:10,type:'cash',feeAmount:0,createdAt:new Date(2026,9,23,12).getTime()},{total:1000,type:'cash',feeAmount:0,cancelledAt:2,createdAt:new Date(2026,9,23,12).getTime()}];
@@ -90,4 +91,8 @@ test('reopening the period dialog uses the current parent dates, not a previous 
  const inputs=ui.container.querySelectorAll('input[type="date"]');assert.equal(inputs[0].value,'2026-11-01');assert.equal(inputs[1].value,'2026-11-04');
  await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Somente dados CSV'})));
  assert.equal(globalThis.__periodExport.startDate,'2026-11-01');assert.equal(globalThis.__periodExport.endDate,'2026-11-04');
+});
+
+test('cancelled Google permission does not start a sheet and releases export loading',async()=>{
+ globalThis.__googleAuthFailure=Object.assign(new Error('cancelled'),{code:'auth/popup-closed-by-user'});const ui=await setup();await act(async()=>fireEvent.click(ui.getByRole('button',{name:'Google Sheets'})));assert.equal(globalThis.__sheetCalls,undefined);assert.equal(ui.getByRole('button',{name:'Google Sheets'}).disabled,false);
 });

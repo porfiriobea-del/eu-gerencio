@@ -4,7 +4,7 @@ import {build} from 'esbuild';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 const dir=await mkdtemp(new URL('../node_modules/report-sheets-test-',import.meta.url));
-await build({stdin:{contents:"export {exportToSheets} from './src/lib/sheets.ts';",resolveDir:process.cwd()},bundle:true,packages:'external',platform:'node',format:'esm',outfile:`${dir}/sheets.mjs`,plugins:[{name:'auth',setup(b){b.onResolve({filter:/^\.\/auth$/},()=>({path:'auth',namespace:'test'}));b.onLoad({filter:/.*/,namespace:'test'},()=>({contents:'export const getAccessToken=async()=>"test-token";'}));}}]});
+await build({stdin:{contents:"export {exportToSheets} from './src/lib/sheets.ts';",resolveDir:process.cwd()},bundle:true,packages:'external',platform:'node',format:'esm',outfile:`${dir}/sheets.mjs`,plugins:[{name:'auth',setup(b){b.onResolve({filter:/^\.\/auth$/},()=>({path:'auth',namespace:'test'}));b.onLoad({filter:/.*/,namespace:'test'},()=>({contents:'export const getAccessToken=async()=>"test-token";export const invalidateGoogleAccessToken=()=>{globalThis.__invalidated=true;};'}));}}]});
 const {exportToSheets}=await import(pathToFileURL(`${dir}/sheets.mjs`));
 after(()=>rm(dir,{recursive:true,force:true}));
 const data={sales:[{total:25,type:'cash',createdAt:new Date(2026,9,23,12).getTime(),feeAmount:0}],purchases:[],customers:[{name:'=not_a_formula',totalDebt:12}],expenses:[],startDate:'2026-10-23',endDate:'2026-10-23'};
@@ -49,4 +49,8 @@ test('Google export allocates enough rows for source tabs beyond the default 100
  const calls=[];t.mock.method(globalThis,'fetch',async(url,init)=>{calls.push(JSON.parse(init.body));return Response.json(calls.length===1?{spreadsheetId:'large'}:{});});
  await exportToSheets({...data,sales:Array.from({length:1200},()=>data.sales[0])});
  assert.equal(calls[0].sheets.find(s=>s.properties.title==='Vendas').properties.gridProperties.rowCount,1201);
+});
+
+test('rejected Google token is invalidated so the next user click can authorize again',async t=>{
+ t.mock.method(globalThis,'fetch',async()=>new Response('',{status:401}));globalThis.__invalidated=false;await assert.rejects(()=>exportToSheets(data),e=>e.code==='GOOGLE_AUTH');assert.equal(globalThis.__invalidated,true);delete globalThis.__invalidated;
 });

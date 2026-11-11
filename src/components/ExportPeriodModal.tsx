@@ -1,3 +1,4 @@
+import {getAccessToken} from '../lib/auth';
 import {exportErrorText,logExportError,openExportLink,type ExportNotice} from '../lib/reportExportFeedback';
 import { saleFee } from '../lib/paymentFees';
 import { useCurrency } from '../lib/useCurrency';
@@ -180,6 +181,7 @@ export function ExportPeriodModal({ isOpen, onClose, defaultStartDate, defaultEn
     try {
       setIsExporting(true);
       setStatusMessage(null);
+      await getAccessToken();
 
       const url = await exportToSheets({
         products,

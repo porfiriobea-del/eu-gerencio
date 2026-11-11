@@ -14,3 +14,16 @@ Dono e Gerente têm acesso. Funcionário não vê o atalho e não pode abrir a r
 A página de relatórios não executa o salvamento automático das configurações.
 Os três modos de linguagem e os idiomas português, inglês e espanhol contemplam
 os novos controles.
+
+## Autorização do Google Sheets
+
+O token de acesso ao Sheets é diferente da sessão de acesso à loja. Ao clicar em
+Google Sheets, antes de carregar o relatório, o app verifica um prazo conservador
+de 50 minutos e a conta à qual o token pertence. Tokens antigos sem esses dados
+exigem nova autorização. A janela do Google usa reautenticação da conta atual,
+sem trocar de loja. O navegador precisa permitir pop-ups do aplicativo.
+
+Rejeições HTTP 401/403 descartam o token. O próximo clique permite autorizar
+novamente; a aplicação não repete automaticamente a criação de planilhas para
+não duplicar exportações parcialmente concluídas. Cancelar ou bloquear a janela
+libera o botão e mantém o relatório disponível. Excel/CSV não exigem essa permissão.

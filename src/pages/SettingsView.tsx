@@ -10,7 +10,7 @@ import { PaymentSummary } from '../components/PaymentSummary';
 import { showToast, showActionError, withActionDeadline } from '../lib/actionFeedback';
 import { useState, useEffect, useRef } from 'react';
 import { subscribeSettings, updateSettings, subscribeCustomers, subscribeProducts, getSalesByDateRange, getSaleItems, deleteEntireAccountData, getPurchasesByDateRange } from '../lib/api';
-import { deleteUserAccountAuth } from '../lib/auth';
+import { deleteUserAccountAuth, getAccessToken } from '../lib/auth';
 import { exportToSheets } from '../lib/sheets';
 import { exportFullReportToCSV, exportDailySalesAndSafetyStockToCSV } from '../lib/exportUtils';
 import { ExportPeriodModal } from '../components/ExportPeriodModal';
@@ -511,6 +511,7 @@ export default function SettingsView({reportsOnly=false}:{reportsOnly?:boolean})
     try {
       setIsExporting(true);
       setExportMessage('');
+      await getAccessToken();
       
       const { startTimestamp, endTimestamp } = getPeriodTimestamps();
 

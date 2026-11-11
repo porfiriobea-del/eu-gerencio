@@ -2,6 +2,7 @@ import type {Language} from './language';
 type Mode='basic'|'neutral'|'technical';
 type Dictionary=Record<string,string>;
 const en:Dictionary={
+ 'report.exportAuth':'Click Google Sheets again and allow spreadsheet access in the Google window. If it does not open, allow pop-ups for this site. You can also download Excel (.xlsx).',
  'reports.nav':'Reports',
  'reports.open':'Open reports',
  'reports.pin':'Pin to menu',
@@ -232,6 +233,7 @@ const en:Dictionary={
  'images.migrationPending':'Your old photos are safe. Open Inventory again to retry the upload.',
 };
 const es:Dictionary={
+ 'report.exportAuth':'Pulsa Google Sheets de nuevo y autoriza el acceso en la ventana de Google. Si no se abre, permite ventanas emergentes para este sitio. También puedes descargar Excel (.xlsx).',
  'reports.nav':'Informes',
  'reports.open':'Abrir informes',
  'reports.pin':'Fijar en el menú',
