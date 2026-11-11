@@ -1,7 +1,7 @@
 import {usePermissions} from '../lib/permissionsContext';
 import {useEffect,useRef} from 'react';
 import {NavLink,useLocation} from 'react-router-dom';
-import {Home,ShoppingCart,Package,Users,MoreHorizontal,Settings,DollarSign,HelpCircle,ShoppingBag,Activity} from 'lucide-react';
+import {Home,ShoppingCart,Package,Users,MoreHorizontal,Settings,DollarSign,HelpCircle,ShoppingBag,Activity,FileSpreadsheet} from 'lucide-react';
 import {usePreferences} from '../lib/preferencesContext';
 import {useMobileViewport} from '../lib/useMobileViewport';
 export function MobileNavigation(){
@@ -17,6 +17,6 @@ export function MobileNavigation(){
  {!access.isEmployee&&<details ref={more} onKeyDown={e=>{if(e.key==='Escape'&&more.current)more.current.open=false;}} className="relative">
  <summary className="flex min-h-12 cursor-pointer list-none flex-col items-center justify-center gap-1 text-[11px] text-muted-foreground"><MoreHorizontal className="h-5 w-5"/>{v('mobile.more','Mais')}</summary>
  <div className="absolute bottom-full right-0 mb-4 w-56 rounded-2xl border border-border bg-surface p-2 shadow-xl">
- {[[ '/precos',DollarSign,t('nav.pricing')],['/ajustes',Settings,t('nav.settings')],['/tutorial',HelpCircle,v('mobile.help','Ajuda')],['/compras',ShoppingBag,t('nav.purchases')],['/movimentacoes',Activity,v('nav.movements','Movimentações')]].map(([to,Icon,label])=>{const Component=Icon as typeof Home;return <NavLink key={String(to)} to={String(to)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm hover:bg-muted"><Component className="h-5 w-5"/>{String(label)}</NavLink>;})}
+ {[['/relatorios',FileSpreadsheet,v('reports.nav')],[ '/precos',DollarSign,t('nav.pricing')],['/ajustes',Settings,t('nav.settings')],['/tutorial',HelpCircle,v('mobile.help','Ajuda')],['/compras',ShoppingBag,t('nav.purchases')],['/movimentacoes',Activity,v('nav.movements','Movimentações')]].map(([to,Icon,label])=>{const Component=Icon as typeof Home;return <NavLink key={String(to)} to={String(to)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm hover:bg-muted"><Component className="h-5 w-5"/>{String(label)}</NavLink>;})}
  </div></details>}</nav>;
 }

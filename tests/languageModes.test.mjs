@@ -79,11 +79,11 @@ test('Settings uses compact sections in simple mode and autosaves the current la
  globalThis.__settingsPatches=[];
  globalThis.__initialSettings={storeName:'Loja Teste',theme:'standard',languageMode:'basic',simpleViewMode:true};
  localStorage.setItem('app_lang_mode','basic');localStorage.setItem('app_simple_view_mode','true');
- const ui=render(React.createElement(PreferencesProvider,null,React.createElement(SettingsView)));
+ const ui=render(React.createElement(MemoryRouter,null,React.createElement(PreferencesProvider,null,React.createElement(SettingsView))));
  const advanced=ui.getByText('Mais opções: planilhas e cópias de segurança').closest('details');
  assert.equal(advanced.open,false);
- assert.ok(ui.getByText('Total vendido'));
- assert.ok(ui.getByText('Vendas menos compras e taxas'));
+ assert.equal(ui.getByRole('link',{name:'Abrir relatórios'}).getAttribute('href'),'/relatorios');
+ assert.equal(ui.queryByText('Total vendido'),null);
  // Preferences are expanded only when requested.
  fireEvent.click(ui.getByText('Personalização e Tema'));
  fireEvent.click(ui.getByRole('button',{name:/Neutro \(Comercial\)/}));
@@ -152,7 +152,7 @@ test('cloud shop currency defaults to BRL in all languages and changes live inde
 test('currency selector requires the exact no-conversion warning and saves the shop setting, while non-BRL hides Brazil rules',async t=>{
  globalThis.__settingsPatches=[];globalThis.__initialSettings={storeName:'Loja',currency:'USD',theme:'standard',languageMode:'neutral'};
  let accepted=false,warning='';t.mock.method(window,'confirm',text=>{warning=text;return accepted;});
- const ui=render(React.createElement(PreferencesProvider,null,React.createElement(SettingsView)));
+ const ui=render(React.createElement(MemoryRouter,null,React.createElement(PreferencesProvider,null,React.createElement(SettingsView))));
  act(()=>window.dispatchEvent(new CustomEvent('cloud-preferences',{detail:{currency:'USD'}})));
  assert.ok(ui.getByText('CNPJ').closest('div').hidden);
  assert.ok(ui.getByText('Taxa do Pix na maquininha').closest('[hidden]'));
@@ -171,4 +171,16 @@ test('owner settings removes the legacy webhook address, test button, script and
   assert.doesNotMatch(ui.container.textContent,/Webhook Google Apps Script|Testar Envio para a Planilha|Histórico de Envios|function doPost/);
   assert.equal(ui.container.querySelector('input[placeholder*="script.google"]'),null);assert.doesNotMatch(ui.container.textContent,/Ocultar Filtros Detalhados|Filtros de Data & Pagamento/);cleanup();
  }
+});
+
+
+test('dedicated reports page exposes filters and exports without settings or automatic settings writes',async()=>{
+ for(const mode of ['basic','neutral','technical']){
+ globalThis.__settingsPatches=[];globalThis.__initialSettings={storeName:'Loja Teste',theme:'standard',languageMode:mode};localStorage.setItem('app_lang_mode',mode);
+ let ui;await act(async()=>{ui=render(React.createElement(MemoryRouter,null,React.createElement(PreferencesProvider,null,React.createElement(SettingsView,{reportsOnly:true}))));});
+ assert.ok(ui.getByRole('heading',{level:1,name:'Relatórios'}));assert.ok(ui.getByRole('button',{name:'Fixar no menu'}));assert.equal(ui.queryByLabelText('Moeda da loja'),null);assert.equal(ui.queryByText('Zona de Perigo — Exclusão de Conta'),null);
+ assert.ok(ui.getByRole('button',{name:'Hoje'}));assert.ok(ui.getByRole('button',{name:'Google Sheets'}));
+ await act(async()=>{await new Promise(resolve=>setTimeout(resolve,760));});assert.deepEqual(globalThis.__settingsPatches,[]);cleanup();
+ }
+ delete globalThis.__initialSettings;delete globalThis.__settingsPatches;
 });

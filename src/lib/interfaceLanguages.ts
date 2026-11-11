@@ -2,6 +2,12 @@ import type {Language} from './language';
 type Mode='basic'|'neutral'|'technical';
 type Dictionary=Record<string,string>;
 const en:Dictionary={
+ 'reports.nav':'Reports',
+ 'reports.open':'Open reports',
+ 'reports.pin':'Pin to menu',
+ 'reports.unpin':'Unpin from menu',
+ 'reports.shortcutHelp':'View and export your reports. Pin the shortcut while you need it and remove it when finished.',
+
  "access.denied":"Could not confirm your access. Sign in again or contact the store owner.",
 "access.myShift":"My shift",
 "access.entry":"Started",
@@ -226,6 +232,12 @@ const en:Dictionary={
  'images.migrationPending':'Your old photos are safe. Open Inventory again to retry the upload.',
 };
 const es:Dictionary={
+ 'reports.nav':'Informes',
+ 'reports.open':'Abrir informes',
+ 'reports.pin':'Fijar en el menú',
+ 'reports.unpin':'Desfijar del menú',
+ 'reports.shortcutHelp':'Consulta y exporta tus informes. Fija el acceso mientras lo necesites y quítalo al terminar.',
+
  "access.denied":"No se pudo confirmar tu acceso. Entra de nuevo o consulta al dueño.",
 "access.myShift":"Mi turno",
 "access.entry":"Entrada",

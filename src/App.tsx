@@ -310,7 +310,8 @@ export default function App() {
             <Route path="precos" element={<AccessPage path="/precos"><Pricing /></AccessPage>} />
             <Route path="fiado" element={<AccessPage path="/fiado"><Debt /></AccessPage>} />
             <Route path="movimentacoes" element={<AccessPage path="/movimentacoes"><Movements /></AccessPage>} />
-            <Route path="ajustes" element={<AccessPage path="/ajustes"><SettingsView /></AccessPage>} />
+            <Route path="ajustes" element={<AccessPage path="/ajustes"><SettingsView key="settings" /></AccessPage>} />
+            <Route path="relatorios" element={<AccessPage path="/relatorios"><SettingsView key="reports" reportsOnly /></AccessPage>} />
             <Route path="tutorial" element={<AccessPage path="/tutorial"><Tutorial /></AccessPage>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

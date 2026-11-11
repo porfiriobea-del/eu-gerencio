@@ -1,3 +1,4 @@
+import {useReportsPinned} from '../lib/useReportsPinned';
 import {usePermissions} from '../lib/permissionsContext';
 import {OwnerPinDialog} from './OwnerPinDialog';
 import {EmployeeFirstPin} from './EmployeeFirstPin';
@@ -8,7 +9,7 @@ import {
   Home, ShoppingCart, Package, DollarSign, Users, Settings as SettingsIcon, 
   HelpCircle, LogOut, MailPlus, ShoppingBag, Menu,
   Sun, Moon, WifiOff, RefreshCw, CheckCircle2, MessageSquareQuote, 
-  Sparkles, Eye,  Activity, LogIn, X, Briefcase, Pin, PinOff
+  Sparkles, Eye,  Activity, LogIn, X, Briefcase, Pin, PinOff, FileSpreadsheet
 } from 'lucide-react';
 import { logout } from '../lib/auth';
 import { subscribeSettings, getActiveStoreSession, type ActiveStoreSession } from '../lib/api';
@@ -27,6 +28,7 @@ interface LayoutProps {
 
 export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
   const access=usePermissions();
+  const {pinned:reportsPinned}=useReportsPinned();
   const [storeName, setStoreName] = useState('Eu Gerencio!');
   const [logoUrl, setLogoUrl] = useState<string | undefined>();
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -111,6 +113,7 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
     { to: '/precos', icon: DollarSign, label: v('nav.pricing', t('nav.pricing')), id: 'nav-item-precos' },
     { to: '/fiado', icon: Users, label: v('nav.debt', t('nav.debt')), id: 'nav-item-fiado' },
     { to: '/movimentacoes', icon: Activity, label: v('nav.movements', 'Movimentações'), id: 'nav-item-movimentacoes' },
+    ...(reportsPinned?[{to:'/relatorios',icon:FileSpreadsheet,label:v('reports.nav'),id:'nav-item-relatorios'}]:[]),
     { to: '/ajustes', icon: SettingsIcon, label: t('nav.settings'), id: 'nav-item-ajustes' },
     { to: '/tutorial', icon: HelpCircle, label: t('nav.tutorial'), id: 'nav-item-tutorial' },
   ].filter(item=>access.canAccess(item.to));
@@ -137,7 +140,7 @@ export function Layout({ menuPinned, onToggleMenuPinned }: LayoutProps) {
             </button>}
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{storeName}</p>
-              <p className="truncate text-xs text-muted-foreground">{NAV_ITEMS.find(item => item.to === location.pathname)?.label || t('nav.home')}</p>
+              <p className="truncate text-xs text-muted-foreground">{location.pathname==='/relatorios'?v('reports.nav'):NAV_ITEMS.find(item => item.to === location.pathname)?.label || t('nav.home')}</p>
             </div>
             <button type="button" onClick={handleToggleMenuPinned} aria-pressed={menuPinned}
               aria-label={menuPinned ? 'Desafixar menu' : 'Fixar menu'}

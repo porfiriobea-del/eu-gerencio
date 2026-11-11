@@ -1,3 +1,4 @@
+import {ReportsShortcut} from '../components/ReportsShortcut';
 import {exportErrorText,logExportError,openExportLink} from '../lib/reportExportFeedback';
 import {ReportFilters} from '../components/ReportFilters';
 import {filterReport,emptyReportFilters,reportExportEntities} from '../lib/reportFilters';
@@ -26,7 +27,7 @@ import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, end
 import { BUSINESS_SECTORS, getSavedBusinessSector, saveBusinessSector, getCustomCategories, setCustomCategories, saveCustomCategory, removeCustomCategory, getAllCategories } from '../lib/categories';
 
 
-export default function SettingsView() {
+export default function SettingsView({reportsOnly=false}:{reportsOnly?:boolean}) {
   const { formatMoney, currencySymbol, currency, isBrazil } = useCurrency();
 
   const { language, setLanguage, languageMode, setLanguageMode, fontSize, setFontSize, themePreset, setThemePreset, darkMode, setDarkMode, t, v, isBasicMode, simpleViewMode, setSimpleViewMode } = usePreferences();
@@ -203,7 +204,7 @@ export default function SettingsView() {
 
   // Salvamento automático contínuo de todas as ações de digitação e ajustes (debounce 700ms)
   useEffect(() => {
-    if (!isInitialLoadDoneRef.current) return;
+    if (reportsOnly || !isInitialLoadDoneRef.current) return;
     setAutoSaveStatus('saving');
     if (autoSaveDebounceRef.current) {
       clearTimeout(autoSaveDebounceRef.current);
@@ -214,7 +215,7 @@ export default function SettingsView() {
     return () => {
       if (autoSaveDebounceRef.current) clearTimeout(autoSaveDebounceRef.current);
     };
-  }, [storeName, cnpj, phone, email, logoUrl, theme, darkMode, languageMode, defaultMargin, dailyGoal, businessSector, categoriesList, language, fontSize, simpleViewMode]);
+  }, [reportsOnly, storeName, cnpj, phone, email, logoUrl, theme, darkMode, languageMode, defaultMargin, dailyGoal, businessSector, categoriesList, language, fontSize, simpleViewMode]);
 
   const handleSelectLanguageMode = async (mode: LanguageMode) => {
     setLanguageMode(mode);
@@ -638,7 +639,9 @@ export default function SettingsView() {
 
   return (
     <div className="max-w-5xl space-y-6">
-      <h1 className="text-2xl font-bold">{t('settings.title')}</h1>
+      <h1 className="text-2xl font-bold">{reportsOnly?v('reports.nav'):t('settings.title')}</h1>
+      <ReportsShortcut page={reportsOnly}/>
+      {!reportsOnly&&<>
 
       {/* Card de Salvamento Automático */}
       <div className="p-4 sm:p-5 rounded-2xl border border-primary/20 bg-palette-1/40 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1492,7 +1495,10 @@ export default function SettingsView() {
         />
       </div>
 
+      </>}
+
       {/* Relatórios Personalizados & Resumo do Dia */}
+      {reportsOnly&&<>
       <div className="bg-surface p-6 md:p-8 rounded-2xl shadow-xl border border-border mt-8 text-foreground">
         <div className="flex justify-between items-start md:items-center mb-6 border-b border-border pb-4 flex-col md:flex-row gap-4">
           <div>
@@ -1781,6 +1787,8 @@ export default function SettingsView() {
         )}
       </div>
 
+      </>}
+      {!reportsOnly&&<>
       <details key={`advanced-${simpleViewMode}`} open={!simpleViewMode} className="rounded-2xl border border-border bg-surface p-4">
         <summary className="cursor-pointer py-2 font-semibold text-foreground">{v('settings.advanced')}</summary>
         <div className="mt-4 space-y-5">
@@ -1952,6 +1960,7 @@ export default function SettingsView() {
         </div>
       )}
 
+      </>}
       {/* Modal de Exportação por Período Personalizado */}
       <ExportPeriodModal
         isOpen={isExportPeriodModalOpen}

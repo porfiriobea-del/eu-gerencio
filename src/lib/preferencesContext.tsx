@@ -86,6 +86,12 @@ export const LANGUAGE_MODE_INFOS: LanguageModeInfo[] = [
 // Unified, consistent dictionary per language mode
 export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
   technical: {
+    "reports.nav": "Relatórios",
+    "reports.open": "Abrir relatórios",
+    "reports.pin": "Fixar no menu",
+    "reports.unpin": "Desafixar do menu",
+    "reports.shortcutHelp": "Acesse os demonstrativos e exportações. O atalho na barra lateral é opcional e pode ser removido após a exportação.",
+
     "stock.saveUnconfirmed": "A confirmação demorou. Confira se a alteração apareceu no estoque antes de reenviar. Seus valores foram mantidos.",
     "stock.saveWorking": "Salvando...",
     "stock.saveFailure": "Falha ao confirmar a gravação do produto. O formulário foi preservado; consulte os detalhes antes de reenviar.",
@@ -649,6 +655,12 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Frente de Caixa',
   },
   neutral: {
+    "reports.nav": "Relatórios",
+    "reports.open": "Abrir relatórios",
+    "reports.pin": "Fixar no menu",
+    "reports.unpin": "Desafixar do menu",
+    "reports.shortcutHelp": "Veja e exporte seus relatórios. Fixe o atalho no menu quando precisar e remova quando terminar.",
+
     "stock.saveUnconfirmed": "A confirmação demorou. Confira se a alteração apareceu no estoque antes de reenviar. Seus valores foram mantidos.",
     "stock.saveWorking": "Salvando...",
     "stock.saveFailure": "Não foi possível confirmar o salvamento. Os valores foram mantidos para você tentar novamente.",
@@ -1212,6 +1224,12 @@ export const VOCABULARY: Record<LanguageMode, Record<string, string>> = {
     'nav.pos': 'Caixa',
   },
   basic: {
+    "reports.nav": "Relatórios",
+    "reports.open": "Abrir relatórios",
+    "reports.pin": "Fixar no menu",
+    "reports.unpin": "Desafixar do menu",
+    "reports.shortcutHelp": "Veja seus números e baixe a planilha. Você pode deixar o atalho no menu só enquanto usa.",
+
     "stock.saveUnconfirmed": "A confirmação demorou. Confira se a alteração apareceu no estoque antes de reenviar. Seus valores foram mantidos.",
     "stock.saveWorking": "Salvando...",
     "stock.saveFailure": "Não consegui salvar. O que você digitou continua aqui. Veja o motivo abaixo e tente de novo.",
